@@ -102,6 +102,10 @@ type DashboardData = {
     scheduler_failed?: number;
     no_available_account?: number;
     active_accounts: number;
+    cooling_accounts?: number;
+    high_risk_accounts?: number;
+    tge_profiles_active?: number;
+    accounts_without_tge?: number;
     data_sources: number;
   };
   platform_health: Array<{
@@ -329,6 +333,30 @@ function DashboardPage() {
           value: data.overview.active_accounts,
           icon: Users,
           tone: "text-emerald-700",
+        },
+        {
+          label: "Cooling Accounts",
+          value: data.overview.cooling_accounts ?? 0,
+          icon: HeartPulse,
+          tone: "text-amber",
+        },
+        {
+          label: "High Risk",
+          value: data.overview.high_risk_accounts ?? 0,
+          icon: ShieldCheck,
+          tone: "text-red-700",
+        },
+        {
+          label: "Active TGE",
+          value: data.overview.tge_profiles_active ?? 0,
+          icon: Workflow,
+          tone: "text-blue-700",
+        },
+        {
+          label: "No TGE Binding",
+          value: data.overview.accounts_without_tge ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
         },
         {
           label: "Data Sources",
@@ -1107,70 +1135,254 @@ function SchedulerPage() {
 
 function AccountCenterPage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/accounts");
+  const platforms = useApiData<PlatformOption[]>("/data-sources/platforms");
+  const profiles = useApiData<RecordItem[]>("/tge-profiles");
   const [showForm, setShowForm] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<RecordItem | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<RecordItem | null>(null);
+  const [platformId, setPlatformId] = useState("1");
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [environmentId, setEnvironmentId] = useState("");
+  const [profileUrl, setProfileUrl] = useState("");
+  const [riskStatus, setRiskStatus] = useState("LOW");
+  const [remark, setRemark] = useState("");
+  const [replyLimit, setReplyLimit] = useState("5");
+  const [currentReply, setCurrentReply] = useState("0");
+  const [windowDay, setWindowDay] = useState("MON");
+  const [windowStart, setWindowStart] = useState("09:00");
+  const [windowEnd, setWindowEnd] = useState("18:00");
+  const [bindProfileId, setBindProfileId] = useState("");
   const [feedback, setFeedback] = useState("");
+
+  function startCreateAccount() {
+    setEditingAccount(null);
+    setPlatformId(String(platforms.data?.[0]?.id ?? 1));
+    setUsername("");
+    setDisplayName("");
+    setProfileUrl("");
+    setRiskStatus("LOW");
+    setRemark("");
+    setReplyLimit("5");
+    setCurrentReply("0");
+    setWindowDay("MON");
+    setWindowStart("09:00");
+    setWindowEnd("18:00");
+    setShowForm(true);
+  }
+
+  function startEditAccount(account: RecordItem) {
+    const limits = (account.limits ?? {}) as RecordItem;
+    const windows = ((account.working_windows ?? []) as RecordItem[])[0] ?? {};
+    setEditingAccount(account);
+    setPlatformId(String(account.platform_id ?? platforms.data?.[0]?.id ?? 1));
+    setUsername(String(account.username ?? ""));
+    setDisplayName(String(account.display_name ?? ""));
+    setProfileUrl(String(account.profile_url ?? ""));
+    setRiskStatus(String(account.risk_status ?? "LOW"));
+    setRemark(String(account.remark ?? ""));
+    setReplyLimit(String(limits.reply_daily_limit ?? 5));
+    setCurrentReply(String(limits.current_reply_count ?? 0));
+    setWindowDay(String(windows.day_of_week ?? "MON"));
+    setWindowStart(String(windows.start_time ?? "09:00"));
+    setWindowEnd(String(windows.end_time ?? "18:00"));
+    setShowForm(true);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     try {
-      await apiRequest("/accounts", {
-        method: "POST",
+      const account = await apiRequest<RecordItem>(editingAccount ? `/accounts/${String(editingAccount.id)}` : "/accounts", {
+        method: editingAccount ? "PUT" : "POST",
         body: JSON.stringify({
-          platform_id: 1,
+          platform_id: Number(platformId),
           username,
           display_name: displayName,
-          environment_id: environmentId,
+          profile_url: profileUrl,
+          risk_status: riskStatus,
+          remark,
           daily_limits: { browse: 20, like: 8, reply: 5 },
           working_time: { timezone: "Asia/Shanghai", ranges: ["09:00-12:00"] },
         }),
       });
-      setFeedback("账号与 TGE Environment ID 已保存；本版本不会连接 TGE。");
+      const accountId = Number(account.id);
+      await apiRequest(`/accounts/${accountId}/limits`, {
+        method: "PUT",
+        body: JSON.stringify({
+          browse_daily_limit: 20,
+          like_daily_limit: 8,
+          bookmark_daily_limit: 5,
+          visit_profile_daily_limit: 5,
+          reply_daily_limit: Number(replyLimit),
+          dm_daily_limit: 0,
+          follow_daily_limit: 0,
+          current_browse_count: 0,
+          current_like_count: 0,
+          current_bookmark_count: 0,
+          current_visit_profile_count: 0,
+          current_reply_count: Number(currentReply),
+          current_dm_count: 0,
+          current_follow_count: 0,
+        }),
+      });
+      await apiRequest(`/accounts/${accountId}/working-windows`, {
+        method: "PUT",
+        body: JSON.stringify({
+          windows: [
+            {
+              day_of_week: windowDay,
+              start_time: windowStart,
+              end_time: windowEnd,
+              timezone: "Asia/Shanghai",
+              enabled: true,
+            },
+          ],
+        }),
+      });
+      setFeedback(editingAccount ? "账号配置已更新。" : "账号已创建。");
       setShowForm(false);
-      setUsername("");
-      setEnvironmentId("");
       await reload();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "保存失败");
     }
   }
 
-  const rows = (data ?? []).map((item) => ({
-    ...item,
-    environment_id: item.tge_profile
-      ? (item.tge_profile as RecordItem).environment_id
-      : "—",
-  }));
+  async function accountAction(account: RecordItem, action: "pause" | "resume" | "recalculate-health") {
+    try {
+      await apiRequest(`/accounts/${String(account.id)}/${action}`, { method: "POST" });
+      setFeedback(action === "pause" ? "账号已暂停。" : action === "resume" ? "账号已恢复。" : "Health Score 已重算。");
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "操作失败");
+    }
+  }
+
+  async function bindProfile() {
+    if (!selectedAccount || !bindProfileId) return;
+    try {
+      await apiRequest(`/accounts/${String(selectedAccount.id)}/bind-tge-profile`, {
+        method: "POST",
+        body: JSON.stringify({ profile_id: Number(bindProfileId) }),
+      });
+      setFeedback("TGE Profile 已绑定。");
+      await reload();
+      await profiles.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "绑定失败");
+    }
+  }
+
+  async function unbindProfile(account: RecordItem) {
+    try {
+      await apiRequest(`/accounts/${String(account.id)}/unbind-tge-profile`, { method: "DELETE" });
+      setFeedback("TGE Profile 已解绑。");
+      await reload();
+      await profiles.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "解绑失败");
+    }
+  }
+
+  const rows = (data ?? []).map((item) => {
+    const limits = (item.limits ?? {}) as RecordItem;
+    return {
+      ...item,
+      tge_environment_id: item.tge_environment_id ?? "—",
+      reply_daily_limit: limits.reply_daily_limit ?? "—",
+      current_reply_count: limits.current_reply_count ?? "—",
+      last_seen_at: item.tge_profile ? (item.tge_profile as RecordItem).last_seen_at ?? "—" : "—",
+    };
+  });
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
         {showForm && (
-          <form className="panel grid gap-4 p-4 md:grid-cols-3" onSubmit={submit}>
+          <form className="panel grid gap-4 p-4 md:grid-cols-3 xl:grid-cols-4" onSubmit={submit}>
+            <select className="field" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>{(platforms.data ?? []).map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}</select>
             <input className="field" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} required />
             <input className="field" placeholder="Display Name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-            <input className="field" placeholder="TGE Environment ID" value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} required />
-            <div className="flex gap-2 md:col-span-3">
-              <button className="button" type="submit">保存账号</button>
+            <input className="field" placeholder="Profile URL" value={profileUrl} onChange={(e) => setProfileUrl(e.target.value)} />
+            <select className="field" value={riskStatus} onChange={(e) => setRiskStatus(e.target.value)}>{["LOW", "MEDIUM", "HIGH", "CRITICAL", "COOLING_DOWN"].map((item) => <option key={item} value={item}>{item}</option>)}</select>
+            <input className="field" type="number" placeholder="Reply Daily Limit" value={replyLimit} onChange={(e) => setReplyLimit(e.target.value)} />
+            <input className="field" type="number" placeholder="Current Reply Count" value={currentReply} onChange={(e) => setCurrentReply(e.target.value)} />
+            <input className="field" placeholder="Remark" value={remark} onChange={(e) => setRemark(e.target.value)} />
+            <select className="field" value={windowDay} onChange={(e) => setWindowDay(e.target.value)}>{["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((item) => <option key={item} value={item}>{item}</option>)}</select>
+            <input className="field" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} />
+            <input className="field" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} />
+            <div className="flex gap-2 md:col-span-3 xl:col-span-4">
+              <button className="button" type="submit">{editingAccount ? "更新账号" : "保存账号"}</button>
               <button className="button-secondary" type="button" onClick={() => setShowForm(false)}>取消</button>
             </div>
           </form>
         )}
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
-        <Section title="Account Assets" action={<button className="button" onClick={() => setShowForm(true)}><Users className="h-4 w-4" />添加账号</button>}>
-          <DataTable
-            columns={[
-              { key: "username", label: "Username" },
-              { key: "display_name", label: "Display Name" },
-              { key: "environment_id", label: "TGE Environment" },
-              { key: "health_score", label: "Health" },
-              { key: "risk_level", label: "Risk" },
-              { key: "status", label: "Status" },
-            ]}
-            rows={rows}
-          />
+        <Section title="Account Assets" action={<button className="button" onClick={startCreateAccount}><Users className="h-4 w-4" />添加账号</button>}>
+          <div className="panel overflow-x-auto">
+            <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["Platform", "Username", "Health", "Risk", "Status", "TGE", "Reply Limit", "Used", "Last Seen", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{rows.map((account) => (
+                <tr key={String(account.uuid)} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3 uppercase text-teal">{String(account.platform ?? "—")}</td>
+                  <td className="px-4 py-3"><p className="font-semibold">{String(account.username)}</p><p className="text-xs text-gray-500">{String(account.display_name ?? "")}</p></td>
+                  <td className="px-4 py-3">{String(account.health_score)}</td>
+                  <td className="px-4 py-3"><StatusBadge value={account.risk_status} /></td>
+                  <td className="px-4 py-3"><StatusBadge value={account.status} /></td>
+                  <td className="px-4 py-3 font-mono text-xs">{String(account.tge_environment_id ?? "—")}</td>
+                  <td className="px-4 py-3">{String(account.reply_daily_limit)}</td>
+                  <td className="px-4 py-3">{String(account.current_reply_count)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{String(account.last_seen_at ?? "—")}</td>
+                  <td className="px-4 py-3"><div className="flex flex-wrap gap-2">
+                    <button className="button-secondary" onClick={() => setSelectedAccount(account)}>详情</button>
+                    <button className="button-secondary" onClick={() => startEditAccount(account)}>编辑</button>
+                    <button className="button-secondary" onClick={() => void accountAction(account, account.status === "ACTIVE" ? "pause" : "resume")}>{account.status === "ACTIVE" ? "暂停" : "启用"}</button>
+                    <button className="button-secondary" onClick={() => void accountAction(account, "recalculate-health")}>Health</button>
+                  </div></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
         </Section>
+        {selectedAccount && (
+          <Section title={`Account Detail · ${String(selectedAccount.username)}`} action={<button className="button-secondary" onClick={() => setSelectedAccount(null)}>关闭</button>}>
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="panel p-4">
+                <p className="font-semibold">基础信息</p>
+                <pre className="mt-3 overflow-x-auto text-xs text-gray-600">{JSON.stringify({
+                  profile_url: selectedAccount.profile_url,
+                  account_level: selectedAccount.account_level,
+                  karma_score: selectedAccount.karma_score,
+                  followers_count: selectedAccount.followers_count,
+                  following_count: selectedAccount.following_count,
+                  account_age_days: selectedAccount.account_age_days,
+                  cooling_down_until: selectedAccount.cooling_down_until,
+                  failure_count_24h: selectedAccount.failure_count_24h,
+                  restriction_count_7d: selectedAccount.restriction_count_7d,
+                }, null, 2)}</pre>
+              </div>
+              <div className="panel p-4">
+                <p className="font-semibold">TGE Profile</p>
+                <pre className="mt-3 overflow-x-auto text-xs text-gray-600">{JSON.stringify(selectedAccount.tge_profile ?? {}, null, 2)}</pre>
+                <div className="mt-3 flex gap-2">
+                  <select className="field" value={bindProfileId} onChange={(e) => setBindProfileId(e.target.value)}>
+                    <option value="">选择未绑定 Profile</option>
+                    {(profiles.data ?? []).filter((profile) => !profile.bound_account_id || profile.bound_account_id === selectedAccount.id).map((profile) => <option key={String(profile.id)} value={String(profile.id)}>{String(profile.profile_name ?? profile.name)} · {String(profile.tge_environment_id ?? profile.environment_id)}</option>)}
+                  </select>
+                  <button className="button-secondary" onClick={bindProfile}>绑定</button>
+                  <button className="button-secondary" onClick={() => void unbindProfile(selectedAccount)}>解绑</button>
+                </div>
+              </div>
+              <div className="panel p-4">
+                <p className="font-semibold">Daily Limits / Usage Today</p>
+                <pre className="mt-3 overflow-x-auto text-xs text-gray-600">{JSON.stringify(selectedAccount.limits ?? {}, null, 2)}</pre>
+              </div>
+              <div className="panel p-4">
+                <p className="font-semibold">Working Windows</p>
+                <pre className="mt-3 overflow-x-auto text-xs text-gray-600">{JSON.stringify(selectedAccount.working_windows ?? [], null, 2)}</pre>
+              </div>
+            </div>
+          </Section>
+        )}
       </div>
     </StateView>
   );
@@ -1707,7 +1919,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v0.4</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v0.5</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">

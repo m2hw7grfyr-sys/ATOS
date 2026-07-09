@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AITask, Account, DataSource, Platform, Post, SchedulerTask
+from app.models import AITask, Account, DataSource, Platform, Post, SchedulerTask, TGEProfile
 from app.response import ok
 
 
@@ -49,6 +49,16 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "scheduler_failed": count(SchedulerTask, SchedulerTask.status == "FAILED"),
                 "no_available_account": count(SchedulerTask, SchedulerTask.status == "WAITING_ACCOUNT"),
                 "active_accounts": count(Account, Account.status == "ACTIVE"),
+                "cooling_accounts": count(Account, Account.risk_status == "COOLING_DOWN"),
+                "high_risk_accounts": count(Account, Account.risk_status.in_(["HIGH", "CRITICAL"])),
+                "tge_profiles_active": count(TGEProfile, TGEProfile.status == "ACTIVE"),
+                "accounts_without_tge": count(
+                    Account,
+                    Account.status == "ACTIVE",
+                    ~Account.id.in_(
+                        select(TGEProfile.bound_account_id).where(TGEProfile.bound_account_id.is_not(None))
+                    ),
+                ),
                 "data_sources": count(DataSource, DataSource.enabled.is_(True)),
             },
             "platform_health": [

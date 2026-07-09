@@ -226,8 +226,15 @@ class Account(Base, TimestampMixin):
     platform_id: Mapped[int] = mapped_column(ForeignKey("platforms.id"), index=True)
     username: Mapped[str] = mapped_column(String(120))
     display_name: Mapped[Optional[str]] = mapped_column(String(160))
+    profile_url: Mapped[Optional[str]] = mapped_column(String(1000))
+    account_level: Mapped[Optional[str]] = mapped_column(String(60))
+    karma_score: Mapped[int] = mapped_column(Integer, default=0)
+    followers_count: Mapped[int] = mapped_column(Integer, default=0)
+    following_count: Mapped[int] = mapped_column(Integer, default=0)
+    account_age_days: Mapped[int] = mapped_column(Integer, default=0)
     health_score: Mapped[int] = mapped_column(Integer, default=100)
     risk_level: Mapped[str] = mapped_column(String(30), default="LOW", index=True)
+    risk_status: Mapped[str] = mapped_column(String(30), default="LOW", index=True)
     daily_limits: Mapped[dict] = mapped_column(JSON, default=dict)
     working_time: Mapped[dict] = mapped_column(JSON, default=dict)
     cooling_down_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -235,6 +242,7 @@ class Account(Base, TimestampMixin):
     failure_count_24h: Mapped[int] = mapped_column(Integer, default=0)
     restriction_count_7d: Mapped[int] = mapped_column(Integer, default=0)
     auto_downgrade_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    remark: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
@@ -243,12 +251,54 @@ class TGEProfile(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), unique=True)
-    environment_id: Mapped[str] = mapped_column(String(120))
-    name: Mapped[str] = mapped_column(String(120))
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), unique=True)
+    bound_account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), unique=True, index=True)
+    platform_id: Mapped[Optional[int]] = mapped_column(ForeignKey("platforms.id"), index=True)
+    environment_id: Mapped[Optional[str]] = mapped_column(String(120))
+    tge_environment_id: Mapped[Optional[str]] = mapped_column(String(120), index=True)
+    name: Mapped[Optional[str]] = mapped_column(String(120))
+    profile_name: Mapped[Optional[str]] = mapped_column(String(120))
     api_base_url: Mapped[Optional[str]] = mapped_column(String(500))
-    status: Mapped[str] = mapped_column(String(30), default="OFFLINE", index=True)
+    proxy_region: Mapped[Optional[str]] = mapped_column(String(80))
+    proxy_type: Mapped[Optional[str]] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(30), default="UNKNOWN", index=True)
     last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    remark: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class AccountLimit(Base, TimestampMixin):
+    __tablename__ = "account_limits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), unique=True, index=True)
+    browse_daily_limit: Mapped[int] = mapped_column(Integer, default=20)
+    like_daily_limit: Mapped[int] = mapped_column(Integer, default=8)
+    bookmark_daily_limit: Mapped[int] = mapped_column(Integer, default=5)
+    visit_profile_daily_limit: Mapped[int] = mapped_column(Integer, default=5)
+    reply_daily_limit: Mapped[int] = mapped_column(Integer, default=5)
+    dm_daily_limit: Mapped[int] = mapped_column(Integer, default=0)
+    follow_daily_limit: Mapped[int] = mapped_column(Integer, default=0)
+    current_browse_count: Mapped[int] = mapped_column(Integer, default=0)
+    current_like_count: Mapped[int] = mapped_column(Integer, default=0)
+    current_bookmark_count: Mapped[int] = mapped_column(Integer, default=0)
+    current_visit_profile_count: Mapped[int] = mapped_column(Integer, default=0)
+    current_reply_count: Mapped[int] = mapped_column(Integer, default=0)
+    current_dm_count: Mapped[int] = mapped_column(Integer, default=0)
+    current_follow_count: Mapped[int] = mapped_column(Integer, default=0)
+    reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
+class AccountWorkingWindow(Base, TimestampMixin):
+    __tablename__ = "account_working_windows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    day_of_week: Mapped[str] = mapped_column(String(10), index=True)
+    start_time: Mapped[str] = mapped_column(String(5))
+    end_time: Mapped[str] = mapped_column(String(5))
+    timezone: Mapped[str] = mapped_column(String(80), default="Asia/Shanghai")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
 
 
 class SchedulerTask(Base, TimestampMixin):

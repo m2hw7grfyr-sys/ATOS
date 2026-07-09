@@ -9,6 +9,8 @@ from app.models import (
     AIAnalysisResult,
     AITask,
     Account,
+    AccountLimit,
+    AccountWorkingWindow,
     DataSource,
     LLMProvider,
     Platform,
@@ -23,7 +25,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v0.4-acceptance"
+SEED_VERSION = "v0.5-acceptance"
 
 
 def main() -> None:
@@ -205,6 +207,7 @@ def main() -> None:
 
         account_specs = [
             ("reddit", "atos_reddit_demo", "ATOS Reddit Demo", 92),
+            ("reddit", "atos_reddit_backup", "ATOS Reddit Backup", 89),
             ("x", "atos_x_demo", "ATOS X Demo", 88),
             ("facebook", "atos_facebook_demo", "ATOS Facebook Demo", 85),
         ]
@@ -216,7 +219,14 @@ def main() -> None:
                     platform_id=platforms[platform_slug].id,
                     username=username,
                     display_name=display_name,
+                    profile_url=f"https://example.com/{platform_slug}/{username}",
+                    account_level="seed",
+                    karma_score=120 if platform_slug == "reddit" else 0,
+                    followers_count=50,
+                    following_count=25,
+                    account_age_days=180,
                     health_score=health_score,
+                    risk_status="LOW",
                     daily_limits={"browse": 20, "reply": 5, "like": 8},
                     working_time={
                         "timezone": "Asia/Shanghai",
@@ -230,28 +240,82 @@ def main() -> None:
                             {"day": "SUN", "start": "00:00", "end": "23:59"},
                         ],
                     },
+                    remark="Seed account for local scheduler validation.",
                     status="ACTIVE",
                 )
                 db.add(item)
                 db.flush()
+            else:
+                item.risk_status = item.risk_status or item.risk_level or "LOW"
+                item.profile_url = item.profile_url or f"https://example.com/{platform_slug}/{username}"
+                item.account_level = item.account_level or "seed"
+                item.remark = item.remark or "Seed account for local scheduler validation."
+                item.working_time = item.working_time or {"timezone": "Asia/Shanghai", "windows": []}
+            limit = db.scalar(select(AccountLimit).where(AccountLimit.account_id == item.id))
+            if not limit:
+                db.add(
+                    AccountLimit(
+                        account_id=item.id,
+                        browse_daily_limit=20,
+                        like_daily_limit=8,
+                        bookmark_daily_limit=5,
+                        visit_profile_daily_limit=5,
+                        reply_daily_limit=5,
+                    )
+                )
+            existing_windows = db.scalars(
+                select(AccountWorkingWindow).where(AccountWorkingWindow.account_id == item.id)
+            ).all()
+            if not existing_windows:
+                for day in ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]:
+                    db.add(
+                        AccountWorkingWindow(
+                            account_id=item.id,
+                            day_of_week=day,
+                            start_time="00:00",
+                            end_time="23:59",
+                            timezone="Asia/Shanghai",
+                            enabled=True,
+                        )
+                    )
             accounts.append(item)
 
-        for account, environment_id in zip(
-            accounts[:2], ["tge-demo-001", "tge-demo-002"]
+        for index, (account, environment_id) in enumerate(
+            zip(accounts, ["tge-demo-001", "tge-demo-002", "tge-demo-003", "tge-demo-004"]),
+            start=1,
         ):
             profile = db.scalar(
-                select(TGEProfile).where(TGEProfile.account_id == account.id)
+                select(TGEProfile).where(
+                    (TGEProfile.bound_account_id == account.id)
+                    | (TGEProfile.account_id == account.id)
+                )
             )
             if not profile:
                 db.add(
                     TGEProfile(
                         account_id=account.id,
+                        bound_account_id=account.id,
+                        platform_id=account.platform_id,
                         environment_id=environment_id,
+                        tge_environment_id=environment_id,
                         name=f"{account.display_name} Environment",
+                        profile_name=f"{account.display_name} Environment",
                         api_base_url="http://127.0.0.1:50326",
-                        status="OFFLINE",
+                        proxy_region="US",
+                        proxy_type="residential",
+                        status="ACTIVE",
+                        remark=f"Seed TGE profile {index}.",
                     )
                 )
+            else:
+                profile.bound_account_id = profile.bound_account_id or account.id
+                profile.account_id = profile.account_id or account.id
+                profile.platform_id = profile.platform_id or account.platform_id
+                profile.tge_environment_id = profile.tge_environment_id or profile.environment_id or environment_id
+                profile.environment_id = profile.environment_id or profile.tge_environment_id
+                profile.profile_name = profile.profile_name or profile.name or f"{account.display_name} Environment"
+                profile.name = profile.name or profile.profile_name
+                profile.status = "ACTIVE"
 
         scheduler_specs = [
             ("REPLY", accounts[0], posts[1], ai_tasks[1][1], "HIGH"),
@@ -486,8 +550,8 @@ Community: {{community}}
         db.commit()
         print(
             "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
-            "10 posts, 3 AI tasks, 3 scheduler tasks, 3 accounts, "
-            "2 TGE profiles, 6 statistics, 2 LLM providers, 2 prompt templates, "
+            "10 posts, 3 AI tasks, 3 scheduler tasks, 4 accounts, "
+            "4 TGE profiles, 6 statistics, 2 LLM providers, 2 prompt templates, "
             "5 platform weights."
         )
     finally:

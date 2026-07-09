@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.models import (
     AITask,
     Account,
+    AccountLimit,
+    AccountWorkingWindow,
     Platform,
     PlatformWeight,
     Post,
@@ -17,6 +19,7 @@ from app.models import (
     SchedulerLog,
     SchedulerTask,
     SystemSetting,
+    TGEProfile,
 )
 
 
@@ -166,9 +169,18 @@ def parse_windows(account: Account) -> list[dict[str, str]]:
     return []
 
 
-def account_in_working_time(account: Account, now: datetime | None = None) -> bool:
+def account_in_working_time(db: Session, account: Account, now: datetime | None = None) -> bool:
     now = now or utc_now()
-    windows = parse_windows(account)
+    db_windows = db.scalars(
+        select(AccountWorkingWindow).where(
+            AccountWorkingWindow.account_id == account.id,
+            AccountWorkingWindow.enabled.is_(True),
+        )
+    ).all()
+    windows = [
+        {"day": item.day_of_week, "start": item.start_time, "end": item.end_time}
+        for item in db_windows
+    ] or parse_windows(account)
     if not windows:
         return True
     today = now.strftime("%a").upper()[:3]
@@ -200,6 +212,28 @@ def account_daily_count(db: Session, account_id: int, task_type: str) -> int:
     ) or 0
 
 
+def account_limit_available(db: Session, account: Account, task_type: str, settings: dict[str, Any]) -> tuple[bool, str | None]:
+    limits = db.scalar(select(AccountLimit).where(AccountLimit.account_id == account.id))
+    if limits and task_type == "REPLY":
+        if limits.current_reply_count >= limits.reply_daily_limit:
+            return False, "Daily reply limit reached"
+        return True, None
+    legacy_limits = account.daily_limits or {}
+    reply_limit = int(legacy_limits.get("reply", settings.get("max_tasks_per_account_per_day", 5)))
+    if task_type == "REPLY" and account_daily_count(db, account.id, "REPLY") >= reply_limit:
+        return False, "Daily reply limit reached"
+    return True, None
+
+
+def account_has_tge_profile(db: Session, account: Account) -> bool:
+    profile = db.scalar(
+        select(TGEProfile).where(
+            (TGEProfile.bound_account_id == account.id) | (TGEProfile.account_id == account.id)
+        )
+    )
+    return profile is not None
+
+
 def select_account_for_task(
     db: Session, task: SchedulerTask, settings: dict[str, Any]
 ) -> tuple[Account | None, str | None]:
@@ -212,19 +246,22 @@ def select_account_for_task(
     if not candidates:
         return None, "No available account"
     for account in candidates:
-        if account.risk_level in {"HIGH", "CRITICAL"}:
+        risk_status = account.risk_status or account.risk_level
+        if risk_status in {"HIGH", "CRITICAL"}:
             log_task(db, task, action="ACCOUNT_REJECTED", old_status=task.status, new_status=task.status, reason="Risk status blocked", selected_account_id=account.id)
             continue
         if account.cooling_down_until and account.cooling_down_until > now:
             log_task(db, task, action="ACCOUNT_REJECTED", old_status=task.status, new_status=task.status, reason="Account cooling down", selected_account_id=account.id)
             continue
-        if not account_in_working_time(account, now):
+        if not account_in_working_time(db, account, now):
             log_task(db, task, action="ACCOUNT_REJECTED", old_status=task.status, new_status=task.status, reason="Outside working time", selected_account_id=account.id)
             continue
-        limits = account.daily_limits or {}
-        reply_limit = int(limits.get("reply", settings.get("max_tasks_per_account_per_day", 5)))
-        if task.task_type == "REPLY" and account_daily_count(db, account.id, "REPLY") >= reply_limit:
-            log_task(db, task, action="ACCOUNT_REJECTED", old_status=task.status, new_status=task.status, reason="Daily reply limit reached", selected_account_id=account.id)
+        limit_ok, limit_reason = account_limit_available(db, account, task.task_type, settings)
+        if not limit_ok:
+            log_task(db, task, action="ACCOUNT_REJECTED", old_status=task.status, new_status=task.status, reason=limit_reason, selected_account_id=account.id)
+            continue
+        if not account_has_tge_profile(db, account):
+            log_task(db, task, action="ACCOUNT_REJECTED", old_status=task.status, new_status=task.status, reason="No TGE profile binding", selected_account_id=account.id)
             continue
         return account, None
     return None, "No available account"

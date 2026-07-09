@@ -61,10 +61,88 @@ class AccountCreate(BaseModel):
     platform_id: int
     username: str
     display_name: Optional[str] = None
+    profile_url: Optional[str] = None
+    account_level: Optional[str] = None
+    karma_score: int = 0
+    followers_count: int = 0
+    following_count: int = 0
+    account_age_days: int = 0
+    health_score: int = 100
+    risk_status: str = "LOW"
+    remark: Optional[str] = None
     environment_id: Optional[str] = None
     environment_name: Optional[str] = None
     daily_limits: dict[str, Any] = Field(default_factory=dict)
     working_time: dict[str, Any] = Field(default_factory=dict)
+
+
+class AccountUpdate(BaseModel):
+    platform_id: Optional[int] = None
+    username: Optional[str] = None
+    display_name: Optional[str] = None
+    profile_url: Optional[str] = None
+    account_level: Optional[str] = None
+    karma_score: Optional[int] = None
+    followers_count: Optional[int] = None
+    following_count: Optional[int] = None
+    account_age_days: Optional[int] = None
+    health_score: Optional[int] = None
+    risk_status: Optional[str] = None
+    status: Optional[str] = None
+    remark: Optional[str] = None
+    cooling_down_until: Optional[datetime] = None
+    last_failure_reason: Optional[str] = None
+    failure_count_24h: Optional[int] = None
+    restriction_count_7d: Optional[int] = None
+    auto_downgrade_enabled: Optional[bool] = None
+
+
+class TGEProfileCreate(BaseModel):
+    profile_name: str
+    tge_environment_id: str
+    platform_id: int
+    bound_account_id: Optional[int] = None
+    proxy_region: Optional[str] = None
+    proxy_type: Optional[str] = None
+    status: str = "UNKNOWN"
+    remark: Optional[str] = None
+
+
+class TGEProfileUpdate(BaseModel):
+    profile_name: Optional[str] = None
+    tge_environment_id: Optional[str] = None
+    platform_id: Optional[int] = None
+    bound_account_id: Optional[int] = None
+    proxy_region: Optional[str] = None
+    proxy_type: Optional[str] = None
+    status: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class BindTGEProfileRequest(BaseModel):
+    profile_id: int
+
+
+class AccountLimitUpdate(BaseModel):
+    browse_daily_limit: int = 20
+    like_daily_limit: int = 8
+    bookmark_daily_limit: int = 5
+    visit_profile_daily_limit: int = 5
+    reply_daily_limit: int = 5
+    dm_daily_limit: int = 0
+    follow_daily_limit: int = 0
+    current_browse_count: int = 0
+    current_like_count: int = 0
+    current_bookmark_count: int = 0
+    current_visit_profile_count: int = 0
+    current_reply_count: int = 0
+    current_dm_count: int = 0
+    current_follow_count: int = 0
+    reset_at: Optional[datetime] = None
+
+
+class AccountWorkingWindowsUpdate(BaseModel):
+    windows: list[dict[str, Any]]
 
 
 class MockAIGenerateRequest(BaseModel):

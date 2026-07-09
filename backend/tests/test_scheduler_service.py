@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import AITask, Account, Platform, Post, Reply, SchedulerLog
+from app.models import AITask, Account, Platform, Post, Reply, SchedulerLog, TGEProfile
 from app.services.scheduler import queue_approved_ai_task, run_once, save_scheduler_settings
 
 
@@ -47,6 +47,18 @@ class SchedulerServiceTest(unittest.TestCase):
         )
         self.db.add_all([self.account, self.post])
         self.db.flush()
+        self.db.add(
+            TGEProfile(
+                account_id=self.account.id,
+                bound_account_id=self.account.id,
+                platform_id=self.platform.id,
+                environment_id="scheduler-env",
+                tge_environment_id="scheduler-env",
+                name="Scheduler Env",
+                profile_name="Scheduler Env",
+                status="ACTIVE",
+            )
+        )
         self.ai_task = AITask(
             post_id=self.post.id,
             provider="mock",
