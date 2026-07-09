@@ -4,6 +4,14 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v2.1
+
+- Added Subsystem Contract
+- Added Dependency Rules
+- Added Service Boundary
+- Added Worker Contract
+- Added UI Contract
+
 ## v2.0
 
 - Introduced Engineering Convention

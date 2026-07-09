@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 2.0
+**Version:** 2.1
 
 **Status:** Draft
 
@@ -378,6 +378,217 @@ ATOS 遵守：
 8. 所有状态必须事件化。
 9. 所有数据必须可追踪。
 10. 任何新增模块必须符合本规范。
+
+==============================================================
+
+# PART EC-Subsystem Contract
+
+Subsystem Contract 定义所有子系统之间唯一允许的协作方式。
+
+任何模块不得违反。
+
+==============================================================
+
+# SC-001
+
+Subsystem Independence
+
+每个 Subsystem 必须独立。
+
+包括自己的：
+
+- Entity
+- Service
+- DTO
+- Repository
+- Configuration
+- Event
+
+禁止共享 Repository。
+
+==============================================================
+
+# SC-002
+
+Allowed Communication
+
+Subsystem 允许：
+
+- REST API
+- Event Bus
+
+禁止直接访问其它数据库。
+
+==============================================================
+
+# SC-003
+
+Dependency Direction
+
+允许：
+
+Dashboard
+
+↓
+
+Statistics
+
+↓
+
+Execution
+
+禁止：
+
+Execution
+
+↓
+
+Dashboard
+
+禁止：
+
+Execution
+
+↓
+
+Scheduler
+
+禁止：
+
+Execution
+
+↓
+
+AI
+
+==============================================================
+
+# SC-004
+
+Execution Contract
+
+Execution 唯一输入：
+
+Execution Task。
+
+唯一输出：
+
+Execution Result。
+
+Execution 禁止知道 Business。
+
+==============================================================
+
+# SC-005
+
+Scheduler Contract
+
+Scheduler 唯一输入：
+
+Approved Task。
+
+唯一输出：
+
+Execution Task。
+
+Scheduler 不得执行浏览器。
+
+==============================================================
+
+# SC-006
+
+AI Contract
+
+AI 唯一输入：
+
+Post。
+
+唯一输出：
+
+Approved Reply。
+
+AI 不得操作账号。
+
+==============================================================
+
+# SC-007
+
+Account Contract
+
+Account 唯一负责：
+
+- 账号
+- Cookie
+- Session
+- Health
+- Limit
+- Working Time
+
+Execution 禁止修改 Cookie。
+
+==============================================================
+
+# SC-008
+
+Statistics Contract
+
+Statistics 唯一：
+
+Read。
+
+禁止 Write。
+
+==============================================================
+
+# SC-009
+
+Configuration Contract
+
+所有 Subsystem 读取 Configuration Service。
+
+禁止自己保存配置。
+
+==============================================================
+
+# SC-010
+
+Platform Contract
+
+任何平台都是 Adapter。
+
+Business 永远不知道 Reddit。
+
+==============================================================
+
+# SC-011
+
+Worker Contract
+
+Worker 只负责执行 Task。
+
+禁止业务。
+
+禁止 UI。
+
+==============================================================
+
+# SC-012
+
+UI Contract
+
+Screen 只能调用 API。
+
+禁止业务计算。
+
+==============================================================
+
+# SC-013
+
+Golden Dependency Rule
+
+依赖只能向下。
+
+永远不能反向。
 
 ==============================================================
 
