@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.3
+**Version:** 0.4
 
 **Status:** Draft
 
@@ -1536,3 +1536,619 @@ Data Center：
 只负责：
 
 Data。
+
+==============================================================
+
+# PART IV AI Workspace
+
+---
+
+# Chapter 3 AI Workspace
+
+## 3.1 模块定位
+
+AI Workspace 是整个 ATOS 的智能决策中心。
+
+AI Workspace 不是一个 ChatGPT 页面。
+
+AI Workspace 的职责包括：
+
+- 内容分析
+- 商业价值评估
+- 风险评估
+- Strategy 推荐
+- Prompt 构建
+- 回复生成
+- 重复检测
+- Fallback
+- 人工审核
+- 批量审批
+- AI 数据统计
+
+AI Workspace 是 Scheduler 的唯一上游。
+
+未经 AI Workspace 审核通过的数据，不允许进入 Scheduler。
+
+---
+
+# 3.2 Processing Pipeline
+
+AI Pipeline：
+
+Post Pool
+
+↓
+
+Content Analysis
+
+↓
+
+Commercial Analysis
+
+↓
+
+Risk Analysis
+
+↓
+
+Intent Classification
+
+↓
+
+Strategy Selection
+
+↓
+
+Prompt Builder
+
+↓
+
+LLM Generation
+
+↓
+
+Embedding Compare
+
+↓
+
+Fallback
+
+↓
+
+Human Review
+
+↓
+
+Approved
+
+↓
+
+Scheduler
+
+任何步骤失败：
+
+进入：
+
+Retry Queue。
+
+---
+
+# 3.3 Content Analysis
+
+AI 第一阶段：
+
+分析帖子。
+
+输出：
+
+- Language
+- Emotion
+- Topic
+- Medication
+- Community
+- Intent
+- Urgency
+- Experience
+- Question
+- Commercial Score
+- Risk Score
+- Confidence
+
+所有分析：
+
+保存：
+
+Analysis Result。
+
+禁止覆盖。
+
+---
+
+# 3.4 Intent Classification
+
+Intent：
+
+支持：
+
+- Question
+- Purchase
+- Information
+- Complaint
+- Experience
+- Review
+- Recommendation
+- Comparison
+- Story
+- Emergency
+- Support
+
+Intent：
+
+允许多个。
+
+例如：
+
+Question
+
++
+
+Purchase
+
+---
+
+# 3.5 Commercial Score
+
+商业价值：
+
+0~100。
+
+评分：
+
+由：
+
+AI。
+
+考虑：
+
+- Medication
+- Buying Intent
+- Urgency
+- Emotion
+- History
+- Community
+
+评分：
+
+保存。
+
+后续：
+
+Statistics。
+
+---
+
+# 3.6 Risk Score
+
+风险：
+
+0~100。
+
+例如：
+
+- Spam
+- Medical Risk
+- Platform Risk
+- Sensitive
+- Illegal
+- Emergency
+
+Risk：
+
+高于：
+
+Threshold。
+
+进入：
+
+Manual Review。
+
+---
+
+# 3.7 Strategy Recommendation
+
+AI：
+
+自动推荐：
+
+Strategy。
+
+例如：
+
+- Warm-up
+- Education
+- Story
+- Direct Reply
+- Brand Exposure
+- Silent Browse
+- Mixed Engagement
+
+允许：
+
+人工修改。
+
+---
+
+# 3.8 Prompt Builder
+
+Prompt：
+
+由：
+
+多个部分：
+
+组合。
+
+包括：
+
+- System Prompt
+- Platform Prompt
+- Role Prompt
+- Strategy Prompt
+- Variables
+- User Prompt
+- Context
+- History
+
+所有 Prompt：
+
+记录：
+
+Version。
+
+---
+
+# 3.9 Variables
+
+支持：
+
+- {{landing_link}}
+- {{mention}}
+- {{profile}}
+- {{cta}}
+- {{username}}
+- {{community}}
+- {{tone}}
+- {{emoji}}
+- {{platform}}
+
+变量：
+
+支持：
+
+平台过滤。
+
+例如：
+
+Reddit：
+
+不允许：
+
+Short Link。
+
+Facebook：
+
+允许。
+
+---
+
+# 3.10 LLM Provider
+
+Provider：
+
+统一：
+
+Provider Adapter。
+
+支持：
+
+- OpenAI
+- Anthropic
+- Gemini
+- Ollama
+- Local
+- Custom API
+
+业务：
+
+不得：
+
+直接：
+
+调用：
+
+OpenAI SDK。
+
+---
+
+# 3.11 Model Routing
+
+支持：
+
+按：
+
+- Platform
+- Community
+- Language
+- Commercial Score
+- Risk
+
+自动：
+
+选择：
+
+Model。
+
+例如：
+
+Reddit：
+
+GPT
+
+TikTok：
+
+Gemini
+
+Medical：
+
+Claude
+
+---
+
+# 3.12 Fallback
+
+失败：
+
+自动：
+
+Fallback。
+
+优先级：
+
+Primary
+
+↓
+
+Backup
+
+↓
+
+Template
+
+↓
+
+Manual
+
+全部：
+
+记录：
+
+原因。
+
+---
+
+# 3.13 Embedding
+
+所有：
+
+回复。
+
+生成：
+
+Embedding。
+
+支持：
+
+Cosine Similarity。
+
+默认：
+
+Threshold：
+
+0.85。
+
+超过：
+
+自动：
+
+Rewrite。
+
+---
+
+# 3.14 Human Review
+
+支持：
+
+- Approve
+- Reject
+- Edit
+- Regenerate
+- Switch Model
+- Switch Strategy
+- Edit Variables
+- History
+- Diff
+
+所有：
+
+操作：
+
+Audit。
+
+---
+
+# 3.15 Batch Review
+
+支持：
+
+批量：
+
+- Approve
+- Reject
+- Assign
+- Regenerate
+- Change Strategy
+- Change Prompt
+
+---
+
+# 3.16 Reply Status
+
+Reply：
+
+状态：
+
+GENERATING
+
+↓
+
+GENERATED
+
+↓
+
+REVIEWING
+
+↓
+
+APPROVED
+
+↓
+
+QUEUED
+
+↓
+
+EXECUTED
+
+↓
+
+ARCHIVED
+
+失败：
+
+ERROR
+
+↓
+
+RETRY
+
+---
+
+# 3.17 Dashboard
+
+Dashboard：
+
+新增：
+
+AI：
+
+统计。
+
+包括：
+
+- Today's Generation
+- Today's Review
+- Approval Rate
+- Fallback Rate
+- Average Token
+- Average Cost
+- Average Time
+- Top Prompt
+- Top Model
+
+---
+
+# 3.18 API
+
+GET
+
+/ai/tasks
+
+GET
+
+/ai/result
+
+POST
+
+/ai/generate
+
+POST
+
+/ai/retry
+
+POST
+
+/ai/review
+
+POST
+
+/ai/approve
+
+POST
+
+/ai/reject
+
+POST
+
+/ai/regenerate
+
+POST
+
+/ai/switch-model
+
+---
+
+# 3.19 Developer Rules
+
+AI Workspace：
+
+不得：
+
+直接：
+
+Scheduler。
+
+必须：
+
+Approved。
+
+AI：
+
+不得：
+
+直接：
+
+Execution。
+
+所有：
+
+Provider：
+
+必须：
+
+Adapter。
+
+所有：
+
+Prompt：
+
+必须：
+
+Version。
+
+所有：
+
+Variables：
+
+必须：
+
+Config。

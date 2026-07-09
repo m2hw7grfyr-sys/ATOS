@@ -4,6 +4,7 @@
 
 - [x] Dashboard
 - [x] Data Center
+- [x] AI Workspace
 
 ## Specification
 

@@ -4,6 +4,18 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v0.4
+
+- Expanded AI Workspace
+- Added AI Processing Pipeline
+- Added Strategy Recommendation
+- Added Prompt Builder
+- Added Variable System
+- Added Model Routing
+- Added Embedding
+- Added Batch Review
+- Added Reply State Machine
+
 ## v0.3
 
 - Expanded Data Center Specification
