@@ -1,22 +1,161 @@
 # ATOS
 
-ATOS 项目文档、原型、数据库、API 与源代码的统一仓库。
+ATOS（AI Traffic Operating System）v0.1 本地可运行骨架。
 
-## 核心目录
+当前版本实现 FastAPI、React/TypeScript、SQLite、本地数据库队列和十个 Console 页面。平台、模型、数据源、账号及执行环境均采用配置化数据结构；浏览器执行和自动互动仅保留模块边界，不在 v0.1 中自动运行。
 
-- `docs/`：软件规范、技术参考及项目文档
-- `architecture/`：系统架构设计
-- `wireframe/`：页面线框与交互原型
-- `diagram/`：Mermaid、draw.io 及流程图
-- `prompt/`：AI Prompt 与版本记录
-- `openapi/`：OpenAPI 接口契约
-- `database/`：数据库模型、迁移与设计资料
-- `src/`：应用源代码
+## 已实现
 
-现有的 `api/`、`sql/`、`assets/` 和 `prototype/` 暂时保留，后续按模块成熟度逐步迁移到新的标准目录。
+- FastAPI + SQLAlchemy + Alembic
+- SQLite 本地开发数据库，可切换 PostgreSQL
+- 统一 API 返回结构和 Trace ID
+- Dashboard 聚合接口
+- Apify 数据源配置模型
+- Post Pool
+- AI Workspace 初版
+- Scheduler 数据库状态队列
+- Account Center
+- Execution、Engagement、Statistics 占位页面
+- System Settings 配置中心初版
+- React + TypeScript + Tailwind Console
+- 初始化与演示数据脚本
 
-## 项目管理
+## 目录
 
-GitHub Project：`ATOS Development`
+```text
+ATOS/
+├── backend/       FastAPI、SQLAlchemy、Alembic
+├── frontend/      React、TypeScript、Tailwind、Vite
+├── docs/          产品、工程与架构规范
+├── architecture/  架构资产
+├── database/      数据库设计资产
+├── diagram/       Mermaid 与流程图
+├── openapi/       API 契约
+└── prompt/        Prompt 与版本记录
+```
 
-计划版本：`V3.0`、`V3.1`、`V3.2`、`V4.0`
+## 环境要求
+
+- Python 3.9+
+- Node.js 18+
+- npm 9+
+
+## 快速启动
+
+### 1. 配置环境变量
+
+```bash
+cd /path/to/ATOS
+cp .env.example .env
+```
+
+默认使用 SQLite，不需要安装 PostgreSQL。
+
+### 2. 安装后端
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+```
+
+### 3. 初始化数据库
+
+推荐使用 Alembic：
+
+```bash
+cd backend
+../.venv/bin/python -m alembic upgrade head
+../.venv/bin/python -m scripts.seed_data
+cd ..
+```
+
+也可以运行基础初始化脚本：
+
+```bash
+cd backend
+../.venv/bin/python -m scripts.init_db
+```
+
+### 4. 启动后端
+
+```bash
+cd backend
+../.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+- API: http://127.0.0.1:8000
+- Swagger: http://127.0.0.1:8000/docs
+- Health: http://127.0.0.1:8000/health
+
+### 5. 安装并启动前端
+
+新开一个终端：
+
+```bash
+cd /path/to/ATOS/frontend
+npm install
+npm run dev
+```
+
+Console: http://127.0.0.1:5173
+
+## Makefile
+
+也可以使用：
+
+```bash
+make install
+make init-db
+make seed
+```
+
+然后分别运行：
+
+```bash
+make backend
+make frontend
+```
+
+## 初始 API
+
+- `GET /health`
+- `GET /dashboard/summary`
+- `GET|POST /data-sources`
+- `GET /posts`
+- `GET /ai/tasks`
+- `GET|POST /scheduler/tasks`
+- `GET|POST /accounts`
+- `GET /settings`
+- `PUT /settings/{key}`
+
+统一返回结构：
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "success",
+  "data": {},
+  "trace_id": "..."
+}
+```
+
+## PostgreSQL
+
+将 `.env` 中 `DATABASE_URL` 改为 PostgreSQL URL，并安装对应驱动即可：
+
+```text
+DATABASE_URL=postgresql+psycopg://atos:password@localhost:5432/atos
+```
+
+之后执行 Alembic migration。业务模型无需修改。
+
+## v0.1 边界
+
+- Data Center 只负责数据源和帖子入池，不直接调用 AI。
+- AI Workspace 不直接调用 Execution。
+- Scheduler 是进入 Execution 的唯一入口。
+- Execution 不决定业务逻辑。
+- 页面只访问 API，不直接访问数据库。
+- Apify、LLM 和 TGE 均为可配置集成，默认关闭。
