@@ -20,7 +20,7 @@ DEFAULT_TGE_SETTINGS = {
     "enable_auto_start_environment": False,
     "enable_auto_attach_environment": False,
     "enable_auto_close_tab": True,
-    "remark": "TGE adapter scaffold. No browser automation in v0.6.",
+    "remark": "TGE adapter scaffold. v0.7 supports OPEN_PAGE only.",
 }
 
 

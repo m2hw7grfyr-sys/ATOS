@@ -144,7 +144,14 @@ def queue_approved_ai_task(
         post_id=post.id,
         reply_id=reply.id,
         priority=priority.upper(),
-        payload={"ai_task_id": ai_task.id, "strategy": ai_task.strategy, "mode": "HUMAN_IN_THE_LOOP"},
+        payload={
+            "ai_task_id": ai_task.id,
+            "strategy": ai_task.strategy,
+            "mode": "HUMAN_IN_THE_LOOP",
+            "action_type": "OPEN_PAGE",
+            "url": post.url,
+            "post_url": post.url,
+        },
         status="NEW",
     )
     db.add(task)

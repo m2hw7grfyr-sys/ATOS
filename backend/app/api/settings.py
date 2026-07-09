@@ -9,6 +9,7 @@ from app.schemas import (
     LLMProviderCreate,
     LLMProviderUpdate,
     PlatformWeightUpdate,
+    PlaywrightSettingsUpdate,
     SchedulerSettingsUpdate,
     SettingUpdate,
     TgeSettingsUpdate,
@@ -21,6 +22,7 @@ from app.services.scheduler import (
     save_scheduler_settings,
 )
 from app.services.tge import get_tge_settings, safe_tge_settings, save_tge_settings
+from app.services.playwright_runner import get_playwright_settings, save_playwright_settings
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -121,6 +123,20 @@ def update_tge_config(
     db: Session = Depends(get_db),
 ):
     return ok(save_tge_settings(db, payload.model_dump()), request.state.trace_id, "TGE settings updated")
+
+
+@router.get("/playwright")
+def get_playwright_config(request: Request, db: Session = Depends(get_db)):
+    return ok(get_playwright_settings(db), request.state.trace_id)
+
+
+@router.put("/playwright")
+def update_playwright_config(
+    payload: PlaywrightSettingsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return ok(save_playwright_settings(db, payload.model_dump()), request.state.trace_id, "Playwright settings updated")
 
 
 @router.get("/llm-providers")

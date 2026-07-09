@@ -29,7 +29,7 @@ settings_config = get_settings()
 app = FastAPI(
     title=settings_config.app_name,
     version=settings_config.app_version,
-    description="ATOS v0.6 local application API",
+    description="ATOS v0.7 local application API",
 )
 app.middleware("http")(trace_middleware)
 app.add_exception_handler(HTTPException, http_exception_handler)

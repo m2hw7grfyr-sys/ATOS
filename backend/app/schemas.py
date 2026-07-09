@@ -68,6 +68,18 @@ class TgeSettingsUpdate(BaseModel):
     remark: Optional[str] = None
 
 
+class PlaywrightSettingsUpdate(BaseModel):
+    playwright_enabled: bool = False
+    playwright_mock_mode: bool = True
+    playwright_timeout_seconds: int = 30
+    playwright_headless: bool = False
+    playwright_default_wait_ms: int = 1000
+    enable_screenshot: bool = True
+    enable_html_snapshot: bool = True
+    enable_auto_close_tab: bool = True
+    enable_replay_capture: bool = True
+
+
 class AccountCreate(BaseModel):
     platform_id: int
     username: str

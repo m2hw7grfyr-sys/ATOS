@@ -1101,7 +1101,7 @@ function SchedulerPage() {
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
         {taskGroups.map(([title, statuses]) => {
-          const rows = (data ?? []).filter((task) => statuses.includes(String(task.status)));
+          const rows = (data ?? []).filter((task) => (statuses as readonly string[]).includes(String(task.status)));
           return (
             <Section key={title} title={`${title} · ${rows.length}`}>
               <div className="panel overflow-x-auto">
@@ -1325,7 +1325,7 @@ function AccountCenterPage() {
     }
   }
 
-  const rows = (data ?? []).map((item) => {
+  const rows: RecordItem[] = (data ?? []).map((item) => {
     const limits = (item.limits ?? {}) as RecordItem;
     return {
       ...item,
@@ -1414,7 +1414,7 @@ function AccountCenterPage() {
                   <button className="button-secondary" onClick={bindProfile}>绑定</button>
                   <button className="button-secondary" onClick={() => void unbindProfile(selectedAccount)}>解绑</button>
                 </div>
-                {selectedAccount.tge_profile && (
+                {Boolean(selectedAccount.tge_profile) && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "test-connection")}>Test Connection</button>
                     <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "status")}>Check Status</button>
@@ -1444,6 +1444,7 @@ function SettingsPage() {
   const schedulerSettings = useApiData<RecordItem>("/settings/scheduler");
   const platformWeights = useApiData<RecordItem[]>("/settings/platform-weights");
   const tgeSettings = useApiData<RecordItem>("/settings/tge");
+  const playwrightSettings = useApiData<RecordItem>("/settings/playwright");
   const [showProviderForm, setShowProviderForm] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
   const [providerName, setProviderName] = useState("Mock Provider");
@@ -1462,6 +1463,7 @@ function SettingsPage() {
   const [remark, setRemark] = useState("");
   const [schedulerForm, setSchedulerForm] = useState<Record<string, unknown>>({});
   const [tgeForm, setTgeForm] = useState<Record<string, unknown>>({});
+  const [playwrightForm, setPlaywrightForm] = useState<Record<string, unknown>>({});
   const [weightEdits, setWeightEdits] = useState<Record<string, Record<string, unknown>>>({});
   const [feedback, setFeedback] = useState("");
 
@@ -1476,6 +1478,12 @@ function SettingsPage() {
       setTgeForm(tgeSettings.data);
     }
   }, [tgeSettings.data, tgeForm]);
+
+  useEffect(() => {
+    if (playwrightSettings.data && Object.keys(playwrightForm).length === 0) {
+      setPlaywrightForm(playwrightSettings.data);
+    }
+  }, [playwrightSettings.data, playwrightForm]);
 
   useEffect(() => {
     if ((platformWeights.data ?? []).length && Object.keys(weightEdits).length === 0) {
@@ -1657,6 +1665,33 @@ function SettingsPage() {
     }
   }
 
+  function updatePlaywrightField(key: string, value: unknown) {
+    setPlaywrightForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function savePlaywrightSettings() {
+    try {
+      await apiRequest("/settings/playwright", {
+        method: "PUT",
+        body: JSON.stringify({
+          playwright_enabled: Boolean(playwrightForm.playwright_enabled),
+          playwright_mock_mode: Boolean(playwrightForm.playwright_mock_mode),
+          playwright_timeout_seconds: Number(playwrightForm.playwright_timeout_seconds ?? 30),
+          playwright_headless: Boolean(playwrightForm.playwright_headless),
+          playwright_default_wait_ms: Number(playwrightForm.playwright_default_wait_ms ?? 1000),
+          enable_screenshot: Boolean(playwrightForm.enable_screenshot),
+          enable_html_snapshot: Boolean(playwrightForm.enable_html_snapshot),
+          enable_auto_close_tab: Boolean(playwrightForm.enable_auto_close_tab),
+          enable_replay_capture: Boolean(playwrightForm.enable_replay_capture),
+        }),
+      });
+      setFeedback("Playwright 配置已保存。");
+      await playwrightSettings.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存 Playwright 配置失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
@@ -1749,6 +1784,35 @@ function SettingsPage() {
                 {label}
               </label>
             ))}
+          </div>
+        </Section>
+        <Section
+          title="Playwright Configuration"
+          action={<button className="button" onClick={savePlaywrightSettings}><Settings className="h-4 w-4" />保存 Playwright</button>}
+        >
+          <div className="panel grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["playwright_enabled", "Playwright Enabled"],
+              ["playwright_mock_mode", "Mock Mode"],
+              ["playwright_headless", "Headless"],
+              ["enable_screenshot", "Screenshot"],
+              ["enable_html_snapshot", "HTML Snapshot"],
+              ["enable_auto_close_tab", "Auto Close Tab"],
+              ["enable_replay_capture", "Replay Capture"],
+            ].map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" checked={Boolean(playwrightForm[key])} onChange={(e) => updatePlaywrightField(key, e.target.checked)} />
+                {label}
+              </label>
+            ))}
+            <label className="text-xs font-semibold text-gray-600">
+              Timeout Seconds
+              <input className="field mt-2" type="number" value={String(playwrightForm.playwright_timeout_seconds ?? 30)} onChange={(e) => updatePlaywrightField("playwright_timeout_seconds", Number(e.target.value))} />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Default Wait MS
+              <input className="field mt-2" type="number" value={String(playwrightForm.playwright_default_wait_ms ?? 1000)} onChange={(e) => updatePlaywrightField("playwright_default_wait_ms", Number(e.target.value))} />
+            </label>
           </div>
         </Section>
         <Section
@@ -1885,10 +1949,22 @@ function ExecutionPage() {
   }, {});
   const [feedback, setFeedback] = useState("");
 
-  async function executionAction(taskId: unknown, action: "precheck" | "mark-success" | "mark-failed") {
+  async function executionAction(taskId: unknown, action: "precheck" | "mark-success" | "mark-failed" | "run-open-page" | "attach" | "close-tab") {
     try {
       await apiRequest(`/execution/tasks/${String(taskId)}/${action}`, { method: "POST" });
-      setFeedback(action === "precheck" ? "Precheck 已完成。" : action === "mark-success" ? "已标记成功。" : "已标记失败。");
+      setFeedback(
+        action === "precheck"
+          ? "Precheck 已完成。"
+          : action === "run-open-page"
+            ? "OPEN_PAGE 执行链已完成。"
+            : action === "attach"
+              ? "Attach 已完成。"
+              : action === "close-tab"
+                ? "Tab 已关闭。"
+                : action === "mark-success"
+                  ? "已标记成功。"
+                  : "已标记失败。",
+      );
       await reload();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "Execution 操作失败");
@@ -1912,7 +1988,7 @@ function ExecutionPage() {
           </div>
           <div>
             <h2 className="font-bold">Execution Runtime Status</h2>
-            <p className="mt-1 text-sm text-gray-500">已接收 Scheduler DISPATCHED 任务，等待未来执行引擎。本版本不连接 TGE、不执行浏览器动作。</p>
+            <p className="mt-1 text-sm text-gray-500">已接收 Scheduler DISPATCHED 任务。v0.7 支持 OPEN_PAGE、页面检测、Replay 保存与关闭 Tab，不粘贴或提交评论。</p>
           </div>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
@@ -1926,7 +2002,7 @@ function ExecutionPage() {
           ))}
         </div>
         {groups.map(([title, statuses]) => {
-          const rows = (data ?? []).filter((task) => statuses.includes(String(task.status)));
+          const rows = (data ?? []).filter((task) => (statuses as readonly string[]).includes(String(task.status)));
           return (
             <Section key={title} title={`${title} · ${rows.length}`}>
               <div className="panel overflow-x-auto">
@@ -1949,6 +2025,9 @@ function ExecutionPage() {
                       <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.error_message ?? "—")}</td>
                       <td className="px-4 py-3"><div className="flex flex-wrap gap-2">
                         <button className="button-secondary" onClick={() => void executionAction(task.id, "precheck")}>Precheck</button>
+                        <button className="button" onClick={() => void executionAction(task.id, "run-open-page")}>Run OPEN_PAGE</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "attach")}>Attach</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "close-tab")}>Close Tab</button>
                         <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-success")}>Success</button>
                         <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-failed")}>Failed</button>
                       </div></td>
@@ -1960,7 +2039,7 @@ function ExecutionPage() {
           );
         })}
         <Section title="Replay 占位">
-          <div className="panel p-5 text-sm text-gray-600">Replay files table is ready. v0.6 does not generate real screenshots, HTML, console logs, or network logs.</div>
+          <div className="panel p-5 text-sm text-gray-600">Replay files are available after OPEN_PAGE runs. v0.7 can save screenshot and HTML snapshots, but it does not paste or submit comments.</div>
         </Section>
       </div>
     </StateView>
@@ -2085,7 +2164,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v0.6</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v0.7</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">

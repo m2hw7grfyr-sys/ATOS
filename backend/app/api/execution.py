@@ -7,6 +7,7 @@ from app.models import Account, ExecutionLog, ExecutionTask, ReplayFile, Schedul
 from app.response import ok
 from app.serializers import serialize_model
 from app.services.execution import run_precheck, set_execution_status
+from app.services.playwright_runner import run_open_page
 
 
 router = APIRouter(prefix="/execution", tags=["execution"])
@@ -50,6 +51,43 @@ def precheck_execution_task(task_id: int, request: Request, db: Session = Depend
     db.commit()
     db.refresh(task)
     return ok(serialize_execution_task(task, db), request.state.trace_id, "precheck completed")
+
+
+@router.post("/tasks/{task_id}/attach")
+def attach_execution_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    task = db.get(ExecutionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="execution task not found")
+    set_execution_status(db, task, "ATTACHING", "ATTACH_STARTED", message="Attach scaffold started")
+    set_execution_status(db, task, "ATTACHED", "ATTACH_SUCCESS", message="Attach scaffold completed")
+    db.commit()
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "attach completed")
+
+
+@router.post("/tasks/{task_id}/run-open-page")
+def run_open_page_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    task = db.get(ExecutionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="execution task not found")
+    if task.precheck_status != "SUCCESS":
+        run_precheck(db, task)
+        if task.status == "FAILED":
+            db.commit()
+            return ok(serialize_execution_task(task, db), request.state.trace_id, "precheck failed")
+    run_open_page(db, task)
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "open page flow completed")
+
+
+@router.post("/tasks/{task_id}/close-tab")
+def close_tab_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    task = db.get(ExecutionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="execution task not found")
+    set_execution_status(db, task, "TAB_CLOSED", "TAB_CLOSED", message="Close tab scaffold completed")
+    db.commit()
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "tab closed")
 
 
 @router.post("/tasks/{task_id}/mark-success")

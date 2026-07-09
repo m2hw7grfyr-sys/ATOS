@@ -25,7 +25,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v0.6-acceptance"
+SEED_VERSION = "v0.7-acceptance"
 
 
 def main() -> None:
@@ -349,6 +349,9 @@ def main() -> None:
                         payload={
                             "mode": "HUMAN_IN_THE_LOOP",
                             "seed": True,
+                            "action_type": "OPEN_PAGE",
+                            "url": post.url,
+                            "post_url": post.url,
                         },
                         status="QUEUED",
                     )
@@ -385,11 +388,27 @@ def main() -> None:
                     "enable_auto_start_environment": False,
                     "enable_auto_attach_environment": False,
                     "enable_auto_close_tab": True,
-                    "remark": "Seed TGE adapter config. v0.6 does not execute browser actions.",
+                    "remark": "Seed TGE adapter config. v0.7 supports OPEN_PAGE only.",
                 },
                 True,
             ),
             ("data.apify", "DATA_CENTER", {"enabled": False}, True),
+            (
+                "execution.playwright",
+                "EXECUTION",
+                {
+                    "playwright_enabled": False,
+                    "playwright_mock_mode": True,
+                    "playwright_timeout_seconds": 30,
+                    "playwright_headless": False,
+                    "playwright_default_wait_ms": 1000,
+                    "enable_screenshot": True,
+                    "enable_html_snapshot": True,
+                    "enable_auto_close_tab": True,
+                    "enable_replay_capture": True,
+                },
+                False,
+            ),
         ]
         for key, category, value, is_secret in setting_specs:
             item = db.scalar(select(SystemSetting).where(SystemSetting.key == key))
