@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.1
+**Version:** 0.2
 
 **Status:** Draft
 
@@ -440,3 +440,498 @@ Version 0.1 定义 ATOS 的产品与系统主干。
 - Queue
 - 错误码
 - 测试规范
+
+---
+
+# PART II Dashboard
+
+---
+
+# Chapter 1 Dashboard
+
+## 1.1 模块定位
+
+Dashboard 是整个 ATOS Console 的默认首页。
+
+Dashboard 不负责业务处理。
+
+Dashboard 负责：
+
+- 展示
+- 聚合
+- 导航
+- 告警
+
+Dashboard 是整个系统的运行驾驶舱（Operation Cockpit）。
+
+所有业务数据均来自其它 Service。
+
+Dashboard 自身禁止直接访问业务数据库。
+
+---
+
+## 1.2 页面目标
+
+运营人员进入系统后的 3 秒内，应能够知道：
+
+- 今天有没有新帖子
+- AI 有没有异常
+- Scheduler 是否正常
+- Execution 是否正常
+- 哪些账号异常
+- 哪些平台异常
+- 哪些任务等待处理
+- 今天的数据是否达到目标
+
+Dashboard 的目标：
+
+让运营人员无需进入任何模块即可了解整个系统状态。
+
+---
+
+## 1.3 页面布局
+
+Dashboard 分为九个区域：
+
+- Header
+- Sidebar
+- Overview Cards
+- Pending Queue
+- Platform Health
+- System Health
+- Statistics
+- Quick Actions
+- Recent Activity
+
+布局如下：
+
+Header
+
+↓
+
+Sidebar + Main
+
+↓
+
+Overview Cards
+
+↓
+
+Statistics
+
+↓
+
+Recent Activity
+
+---
+
+## 1.4 Header
+
+Header 固定高度：
+
+64px
+
+Header 包含：
+
+- Logo
+- Global Search
+- Notification
+- Current Workspace
+- Current User
+- Theme Switch
+- Language
+- System Status
+
+所有页面共享 Header。
+
+---
+
+## 1.5 Sidebar
+
+Sidebar 为整个 Console 的一级导航。
+
+包含：
+
+- Dashboard
+- Data Center
+- Post Pool
+- AI Workspace
+- Scheduler
+- Execution
+- Engagement
+- Account Center
+- Statistics
+- Settings
+
+Sidebar 支持：
+
+- 折叠
+- 收藏
+- 最近访问
+- 快捷键
+
+---
+
+## 1.6 Overview Cards
+
+默认显示：
+
+- Today's Posts
+- AI Pending
+- Pending Review
+- Execution Queue
+- Today's Reply
+- Success Rate
+- CTR
+- CVR
+- Running Accounts
+- Online TGE
+- Running Workers
+- System Health
+
+所有 Card：
+
+支持点击。
+
+点击后进入对应模块。
+
+Card 不允许编辑业务数据。
+
+---
+
+## 1.7 Pending Queue
+
+显示：
+
+- AI Pending
+- Review Pending
+- Scheduler Pending
+- Execution Pending
+- Error Queue
+
+每一项：
+
+点击：
+
+进入对应模块。
+
+---
+
+## 1.8 Platform Health
+
+每个平台：
+
+显示：
+
+- Platform
+- Status
+- Account Count
+- Running
+- Cooldown
+- Error
+- Today's Tasks
+- Today's Success
+
+默认：
+
+- Reddit
+- Facebook
+- X
+- Instagram
+- TikTok
+- YouTube
+- Quora
+
+后续新增平台无需修改 Dashboard。
+
+---
+
+## 1.9 System Health
+
+展示：
+
+- AI
+- Scheduler
+- Execution
+- Apify
+- Redis
+- Database
+- Worker
+- TGE
+- Playwright
+- Health Service
+
+全部：
+
+绿色：
+
+Healthy
+
+黄色：
+
+Warning
+
+红色：
+
+Error
+
+支持：
+
+点击：
+
+查看详情。
+
+---
+
+## 1.10 Statistics
+
+Dashboard 默认展示：
+
+- Posts
+- Replies
+- CTR
+- CVR
+- Conversions
+- AI Cost
+- Prompt Usage
+- Model Usage
+- Execution Time
+- Reply Success
+- Platform Distribution
+- Account Distribution
+
+支持：
+
+- Today
+- Yesterday
+- 7 Days
+- 30 Days
+- Custom Range
+
+---
+
+## 1.11 Quick Actions
+
+Dashboard 支持：
+
+- Run Crawler
+- Generate AI
+- Run Scheduler
+- Open Execution
+- Open Engagement
+- Refresh Statistics
+- Restart Worker
+- Reload Config
+
+Quick Actions：
+
+必须支持权限控制。
+
+---
+
+## 1.12 Recent Activity
+
+显示：
+
+最近100条：
+
+- AI
+- Scheduler
+- Execution
+- System
+- Platform
+- Account
+- Config
+
+所有日志：
+
+支持：
+
+点击：
+
+查看详情。
+
+---
+
+## 1.13 Dashboard 数据来源
+
+Dashboard 禁止直接查询：
+
+- posts
+- accounts
+- scheduler
+- execution
+- 等业务表
+
+Dashboard 仅允许调用：
+
+- Statistics Service
+- Health Service
+- Configuration Service
+- Audit Service
+
+Dashboard API：
+
+负责：
+
+聚合。
+
+---
+
+## 1.14 Dashboard API
+
+Dashboard：
+
+需要：
+
+GET
+
+/dashboard/summary
+
+GET
+
+/dashboard/statistics
+
+GET
+
+/dashboard/health
+
+GET
+
+/dashboard/activity
+
+Dashboard：
+
+不允许：
+
+POST。
+
+---
+
+## 1.15 Dashboard Cache
+
+Dashboard：
+
+默认：
+
+Redis：
+
+30 秒。
+
+Statistics：
+
+60 秒。
+
+Health：
+
+10 秒。
+
+Notification：
+
+实时。
+
+---
+
+## 1.16 Dashboard 权限
+
+Administrator
+
+全部
+
+Operator
+
+全部运营数据
+
+Reviewer
+
+审核相关
+
+Viewer
+
+只读
+
+Dashboard：
+
+所有按钮：
+
+必须：
+
+RBAC。
+
+---
+
+## 1.17 Dashboard 日志
+
+所有：
+
+- 点击
+- 刷新
+- 搜索
+- 筛选
+- 跳转
+
+全部：
+
+Audit Log。
+
+---
+
+## 1.18 Dashboard 性能要求
+
+首次打开：
+
+<2 秒
+
+刷新：
+
+<500ms
+
+所有：
+
+统计：
+
+异步。
+
+禁止：
+
+Dashboard：
+
+等待：
+
+AI。
+
+---
+
+## 1.19 Dashboard 开发原则
+
+Dashboard：
+
+禁止：
+
+业务逻辑。
+
+Dashboard：
+
+禁止：
+
+数据库。
+
+Dashboard：
+
+禁止：
+
+平台判断。
+
+Dashboard：
+
+只负责：
+
+展示。
+
+所有：
+
+计算：
+
+必须：
+
+Service。

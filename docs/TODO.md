@@ -1,5 +1,9 @@
 # ATOS TODO
 
+## Software Specification
+
+- [x] Dashboard
+
 ## Specification
 
 - [ ] 补充 UI 详细规范
