@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.9
+**Version:** 1.0
 
 **Status:** Draft
 
@@ -5358,3 +5358,390 @@ Read Only。
 查询：
 
 业务数据库。
+
+==============================================================
+
+# PART X Architecture & Engineering Standard
+
+---
+
+# Chapter 9 Overall Architecture
+
+## 9.1 Architecture Goal
+
+ATOS 采用：
+
+- Event Driven Architecture（EDA）
+- Domain Driven Design（DDD Lite）
+- Plugin Architecture
+- Configuration Driven Development（CDD）
+
+四种思想共同组成。
+
+目标：
+
+- 所有模块：低耦合。
+- 所有平台：可插拔。
+- 所有 AI：可替换。
+- 所有配置：可热更新。
+- 所有任务：可追踪。
+
+---
+
+# 9.2 Domain Boundary
+
+ATOS 划分以下 Domain：
+
+- Dashboard
+- Data Center
+- Post Pool
+- AI Workspace
+- Scheduler
+- Execution
+- Engagement
+- Account
+- Statistics
+- Configuration
+- Notification（预留）
+- Billing（预留）
+- Affiliate（预留）
+- User Center（预留）
+
+每个 Domain：
+
+拥有：
+
+- Service
+- Entity
+- Repository
+- Event
+- API
+
+禁止跨 Domain 共享数据库。
+
+---
+
+# 9.3 Service Communication
+
+允许：
+
+- REST API
+- Event Bus
+
+禁止 Service A 直接调用 Service B Database。
+
+例如：
+
+Execution 不得直接读取 Account Table。
+
+必须调用 Account Service。
+
+---
+
+# 9.4 Configuration Center
+
+所有配置统一由 Configuration Service 管理。
+
+包括：
+
+- Platform
+- Strategy
+- Prompt
+- Model
+- Scheduler
+- Execution
+- Engagement
+- TGE
+- Playwright
+- Worker
+- Redis
+- API
+
+全部配置化。
+
+禁止 Hard Code。
+
+---
+
+# 9.5 Plugin Architecture
+
+- 所有平台：插件。
+- 所有 AI：插件。
+- 所有 Data Source：插件。
+- 所有 Notification：插件。
+
+插件统一 Lifecycle：
+
+- Install
+- Enable
+- Disable
+- Upgrade
+- Remove
+
+插件支持 Version。
+
+---
+
+# 9.6 Security Model
+
+支持：
+
+- RBAC
+- API Key
+- JWT
+- OAuth（预留）
+- IP Whitelist
+- Audit
+- Encryption
+- Secret Vault（预留）
+
+所有 Secret 禁止明文保存。
+
+---
+
+# 9.7 Configuration Priority
+
+配置优先级：
+
+System
+
+↓
+
+Platform
+
+↓
+
+Strategy
+
+↓
+
+Account
+
+↓
+
+Task
+
+例如：
+
+Task 覆盖全部。
+
+---
+
+# 9.8 Logging
+
+统一采用 Structured Logging。
+
+字段：
+
+- timestamp
+- trace_id
+- request_id
+- correlation_id
+- service
+- module
+- action
+- duration
+- result
+
+所有日志采用 JSON。
+
+---
+
+# 9.9 Observability
+
+统一：
+
+- Metrics
+- Logs
+- Trace
+- Health
+- Dashboard
+- Alert
+
+未来支持：
+
+- Prometheus
+- Grafana
+- OpenTelemetry
+
+---
+
+# 9.10 Health Check
+
+所有 Service 提供：
+
+/health
+
+返回：
+
+- Healthy
+- Warning
+- Critical
+
+Dashboard 统一显示。
+
+---
+
+# 9.11 Deployment
+
+推荐使用 Docker。
+
+- Docker Compose：开发。
+- Kubernetes：生产。
+- Worker：独立部署。
+- Redis：独立。
+- Database：独立。
+- Object Storage：独立。
+- Browser Node：独立。
+
+---
+
+# 9.12 Backup Strategy
+
+- 每天：Database Backup。
+- 每小时：Configuration Backup。
+- Replay：保留 30 天。
+- Log：保留 180 天。
+- Statistics：长期。
+
+---
+
+# 9.13 Disaster Recovery
+
+支持：
+
+- Worker Restart
+- Queue Recovery
+- Replay
+- Retry
+- Restore Backup
+- Health Rebuild
+
+不得全部依赖人工恢复。
+
+---
+
+# 9.14 Git Workflow
+
+- main
+- release
+- develop
+- feature/*
+- hotfix/*
+- docs/*
+
+所有开发必须通过 Pull Request。
+
+禁止直接 Push Main。
+
+---
+
+# 9.15 Version Policy
+
+Semantic Version：
+
+Major.Minor.Patch
+
+例如：
+
+- 1.0.0
+- 1.1.0
+- 1.1.1
+
+Database Migration 使用独立版本。
+
+---
+
+# 9.16 Coding Rules
+
+Backend：
+
+- Python
+- PEP8
+
+Frontend：
+
+- ESLint
+- Prettier
+
+API：
+
+- OpenAPI
+
+Database：
+
+- Migration
+
+禁止所有 Magic Number。
+
+所有 Business Rule 必须配置化。
+
+---
+
+# 9.17 Release Process
+
+Development
+
+↓
+
+Testing
+
+↓
+
+Staging
+
+↓
+
+Production
+
+支持 Rollback。
+
+支持 Blue Green（预留）。
+
+---
+
+# 9.18 Quality Gate
+
+Merge 之前必须通过：
+
+- Lint
+- Unit Test
+- Integration Test
+- Specification Check
+- Security Scan
+- Coverage
+
+---
+
+# 9.19 Non-functional Requirements
+
+- Availability：99.9%
+- Dashboard：<2s
+- API：P95 <300ms
+- Worker：自动恢复。
+- Redis：HA。
+- Replay：可追踪。
+- 系统支持 100+ 平台账号。
+- 支持 10000+ 任务/天。
+
+---
+
+# 9.20 Architecture Decision Record
+
+所有重大架构必须建立 ADR。
+
+例如：
+
+ADR-001
+
+选择 Playwright。
+
+ADR-002
+
+选择 TGE。
+
+ADR-003
+
+选择 Apify。
+
+ADR 长期保存。

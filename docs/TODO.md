@@ -11,11 +11,22 @@
 - [x] Account Center
 - [x] Statistics
 
-- [ ] Final Architecture
-- [ ] Deployment
-- [ ] Coding Standard
-- [ ] Security
-- [ ] Release v1.0
+- [x] Final Architecture
+- [x] Deployment
+- [x] Coding Standard
+- [x] Security
+- [x] Release v1.0
+
+## Technical Reference
+
+- [ ] Database
+- [ ] API
+- [ ] DTO
+- [ ] Queue
+- [ ] Redis
+- [ ] Event Payload
+- [ ] OpenAPI
+- [ ] Deployment Config
 
 ## Specification
 

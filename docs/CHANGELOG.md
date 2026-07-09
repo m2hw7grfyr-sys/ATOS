@@ -4,6 +4,20 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v1.0
+
+- Added Overall Architecture
+- Added Domain Boundary
+- Added Plugin Architecture
+- Added Configuration Center
+- Added Security Model
+- Added Deployment Standard
+- Added Git Workflow
+- Added Coding Rules
+- Added Release Process
+- Added Architecture Decision Record
+- Release ATOS Software Specification v1.0
+
 ## v0.9
 
 - Added Statistics Architecture
