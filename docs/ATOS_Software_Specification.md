@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 1.0
+**Version:** 1.1
 
 **Status:** Draft
 
@@ -935,6 +935,412 @@ Dashboard：
 必须：
 
 Service。
+
+==============================================================
+
+# Dashboard Engineering Specification
+
+本章节开始定义 Dashboard 的工程实现规范。
+
+从本章节开始：
+
+所有模块统一采用相同模板。
+
+任何新模块不得减少章节。
+
+==============================================================
+
+## Dashboard UI Layout
+
+页面采用 12 Grid。
+
+布局：
+
+-------------------------------------------------
+
+Header
+
+-------------------------------------------------
+
+Sidebar
+
+Main
+
+-------------------------------------------------
+
+Overview Cards
+
+-------------------------------------------------
+
+Platform Health
+
+System Health
+
+-------------------------------------------------
+
+Statistics
+
+-------------------------------------------------
+
+Recent Activity
+
+-------------------------------------------------
+
+Quick Actions
+
+-------------------------------------------------
+
+Footer
+
+==============================================================
+
+## Overview Cards
+
+默认 12 张。
+
+每张包含：
+
+- Icon
+- Title
+- Primary Value
+- Secondary Value
+- Trend
+- Tooltip
+- Jump
+- Refresh Time
+
+支持点击。
+
+==============================================================
+
+### Card
+
+Today's Posts
+
+数据：
+
+Statistics Service
+
+点击：
+
+Post Pool
+
+==============================================================
+
+### Card
+
+Today's Reply
+
+数据：
+
+Execution Service
+
+点击：
+
+Execution
+
+==============================================================
+
+### Card
+
+Today's AI
+
+数据：
+
+AI Workspace
+
+==============================================================
+
+### Card
+
+Today's Queue
+
+数据：
+
+Scheduler
+
+==============================================================
+
+### Card
+
+Today's Success
+
+数据：
+
+Execution
+
+==============================================================
+
+### Card
+
+Health
+
+数据：
+
+Health Service
+
+==============================================================
+
+### Card
+
+Workers
+
+数据：
+
+Worker Service
+
+==============================================================
+
+### Card
+
+Apify
+
+数据：
+
+Data Center
+
+==============================================================
+
+### Card
+
+Redis
+
+数据：
+
+Infrastructure
+
+==============================================================
+
+### Card
+
+Database
+
+数据：
+
+Infrastructure
+
+==============================================================
+
+### Card
+
+Current Running
+
+数据：
+
+Execution
+
+==============================================================
+
+### Card
+
+System Version
+
+数据：
+
+Configuration
+
+==============================================================
+
+## Dashboard Filters
+
+支持：
+
+- Workspace
+- Platform
+- Account
+- Date Range
+- Strategy
+- Model
+
+支持组合筛选。
+
+==============================================================
+
+## Dashboard Refresh
+
+Auto Refresh：
+
+30秒。
+
+支持：
+
+- Pause
+- Manual Refresh
+- Force Refresh
+
+==============================================================
+
+## Dashboard Loading
+
+首次：
+
+Skeleton。
+
+禁止：
+
+Loading Spinner。
+
+==============================================================
+
+## Dashboard Empty State
+
+无数据：
+
+显示：
+
+- Illustration
+- Description
+- Quick Action
+
+==============================================================
+
+## Dashboard Error State
+
+失败：
+
+显示：
+
+- Retry
+- Error Code
+- Log ID
+- Support Link
+
+==============================================================
+
+## Dashboard Widget
+
+Widget：
+
+- 允许拖动。
+- 允许排序。
+- 允许隐藏。
+- 允许固定。
+
+未来支持保存 Layout。
+
+==============================================================
+
+## Dashboard API Detail
+
+GET
+
+/dashboard/summary
+
+Response：
+
+Overview
+
+GET
+
+/dashboard/platform-health
+
+Response：
+
+Platform List
+
+GET
+
+/dashboard/system-health
+
+Response：
+
+Infrastructure
+
+GET
+
+/dashboard/statistics
+
+Response：
+
+Chart
+
+GET
+
+/dashboard/activity
+
+Response：
+
+Timeline
+
+==============================================================
+
+## Dashboard Event
+
+- DASHBOARD_OPEN
+- DASHBOARD_REFRESH
+- CARD_CLICK
+- FILTER_CHANGE
+- AUTO_REFRESH
+
+==============================================================
+
+## Dashboard Cache
+
+- Overview：30秒
+- Health：10秒
+- Statistics：60秒
+- Recent：5秒
+
+==============================================================
+
+## Dashboard Permission Matrix
+
+Administrator
+
+全部
+
+Operator
+
+全部
+
+Reviewer
+
+查看
+
+Viewer
+
+查看
+
+==============================================================
+
+## Dashboard Performance
+
+首次：
+
+<2秒
+
+Refresh：
+
+<500ms
+
+Widget：
+
+<100ms
+
+==============================================================
+
+## Dashboard Test Case
+
+- Dashboard Open
+- Dashboard Refresh
+- Platform Offline
+- Redis Down
+- Worker Offline
+- No Data
+- Permission
+- Cache Expire
+
+==============================================================
+
+## Dashboard Developer Notes
+
+Dashboard 永远只负责展示。
+
+不得写数据库。
+
+不得进行业务计算。
+
+所有数据来自 Service。
 
 ==============================================================
 

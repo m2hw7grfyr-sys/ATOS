@@ -4,6 +4,16 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v1.1
+
+- Upgraded Dashboard to Engineering Specification
+- Added Widget System
+- Added Empty State
+- Added Loading Strategy
+- Added Permission Matrix
+- Added Test Cases
+- Added Detailed API Section
+
 ## v1.0
 
 - Added Overall Architecture
