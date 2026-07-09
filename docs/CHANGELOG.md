@@ -4,6 +4,16 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v1.2
+
+- Introduced Screen Specification
+- Added Dashboard Screen
+- Added Component IDs
+- Added Widget Specification
+- Added Responsive Rules
+- Added Telemetry
+- Added Future Roadmap
+
 ## v1.1
 
 - Upgraded Dashboard to Engineering Specification

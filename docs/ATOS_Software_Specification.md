@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Draft
 
@@ -1341,6 +1341,277 @@ Dashboard 永远只负责展示。
 不得进行业务计算。
 
 所有数据来自 Service。
+
+==============================================================
+
+# Dashboard Screen Specification
+
+本章节开始定义 Dashboard Screen。
+
+以后所有页面统一采用 Screen Specification。
+
+==============================================================
+
+## Screen ID
+
+SCR-001
+
+==============================================================
+
+## Screen Name
+
+Dashboard
+
+==============================================================
+
+## URL
+
+/
+
+==============================================================
+
+## Navigation
+
+Sidebar
+
+↓
+
+Dashboard
+
+==============================================================
+
+## User Role
+
+- Administrator
+- Operator
+- Reviewer
+- Viewer
+
+==============================================================
+
+## Purpose
+
+Dashboard 是整个系统唯一首页。
+
+进入系统默认显示 Dashboard。
+
+Dashboard 不处理业务。
+
+Dashboard 负责观察。
+
+==============================================================
+
+## Screen Layout
+
+- Header
+- Sidebar
+- Content
+- Footer
+
+==============================================================
+
+## Components
+
+- COMP-001：Header
+- COMP-002：Sidebar
+- COMP-003：Overview Cards
+- COMP-004：Statistics
+- COMP-005：Platform Health
+- COMP-006：System Health
+- COMP-007：Quick Actions
+- COMP-008：Recent Activity
+
+==============================================================
+
+## Component Detail
+
+### COMP-003
+
+Overview Cards
+
+字段：
+
+- Icon
+- Title
+- Value
+- Trend
+- Refresh Time
+- Tooltip
+- Jump URL
+- Permission
+
+==============================================================
+
+## Interaction
+
+点击 Today's Posts：
+
+↓
+
+进入 Post Pool
+
+点击 Today's Queue：
+
+↓
+
+Scheduler
+
+点击 Today's Reply：
+
+↓
+
+Execution
+
+==============================================================
+
+## Widget Behavior
+
+支持：
+
+- Move
+- Resize（预留）
+- Hide
+- Pin
+- Refresh
+
+==============================================================
+
+## Keyboard Shortcut
+
+- R：Refresh
+- F：Search
+- ESC：Close Dialog
+
+==============================================================
+
+## Responsive
+
+>=1920
+
+6 Cards / Row
+
+>=1440
+
+4 Cards / Row
+
+>=1024
+
+3 Cards / Row
+
+<768
+
+1 Card / Row
+
+==============================================================
+
+## Loading
+
+Skeleton
+
+禁止 Spinner。
+
+==============================================================
+
+## Empty State
+
+Illustration
+
+↓
+
+Description
+
+↓
+
+Quick Action
+
+==============================================================
+
+## Error State
+
+Error Icon
+
+↓
+
+Message
+
+↓
+
+Retry
+
+↓
+
+Support
+
+==============================================================
+
+## Permission Matrix
+
+Overview
+
+| Role | Access |
+| --- | --- |
+| Administrator | ✔ |
+| Operator | ✔ |
+| Reviewer | ✔ |
+| Viewer | ✔ |
+
+Quick Action
+
+| Role | Access |
+| --- | --- |
+| Administrator | ✔ |
+| Operator | ✔ |
+| Reviewer | ✘ |
+| Viewer | ✘ |
+
+==============================================================
+
+## API Binding
+
+- /dashboard/summary
+- /dashboard/platform-health
+- /dashboard/statistics
+- /dashboard/activity
+
+==============================================================
+
+## Event
+
+- Dashboard Open
+- Dashboard Refresh
+- Card Click
+- Widget Move
+- Widget Hide
+
+==============================================================
+
+## Telemetry
+
+- Page View
+- Stay Time
+- Refresh Count
+- Card Click
+- Widget Usage
+
+==============================================================
+
+## Test Cases
+
+- Dashboard Open
+- Dashboard Refresh
+- Widget Hide
+- Permission
+- API Timeout
+- Redis Down
+- Worker Offline
+
+==============================================================
+
+## Future
+
+- Dashboard Layout Save
+- Widget Marketplace
+- Custom Dashboard
 
 ==============================================================
 
