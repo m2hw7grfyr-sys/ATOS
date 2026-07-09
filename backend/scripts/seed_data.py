@@ -1,14 +1,19 @@
+import hashlib
+import os
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
 from app.database import Base, SessionLocal, engine
 from app.models import (
+    AIAnalysisResult,
     AITask,
     Account,
     DataSource,
+    LLMProvider,
     Platform,
     Post,
+    PromptTemplate,
     Reply,
     SchedulerTask,
     StatisticSnapshot,
@@ -17,7 +22,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v0.1-acceptance"
+SEED_VERSION = "v0.3-acceptance"
 
 
 def main() -> None:
@@ -72,8 +77,10 @@ def main() -> None:
                     adapter_key="apify",
                     config={
                         "actor_id": actor_id,
-                        "workspace": "local-demo",
-                        "token_configured": False,
+                        "actor_name": actor_id.split("/")[-1],
+                        "remark": "Seed Apify configuration. Replace actor input before real collection.",
+                        "input_json": {"queries": ["automation", "workflow"], "maxItems": 10},
+                        "max_items": 10,
                     },
                     status="READY",
                 )
@@ -102,16 +109,19 @@ def main() -> None:
                 select(Post).where(Post.source_post_id == source_post_id)
             )
             if not item:
+                url = f"https://example.com/{platform_slug}/{source_post_id}"
                 item = Post(
                     platform_id=platforms[platform_slug].id,
                     data_source_id=sources[source_index].id,
                     source_post_id=source_post_id,
+                    url_hash=hashlib.sha256(url.encode("utf-8")).hexdigest(),
                     community=community,
                     author=author,
                     title=title,
                     content=content,
-                    url=f"https://example.com/{platform_slug}/{source_post_id}",
+                    url=url,
                     tags=tags,
+                    raw_json={"seed": True, "source_post_id": source_post_id},
                     published_at=now - timedelta(hours=index * 2),
                     status=status,
                 )
@@ -138,12 +148,15 @@ def main() -> None:
                 task = AITask(
                     post_id=post.id,
                     provider="mock-seed",
-                    model="mock-v0.1",
+                    model="mock-v0.3",
                     strategy=strategy,
                     commercial_score=commercial,
                     risk_score=risk,
                     result={
                         "intent": ["QUESTION", "SUPPORT"],
+                        "pain_point": "Needs a practical, low-friction next step.",
+                        "recommended_strategy": strategy,
+                        "summary": "Seed AI analysis result for local verification.",
                         "confidence": round(0.8 + index * 0.04, 2),
                         "seed": True,
                     },
@@ -151,6 +164,26 @@ def main() -> None:
                 )
                 db.add(task)
                 db.flush()
+            analysis = db.scalar(
+                select(AIAnalysisResult).where(AIAnalysisResult.ai_task_id == task.id)
+            )
+            if not analysis:
+                db.add(
+                    AIAnalysisResult(
+                        post_id=post.id,
+                        ai_task_id=task.id,
+                        intent="QUESTION",
+                        pain_point="Needs a practical, low-friction next step.",
+                        commercial_score=commercial,
+                        risk_score=risk,
+                        recommended_strategy=strategy,
+                        summary="Seed AI analysis result for local verification.",
+                        provider_used="mock-seed",
+                        model_used="mock-v0.3",
+                        generation_source="MOCK",
+                        raw_result=task.result,
+                    )
+                )
             reply = db.scalar(select(Reply).where(Reply.ai_task_id == task.id))
             if not reply:
                 reply = Reply(
@@ -243,7 +276,7 @@ def main() -> None:
                 )
 
         setting_specs = [
-            ("ai.default_provider", "AI", {"provider": "mock", "model": "mock-v0.1"}, False),
+            ("ai.default_provider", "AI", {"provider": "mock", "model": "mock-v0.3"}, False),
             ("scheduler.defaults", "SCHEDULER", {"random_delay": False, "min_delay": 120, "max_delay": 480}, False),
             ("execution.tge", "EXECUTION", {"base_url": "http://127.0.0.1:50326", "enabled": False}, False),
             ("data.apify", "DATA_CENTER", {"enabled": False}, True),
@@ -283,6 +316,108 @@ def main() -> None:
                         value=value,
                         period="TODAY",
                         metadata_json={"seed": True},
+                )
+            )
+
+        provider_specs = [
+            {
+                "provider_name": "Mock Provider",
+                "provider_type": "mock",
+                "api_base_url": None,
+                "api_key": None,
+                "model_name": "mock-v0.3",
+                "enabled": True,
+                "priority": 100,
+                "use_for_analysis": True,
+                "use_for_reply": True,
+                "use_for_embedding": False,
+                "is_mock": True,
+                "timeout_seconds": 10,
+                "max_retries": 0,
+                "remark": "Default local provider. No external API call.",
+            },
+            {
+                "provider_name": "OpenAI Provider",
+                "provider_type": "openai",
+                "api_base_url": "https://api.openai.com/v1",
+                "api_key": os.getenv("OPENAI_API_KEY") or None,
+                "model_name": os.getenv("DEFAULT_AI_MODEL", "gpt-4.1-mini"),
+                "enabled": bool(os.getenv("OPENAI_API_KEY")),
+                "priority": 10,
+                "use_for_analysis": True,
+                "use_for_reply": True,
+                "use_for_embedding": False,
+                "is_mock": False,
+                "timeout_seconds": 30,
+                "max_retries": 1,
+                "remark": "Optional real provider. Enable after adding an API key.",
+            },
+        ]
+        for spec in provider_specs:
+            provider = db.scalar(
+                select(LLMProvider).where(
+                    LLMProvider.provider_name == spec["provider_name"]
+                )
+            )
+            if not provider:
+                db.add(LLMProvider(**spec))
+
+        prompt_specs = [
+            (
+                "Default Analysis Prompt",
+                "analysis_prompt",
+                None,
+                None,
+                None,
+                """Analyze this post and return JSON only:
+{
+  "intent": "...",
+  "pain_point": "...",
+  "commercial_score": 0,
+  "risk_score": 0,
+  "recommended_strategy": "...",
+  "summary": "..."
+}
+
+Title: {{title}}
+Content: {{content}}
+Community: {{community}}
+Author: {{author}}
+URL: {{url}}
+""",
+            ),
+            (
+                "Default Reply Prompt",
+                "reply_prompt",
+                None,
+                None,
+                "supportive",
+                """Write a helpful, non-spammy reply draft.
+Strategy: {{strategy}}
+Tone: {{tone}}
+Variables: {{variables}}
+
+Title: {{title}}
+Content: {{content}}
+Community: {{community}}
+""",
+            ),
+        ]
+        for name, template_type, platform, strategy, tone, content in prompt_specs:
+            template = db.scalar(
+                select(PromptTemplate).where(PromptTemplate.name == name)
+            )
+            if not template:
+                db.add(
+                    PromptTemplate(
+                        name=name,
+                        template_type=template_type,
+                        platform=platform,
+                        strategy=strategy,
+                        tone=tone,
+                        content=content,
+                        version="v0.3",
+                        enabled=True,
                     )
                 )
 
@@ -300,7 +435,7 @@ def main() -> None:
         print(
             "ATOS acceptance seed ready: 3 platforms, 2 data sources, "
             "10 posts, 3 AI tasks, 3 scheduler tasks, 3 accounts, "
-            "2 TGE profiles, 6 statistics."
+            "2 TGE profiles, 6 statistics, 2 LLM providers, 2 prompt templates."
         )
     finally:
         db.close()

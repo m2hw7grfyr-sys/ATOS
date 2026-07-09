@@ -1,8 +1,10 @@
 # ATOS
 
-ATOS（AI Traffic Operating System）v0.1 本地可运行骨架。
+ATOS（AI Traffic Operating System）v0.3 本地可运行 MVP。
 
-当前版本实现 FastAPI、React/TypeScript、SQLite、本地数据库队列和十个 Console 页面。平台、模型、数据源、账号及执行环境均采用配置化数据结构；浏览器执行和自动互动仅保留模块边界，不在 v0.1 中自动运行。
+当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、Mock/OpenAI 双模式 AI Workspace，以及 Scheduler / Execution 等模块边界页面。
+
+v0.3 仍然保持 human-in-the-loop：不连接 TGE，不运行 Playwright，不自动粘贴，不自动评论。
 
 ## 技术栈
 
@@ -15,23 +17,25 @@ ATOS（AI Traffic Operating System）v0.1 本地可运行骨架。
 | Frontend | React 18、TypeScript、Vite |
 | UI | TailwindCSS、Lucide Icons |
 | Queue | SQLite 数据库状态队列 |
-| Future integrations | Apify、Ollama/OpenAI、TGE（v0.1 默认关闭） |
+| Integrations | Apify、Mock Provider、OpenAI Provider（可选） |
 
 ## 已实现
 
-- FastAPI + SQLAlchemy + Alembic
-- SQLite 本地开发数据库，可切换 PostgreSQL
 - 统一 API 返回结构和 Trace ID
-- Dashboard 聚合接口
-- Apify 数据源配置模型
-- Post Pool
-- AI Workspace 初版
-- Scheduler 数据库状态队列
-- Account Center
+- Dashboard 基础统计
+- Data Center 可添加、编辑、测试、运行 Apify 数据源
+- Apify Actor Input JSON 透传
+- Apify dataset items 拉取、标准化、入库
+- Post Pool 显示真实采集帖，并支持 AI actions
+- AI Workspace 支持分析、生成回复、重新生成、编辑、批准、拒绝
+- LLM Provider 配置中心，支持 Mock / OpenAI / Anthropic / Gemini / Ollama / Custom 类型占位
+- API Key 前端 masked 显示，后端不返回明文
+- Mock Provider 无 key 可完整跑通
+- OpenAI Provider 有 key 时可真实调用，失败自动 fallback 到 Mock
+- AI 调用日志、Prompt Template、Analysis Result 数据结构
+- Scheduler 数据库状态队列初版
+- Account Center 初版
 - Execution、Engagement、Statistics 占位页面
-- System Settings 配置中心初版
-- React + TypeScript + Tailwind Console
-- 初始化与演示数据脚本
 
 ## 目录
 
@@ -39,7 +43,7 @@ ATOS（AI Traffic Operating System）v0.1 本地可运行骨架。
 ATOS/
 ├── backend/       FastAPI、SQLAlchemy、Alembic
 ├── frontend/      React、TypeScript、Tailwind、Vite
-├── docs/          产品、工程与架构规范
+├── docs/          产品、工程与验收文档
 ├── architecture/  架构资产
 ├── database/      数据库设计资产
 ├── diagram/       Mermaid 与流程图
@@ -51,64 +55,40 @@ ATOS/
 
 - Python 3.9+
 - Node.js 18+
-- npm 9+
-
-## 快速启动
-
-### 1. 配置环境变量
-
-```bash
-cd /path/to/ATOS
-cp .env.example .env
-```
-
-默认使用 SQLite，不需要安装 PostgreSQL。
+- npm 9+ 或 pnpm
 
 ## 环境变量
 
+复制示例文件：
+
+```bash
+cp .env.example .env
+```
+
 | Variable | Required | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | Yes | SQLAlchemy 数据库连接；默认 `sqlite:///atos.db` |
+| `DATABASE_URL` | Yes | SQLAlchemy 数据库连接；默认 SQLite |
 | `APP_ENV` | Yes | 应用环境，例如 `development` |
-| `API_BASE_URL` | Yes | API 对外地址，供部署与工具使用 |
-| `VITE_API_BASE_URL` | Yes | 前端构建时使用的 API 地址 |
-| `APIFY_TOKEN` | No | Apify Token；v0.1 不发起真实 Run |
-| `OPENAI_API_KEY` | No | OpenAI Key；v0.1 使用 Mock Provider |
-| `TGE_API_BASE_URL` | No | TGE 本地 API 地址；v0.1 不连接 |
-| `TGE_API_KEY` | No | TGE API Key；可以留空 |
+| `API_BASE_URL` | Yes | API 对外地址 |
+| `VITE_API_BASE_URL` | Yes | 前端访问 API 的地址 |
+| `APIFY_TOKEN` | No | Apify Token；也可在 Data Center 单独配置 |
+| `APIFY_API_BASE_URL` | No | Apify API 地址 |
+| `OPENAI_API_KEY` | No | OpenAI Key；可留空使用 Mock Provider |
+| `TGE_API_BASE_URL` | No | TGE 本地 API 地址；v0.3 不连接 |
+| `TGE_API_KEY` | No | TGE API Key；v0.3 不使用 |
 
-API Key 字段可以为空。不要将真实 `.env` 提交到 Git。
+不要提交真实 `.env`。
 
-### 2. 安装后端
+## 后端启动
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
-```
 
-### 3. 初始化数据库
-
-推荐使用 Alembic：
-
-```bash
 cd backend
 ../.venv/bin/python -m alembic upgrade head
 ../.venv/bin/python -m scripts.seed_data
-cd ..
-```
-
-也可以运行基础初始化脚本：
-
-```bash
-cd backend
-../.venv/bin/python -m scripts.init_db
-```
-
-### 4. 启动后端
-
-```bash
-cd backend
 ../.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -116,49 +96,85 @@ cd backend
 - Swagger: http://127.0.0.1:8000/docs
 - Health: http://127.0.0.1:8000/health
 
-### 5. 安装并启动前端
+## 前端启动
 
 新开一个终端：
 
 ```bash
-cd /path/to/ATOS/frontend
+cd frontend
 npm install
 npm run dev
 ```
 
 Console: http://127.0.0.1:5173
 
-## Makefile
+如果 Vite 自动切到其他端口，请同步更新后端 `CORS_ORIGINS` 或改回 5173。
 
-也可以使用：
+## Apify 使用流程
 
-```bash
-make install
-make init-db
-make seed
-```
+1. 在 `.env` 填写 `APIFY_TOKEN`，或在 Data Center 新建数据源时填写 Token。
+2. 打开 Data Center，点击“新建数据源”。
+3. 填写 Actor ID、Actor Name、Platform、Input JSON、Max Items。
+4. 点击“测试”，确认 Actor 可访问。
+5. 点击“运行”，系统会调用 Actor、读取 dataset items、标准化并写入 `posts`。
+6. 打开 Post Pool 查看采集结果。
 
-然后分别运行：
+安全规则：
 
-```bash
-make backend
-make frontend
-```
+- 前端不会显示完整 `APIFY_TOKEN`。
+- 后端日志不打印完整 Token。
+- Actor Input JSON 不做字段硬编码，系统只负责透传。
 
-## 初始 API
+## AI Provider 使用流程
+
+### Mock Provider
+
+Seed 默认创建 Mock Provider。无需 API Key。
+
+使用方式：
+
+1. 打开 AI Workspace。
+2. 选择帖子。
+3. 点击 Analyze。
+4. 点击 Generate。
+5. 编辑草稿。
+6. 点击批准或拒绝。
+
+### OpenAI Provider
+
+1. 打开 System Settings。
+2. 在 LLM Providers 中新增或编辑 OpenAI Provider。
+3. 填写 `api_base_url`、`api_key`、`model_name`。
+4. 启用 `use_for_analysis` 和 `use_for_reply`。
+5. 设置比 Mock 更高的优先级，例如 `10`。
+6. 保存后回到 AI Workspace 运行 Analyze / Generate。
+
+如果 OpenAI 调用失败，系统会自动 fallback 到 Mock Provider，并在 `ai_generation_logs` 记录失败原因。
+
+## 常用 API
 
 - `GET /health`
 - `GET /dashboard/summary`
 - `GET|POST /data-sources`
-- `GET /posts`
+- `PUT /data-sources/{id}`
+- `POST /data-sources/{id}/test`
+- `POST /data-sources/{id}/run`
+- `GET /data-sources/{id}/logs`
+- `GET /posts?platform=&source_id=&status=`
 - `GET /ai/tasks`
-- `POST /ai/generate-mock`
-- `POST /ai/tasks/{id}/approve`
+- `POST /ai/tasks/{post_id}/analyze`
+- `POST /ai/tasks/{post_id}/generate-reply`
+- `POST /ai/tasks/{task_id}/regenerate`
+- `POST /ai/tasks/{task_id}/approve`
+- `POST /ai/tasks/{task_id}/reject`
+- `PUT /ai/replies/{reply_id}`
+- `GET /settings/llm-providers`
+- `POST /settings/llm-providers`
+- `PUT /settings/llm-providers/{id}`
 - `GET|POST /scheduler/tasks`
 - `POST /scheduler/tasks/from-approved`
 - `GET|POST /accounts`
 - `GET /settings`
-- `PUT /settings/{key}`
 - `GET /statistics`
 
 统一返回结构：
@@ -173,61 +189,36 @@ make frontend
 }
 ```
 
-## PostgreSQL
-
-将 `.env` 中 `DATABASE_URL` 改为 PostgreSQL URL，并安装对应驱动即可：
-
-```text
-DATABASE_URL=postgresql+psycopg://atos:password@localhost:5432/atos
-```
-
-之后执行 Alembic migration。业务模型无需修改。
-
-## v0.1 边界
-
-- Data Center 只负责数据源和帖子入池，不直接调用 AI。
-- AI Workspace 不直接调用 Execution。
-- Scheduler 是进入 Execution 的唯一入口。
-- Execution 不决定业务逻辑。
-- 页面只访问 API，不直接访问数据库。
-- Apify、LLM 和 TGE 均为可配置集成，默认关闭。
-
-## 本地 MVP 流程
-
-1. 在 Data Center 保存 Apify Actor 配置。本版本只保存配置，不运行 Actor。
-2. 在 Account Center 添加账号与 TGE Environment ID。本版本不连接 TGE。
-3. 在 System Settings 选择 LLM Provider；建议本地测试使用 Mock Provider。
-4. 在 AI Workspace 为种子帖子生成 Mock 回复并人工批准。
-5. 在 Scheduler 选择已批准 AI Task 和账号，将任务加入数据库队列。
-6. 在 Execution Center 查看任务状态。本版本不会执行、粘贴或提交任何内容。
-
 ## Seed 数据
 
 `python -m scripts.seed_data` 可重复执行；脚本使用版本标记避免重复插入。全新数据库将生成：
 
 - 3 个平台
-- 2 个数据源
+- 2 个 Apify 数据源
 - 10 条帖子
 - 3 个 AI 任务及回复
+- 2 个 LLM Provider
+- 2 个 Prompt Template
 - 3 个 Scheduler 任务
 - 3 个账号
 - 2 个 TGE Profile
 - 6 条统计快照
 
+## v0.3 边界
+
+- 不做 TGE 连接。
+- 不做 Playwright 执行。
+- 不自动粘贴评论框。
+- 不自动评论、点赞、私信、发帖。
+- 不引入 Redis/Celery。
+- 不做 Embedding 相似度。
+- 不做复杂 Prompt 版本管理。
+
 ## 常见问题
-
-### `python3` 找不到 `app`
-
-请先进入 `backend/`，并使用模块方式运行：
-
-```bash
-cd backend
-../.venv/bin/python -m scripts.seed_data
-```
 
 ### 前端显示 API 不可用
 
-确认后端运行在 `http://127.0.0.1:8000`，并检查 `.env` 中：
+确认后端运行在 `http://127.0.0.1:8000`，并检查：
 
 ```text
 VITE_API_BASE_URL=http://127.0.0.1:8000
@@ -239,14 +230,10 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 
 先关闭旧进程，或为 Uvicorn/Vite 指定其他端口，并同步更新 `VITE_API_BASE_URL` 和 `CORS_ORIGINS`。
 
-### Seed 重复执行是否会产生重复数据
+### 为什么没有真实 OpenAI 调用
 
-不会。验收 seed 使用 `seed.version` 标记；检测到相同版本时会安全跳过。
+默认 Mock Provider 优先可用。要真实调用，请在 System Settings 中启用 OpenAI Provider 并填写 API Key。
 
 ### SQLite 文件在哪里
 
 按 README 命令从 `backend/` 启动时，默认数据库位于 `backend/atos.db`。该文件已被 `.gitignore` 排除。
-
-### 为什么 Apify、LLM、TGE 没有真正执行
-
-这些集成在 v0.1 中只提供配置、数据结构和页面边界。真实网络调用及浏览器执行属于后续版本。

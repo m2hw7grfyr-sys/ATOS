@@ -4,7 +4,17 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -54,12 +64,19 @@ class DataSource(Base, TimestampMixin):
 
 class Post(Base, TimestampMixin):
     __tablename__ = "posts"
+    __table_args__ = (
+        UniqueConstraint(
+            "platform_id", "source_post_id", name="uq_posts_platform_source_post"
+        ),
+        UniqueConstraint("platform_id", "url_hash", name="uq_posts_platform_url_hash"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
     platform_id: Mapped[int] = mapped_column(ForeignKey("platforms.id"), index=True)
     data_source_id: Mapped[Optional[int]] = mapped_column(ForeignKey("data_sources.id"))
-    source_post_id: Mapped[str] = mapped_column(String(160), index=True)
+    source_post_id: Mapped[Optional[str]] = mapped_column(String(160), index=True)
+    url_hash: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     community: Mapped[Optional[str]] = mapped_column(String(120))
     author: Mapped[Optional[str]] = mapped_column(String(120))
     title: Mapped[str] = mapped_column(String(500))
@@ -67,8 +84,32 @@ class Post(Base, TimestampMixin):
     url: Mapped[str] = mapped_column(String(1000))
     language: Mapped[str] = mapped_column(String(20), default="en")
     tags: Mapped[list] = mapped_column(JSON, default=list)
+    raw_json: Mapped[dict] = mapped_column(JSON, default=dict)
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(30), default="NEW", index=True)
+
+
+class CrawlLog(Base):
+    __tablename__ = "crawl_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    data_source_id: Mapped[int] = mapped_column(
+        ForeignKey("data_sources.id"), index=True
+    )
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    actor_id: Mapped[str] = mapped_column(String(200), index=True)
+    status: Mapped[str] = mapped_column(String(30), default="RUNNING", index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    total_items: Mapped[int] = mapped_column(Integer, default=0)
+    inserted_count: Mapped[int] = mapped_column(Integer, default=0)
+    duplicate_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    raw_response_excerpt: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class AITask(Base, TimestampMixin):
@@ -86,6 +127,48 @@ class AITask(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="NEW", index=True)
 
 
+class LLMProvider(Base, TimestampMixin):
+    __tablename__ = "llm_providers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    provider_name: Mapped[str] = mapped_column(String(120))
+    provider_type: Mapped[str] = mapped_column(String(40), index=True)
+    api_base_url: Mapped[Optional[str]] = mapped_column(String(500))
+    api_key: Mapped[Optional[str]] = mapped_column(Text)
+    model_name: Mapped[str] = mapped_column(String(160), default="mock-v0.3")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100, index=True)
+    use_for_analysis: Mapped[bool] = mapped_column(Boolean, default=True)
+    use_for_reply: Mapped[bool] = mapped_column(Boolean, default=True)
+    use_for_embedding: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_mock: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=30)
+    max_retries: Mapped[int] = mapped_column(Integer, default=1)
+    remark: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class AIAnalysisResult(Base, TimestampMixin):
+    __tablename__ = "ai_analysis_results"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
+    ai_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ai_tasks.id"), index=True)
+    intent: Mapped[Optional[str]] = mapped_column(String(120))
+    pain_point: Mapped[Optional[str]] = mapped_column(Text)
+    commercial_score: Mapped[int] = mapped_column(Integer, default=0)
+    risk_score: Mapped[int] = mapped_column(Integer, default=0)
+    recommended_strategy: Mapped[Optional[str]] = mapped_column(String(120))
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    provider_used: Mapped[str] = mapped_column(String(120), default="mock")
+    model_used: Mapped[str] = mapped_column(String(160), default="mock-v0.3")
+    generation_source: Mapped[str] = mapped_column(String(40), default="MOCK", index=True)
+    raw_result: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
 class Reply(Base, TimestampMixin):
     __tablename__ = "replies"
 
@@ -97,6 +180,42 @@ class Reply(Base, TimestampMixin):
     source: Mapped[str] = mapped_column(String(40), default="LLM_GENERATED")
     version: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(30), default="GENERATED", index=True)
+
+
+class PromptTemplate(Base, TimestampMixin):
+    __tablename__ = "prompt_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    template_type: Mapped[str] = mapped_column(String(40), index=True)
+    platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    strategy: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    tone: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    content: Mapped[str] = mapped_column(Text)
+    version: Mapped[str] = mapped_column(String(40), default="v0.3")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class AIGenerationLog(Base):
+    __tablename__ = "ai_generation_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    post_id: Mapped[Optional[int]] = mapped_column(ForeignKey("posts.id"), index=True)
+    ai_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ai_tasks.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(120), index=True)
+    model: Mapped[str] = mapped_column(String(160))
+    prompt_version: Mapped[str] = mapped_column(String(40), default="v0.3")
+    purpose: Mapped[str] = mapped_column(String(40), index=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    token_estimate: Mapped[int] = mapped_column(Integer, default=0)
+    generation_source: Mapped[str] = mapped_column(String(40), default="MOCK", index=True)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(30), default="SUCCESS", index=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class Account(Base, TimestampMixin):

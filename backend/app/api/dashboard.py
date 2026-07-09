@@ -23,7 +23,21 @@ def summary(request: Request, db: Session = Depends(get_db)):
         {
             "overview": {
                 "posts": count(Post),
-                "ai_pending": count(AITask, AITask.status.in_(["NEW", "REVIEWING"])),
+                "ai_pending": count(
+                    AITask,
+                    AITask.status.in_(
+                        [
+                            "PENDING",
+                            "ANALYZING",
+                            "ANALYZED",
+                            "GENERATING",
+                            "GENERATED",
+                            "REVIEWING",
+                            "FALLBACK_USED",
+                            "NEW",
+                        ]
+                    ),
+                ),
                 "scheduler_queue": count(
                     SchedulerTask, SchedulerTask.status.in_(["QUEUED", "DELAYED"])
                 ),
