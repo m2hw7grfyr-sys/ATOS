@@ -15,7 +15,7 @@ def health(request: Request):
             "status": "HEALTHY",
             "service": settings.app_name,
             "version": settings.app_version,
-            "environment": settings.environment,
+            "environment": settings.app_env,
         },
         request.state.trace_id,
     )

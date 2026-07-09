@@ -171,16 +171,6 @@ function StateView({
   return children;
 }
 
-function EmptyState({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="panel flex min-h-48 flex-col items-center justify-center p-6 text-center">
-      <Workflow className="h-8 w-8 text-gray-400" />
-      <p className="mt-3 font-semibold">{title}</p>
-      <p className="mt-1 max-w-md text-sm text-gray-500">{detail}</p>
-    </div>
-  );
-}
-
 function Section({
   title,
   action,
@@ -822,39 +812,31 @@ function EngagementPage() {
   );
 }
 
-function PlaceholderPage({
-  icon: Icon,
-  title,
-  detail,
-  states,
-}: {
-  icon: typeof Zap;
-  title: string;
-  detail: string;
-  states: string[];
-}) {
+function StatisticsPage() {
+  const { data, error, loading, reload } =
+    useApiData<RecordItem[]>("/statistics");
   return (
-    <div className="space-y-6">
-      <div className="panel flex items-start gap-4 p-5">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-gray-100">
-          <Icon className="h-5 w-5 text-gray-600" />
+    <StateView loading={loading} error={error} reload={reload}>
+      <div className="space-y-6">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {(data ?? []).map((item) => (
+            <div key={String(item.uuid)} className="panel p-4">
+              <p className="text-xs font-semibold uppercase text-gray-500">
+                {String(item.metric).replace(/_/g, " ")}
+              </p>
+              <p className="mt-4 text-3xl font-bold">{String(item.value)}</p>
+              <p className="mt-1 text-xs text-gray-400">
+                {String(item.dimension)} · {String(item.period)}
+              </p>
+            </div>
+          ))}
         </div>
-        <div>
-          <h2 className="font-bold">{title}</h2>
-          <p className="mt-1 text-sm text-gray-500">{detail}</p>
+        <div className="panel flex items-start gap-3 p-4 text-sm text-gray-600">
+          <ChartNoAxesCombined className="h-5 w-5 shrink-0 text-cyan" />
+          当前展示 Seed 统计快照。事件总线与实时聚合将在后续版本接入。
         </div>
       </div>
-      <div className="grid gap-3 md:grid-cols-3">
-        {states.map((state) => (
-          <div key={state} className="panel p-4">
-            <p className="text-xs font-semibold uppercase text-gray-500">{state}</p>
-            <p className="mt-4 text-2xl font-bold">0</p>
-            <p className="mt-1 text-xs text-gray-400">等待后续 Runtime 接入</p>
-          </div>
-        ))}
-      </div>
-      <EmptyState title="MVP 占位已就绪" detail="页面边界、导航和状态区域已建立，后续能力通过独立 Service 与 API 接入。" />
-    </div>
+    </StateView>
   );
 }
 
@@ -879,14 +861,7 @@ function PageContent({ page }: { page: PageKey }) {
     case "engagement":
       return <EngagementPage />;
     case "statistics":
-      return (
-        <PlaceholderPage
-          icon={ChartNoAxesCombined}
-          title="Event Analytics"
-          detail="统计中心将通过事件消费构建指标，不直接修改业务数据。"
-          states={["Events", "Aggregations", "Alerts"]}
-        />
-      );
+      return <StatisticsPage />;
   }
 }
 

@@ -3,7 +3,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
 
-from app.api import accounts, ai, dashboard, data_sources, health, posts, scheduler, settings
+from app.api import (
+    accounts,
+    ai,
+    dashboard,
+    data_sources,
+    health,
+    posts,
+    scheduler,
+    settings,
+    statistics,
+)
 from app.config import get_settings
 from app.exception_handlers import (
     http_exception_handler,
@@ -39,3 +49,4 @@ app.include_router(ai.router)
 app.include_router(scheduler.router)
 app.include_router(accounts.router)
 app.include_router(settings.router)
+app.include_router(statistics.router)

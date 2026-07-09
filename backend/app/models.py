@@ -155,6 +155,19 @@ class SystemSetting(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
+class StatisticSnapshot(Base, TimestampMixin):
+    __tablename__ = "statistics_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    metric: Mapped[str] = mapped_column(String(120), index=True)
+    dimension: Mapped[str] = mapped_column(String(80), default="SYSTEM", index=True)
+    value: Mapped[float] = mapped_column(Float, default=0)
+    period: Mapped[str] = mapped_column(String(30), default="TODAY", index=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
