@@ -39,8 +39,15 @@ def summary(request: Request, db: Session = Depends(get_db)):
                     ),
                 ),
                 "scheduler_queue": count(
-                    SchedulerTask, SchedulerTask.status.in_(["QUEUED", "DELAYED"])
+                    SchedulerTask, SchedulerTask.status.in_(["NEW", "QUEUED", "DELAYED"])
                 ),
+                "scheduler_pending": count(
+                    SchedulerTask, SchedulerTask.status.in_(["NEW", "QUEUED", "WAITING_ACCOUNT", "WAITING_TIME"])
+                ),
+                "scheduler_ready": count(SchedulerTask, SchedulerTask.status == "READY"),
+                "scheduler_delayed": count(SchedulerTask, SchedulerTask.status == "DELAYED"),
+                "scheduler_failed": count(SchedulerTask, SchedulerTask.status == "FAILED"),
+                "no_available_account": count(SchedulerTask, SchedulerTask.status == "WAITING_ACCOUNT"),
                 "active_accounts": count(Account, Account.status == "ACTIVE"),
                 "data_sources": count(DataSource, DataSource.enabled.is_(True)),
             },

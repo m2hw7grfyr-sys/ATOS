@@ -230,6 +230,11 @@ class Account(Base, TimestampMixin):
     risk_level: Mapped[str] = mapped_column(String(30), default="LOW", index=True)
     daily_limits: Mapped[dict] = mapped_column(JSON, default=dict)
     working_time: Mapped[dict] = mapped_column(JSON, default=dict)
+    cooling_down_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_failure_reason: Mapped[Optional[str]] = mapped_column(Text)
+    failure_count_24h: Mapped[int] = mapped_column(Integer, default=0)
+    restriction_count_7d: Mapped[int] = mapped_column(Integer, default=0)
+    auto_downgrade_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
@@ -258,8 +263,38 @@ class SchedulerTask(Base, TimestampMixin):
     reply_id: Mapped[Optional[int]] = mapped_column(ForeignKey("replies.id"))
     priority: Mapped[str] = mapped_column(String(20), default="MEDIUM", index=True)
     scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    earliest_execute_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    delay_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(30), default="QUEUED", index=True)
+
+
+class SchedulerLog(Base):
+    __tablename__ = "scheduler_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("scheduler_tasks.id"), index=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    old_status: Mapped[Optional[str]] = mapped_column(String(30))
+    new_status: Mapped[Optional[str]] = mapped_column(String(30))
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    selected_account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
+    delay_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class PlatformWeight(Base, TimestampMixin):
+    __tablename__ = "platform_weights"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    platform_id: Mapped[int] = mapped_column(ForeignKey("platforms.id"), unique=True, index=True)
+    weight: Mapped[int] = mapped_column(Integer, default=10)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    remark: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
 class SystemSetting(Base, TimestampMixin):

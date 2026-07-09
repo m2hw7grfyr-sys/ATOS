@@ -1,10 +1,10 @@
 # ATOS
 
-ATOS（AI Traffic Operating System）v0.3 本地可运行 MVP。
+ATOS（AI Traffic Operating System）v0.4 本地可运行 MVP。
 
-当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、Mock/OpenAI 双模式 AI Workspace，以及 Scheduler / Execution 等模块边界页面。
+当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、Mock/OpenAI 双模式 AI Workspace，以及 AI Approved 到 Scheduler Queue 的调度闭环。
 
-v0.3 仍然保持 human-in-the-loop：不连接 TGE，不运行 Playwright，不自动粘贴，不自动评论。
+v0.4 仍然保持 human-in-the-loop：不连接 TGE，不运行 Playwright，不自动粘贴，不自动评论。
 
 ## 技术栈
 
@@ -33,7 +33,10 @@ v0.3 仍然保持 human-in-the-loop：不连接 TGE，不运行 Playwright，不
 - Mock Provider 无 key 可完整跑通
 - OpenAI Provider 有 key 时可真实调用，失败自动 fallback 到 Mock
 - AI 调用日志、Prompt Template、Analysis Result 数据结构
-- Scheduler 数据库状态队列初版
+- Scheduler 数据库状态队列
+- AI Approved Reply 可手动或自动加入 Scheduler
+- Scheduler 支持随机延迟、平台轮询、权重轮询、账号选择
+- Scheduler READY 后仅写入 mock execution placeholder，不执行浏览器
 - Account Center 初版
 - Execution、Engagement、Statistics 占位页面
 
@@ -151,6 +154,56 @@ Seed 默认创建 Mock Provider。无需 API Key。
 
 如果 OpenAI 调用失败，系统会自动 fallback 到 Mock Provider，并在 `ai_generation_logs` 记录失败原因。
 
+## Scheduler 使用流程
+
+### 从 AI Workspace 加入 Scheduler
+
+1. 在 AI Workspace 中生成回复。
+2. 点击批准。
+3. 如果 System Settings 中开启 `Auto Queue Approved`，批准后会自动创建 Scheduler Task。
+4. 如果未开启自动入队，可在已批准任务旁点击 `Add to Scheduler`。
+
+### 从 Post Pool 批量加入 Scheduler
+
+Post Pool 顶部提供 `批量加入 Scheduler`。它只会把当前列表中已有 approved reply 的帖子加入队列，不会生成回复，也不会执行浏览器动作。
+
+### 配置随机延迟
+
+打开 System Settings：
+
+1. 勾选 `Random Delay`。
+2. 设置 `Min Delay` 和 `Max Delay`。
+3. Scheduler Run Once 时，任务会先进入 `DELAYED`。
+4. 系统会写入 `delay_seconds` 和 `earliest_execute_at`。
+
+### 配置平台权重
+
+打开 System Settings 的 `Platform Weights`：
+
+- Reddit 默认 50
+- Facebook 默认 30
+- X 默认 20
+- Instagram 默认 15
+- TikTok 默认 10
+
+启用 `Weighted Round Robin` 后，Scheduler 会按权重生成平台调度顺序。平台来自数据库，不硬编码业务逻辑。
+
+### 运行 Scheduler 一次
+
+打开 Scheduler 页面，点击 `Run Once`。
+
+当前 v0.4 行为：
+
+1. 从 `NEW / QUEUED` 中选择任务。
+2. 根据平台轮询或权重轮询选择下一个平台任务。
+3. 如开启随机延迟，则写入延迟并进入 `DELAYED`。
+4. 选择可用账号。
+5. 标记 `READY`。
+6. 立即写入 mock execution placeholder。
+7. 标记 `DISPATCHED`。
+
+Execution 页面只显示“已接收任务，等待未来执行引擎”，不会连接 TGE 或 Playwright。
+
 ## 常用 API
 
 - `GET /health`
@@ -168,6 +221,16 @@ Seed 默认创建 Mock Provider。无需 API Key。
 - `POST /ai/tasks/{task_id}/approve`
 - `POST /ai/tasks/{task_id}/reject`
 - `PUT /ai/replies/{reply_id}`
+- `POST /scheduler/tasks/from-approved`
+- `POST /scheduler/tasks/bulk-from-approved`
+- `POST /scheduler/tasks/{id}/cancel`
+- `POST /scheduler/tasks/{id}/retry`
+- `POST /scheduler/run-once`
+- `GET /scheduler/logs`
+- `GET /settings/scheduler`
+- `PUT /settings/scheduler`
+- `GET /settings/platform-weights`
+- `PUT /settings/platform-weights`
 - `GET /settings/llm-providers`
 - `POST /settings/llm-providers`
 - `PUT /settings/llm-providers/{id}`
@@ -204,7 +267,7 @@ Seed 默认创建 Mock Provider。无需 API Key。
 - 2 个 TGE Profile
 - 6 条统计快照
 
-## v0.3 边界
+## v0.4 边界
 
 - 不做 TGE 连接。
 - 不做 Playwright 执行。

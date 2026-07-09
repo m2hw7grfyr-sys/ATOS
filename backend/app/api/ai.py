@@ -8,6 +8,7 @@ from app.response import ok
 from app.schemas import MockAIGenerateRequest, ReplyGenerateRequest, ReplyUpdate
 from app.serializers import serialize_model
 from app.services.ai import AIAnalysisService, AIProviderError, ReplyGenerationService
+from app.services.scheduler import get_scheduler_settings, queue_approved_ai_task
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -119,9 +120,14 @@ def approve_task(task_id: int, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="AI task has no reply")
     task.status = "APPROVED"
     reply.status = "APPROVED"
+    scheduler_task = None
+    if get_scheduler_settings(db).get("auto_queue_on_approval"):
+        scheduler_task = queue_approved_ai_task(db, ai_task_id=task.id)
     db.commit()
     db.refresh(task)
-    return ok(serialize_task(task, db), request.state.trace_id, "AI task approved")
+    result = serialize_task(task, db)
+    result["scheduler_task_id"] = scheduler_task.id if scheduler_task else None
+    return ok(result, request.state.trace_id, "AI task approved")
 
 
 @router.post("/tasks/{task_id}/reject")

@@ -96,6 +96,11 @@ type DashboardData = {
     posts: number;
     ai_pending: number;
     scheduler_queue: number;
+    scheduler_pending?: number;
+    scheduler_ready?: number;
+    scheduler_delayed?: number;
+    scheduler_failed?: number;
+    no_available_account?: number;
     active_accounts: number;
     data_sources: number;
   };
@@ -302,6 +307,24 @@ function DashboardPage() {
           tone: "text-amber",
         },
         {
+          label: "Scheduler Ready",
+          value: data.overview.scheduler_ready ?? 0,
+          icon: CheckCircle2,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Scheduler Delayed",
+          value: data.overview.scheduler_delayed ?? 0,
+          icon: RefreshCw,
+          tone: "text-blue-700",
+        },
+        {
+          label: "No Account",
+          value: data.overview.no_available_account ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
+        },
+        {
           label: "Active Accounts",
           value: data.overview.active_accounts,
           icon: Users,
@@ -327,7 +350,7 @@ function DashboardPage() {
             </button>
           }
         >
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {cards.map((card) => (
               <div key={card.label} className="panel min-h-28 p-4">
                 <div className="flex items-start justify-between">
@@ -673,6 +696,24 @@ function PostPoolPage() {
     }
   }
 
+  async function bulkAddToScheduler() {
+    setFeedback("");
+    try {
+      const result = await apiRequest<RecordItem>("/scheduler/tasks/bulk-from-approved", {
+        method: "POST",
+        body: JSON.stringify({
+          post_ids: (data ?? []).map((post) => Number(post.id)).filter(Boolean),
+          priority: "MEDIUM",
+        }),
+      });
+      setFeedback(
+        `批量加入 Scheduler 完成：${String(result.queued_count ?? 0)} 条，跳过 ${String(result.skipped_count ?? 0)} 条。`,
+      );
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "批量加入失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-4">
@@ -682,6 +723,7 @@ function PostPoolPage() {
           <label className="text-xs font-semibold text-gray-600">Source<select className="field mt-2 min-w-48" value={sourceId} onChange={(e) => setSourceId(e.target.value)}><option value="">All</option>{(sources.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className="text-xs font-semibold text-gray-600">Status<select className="field mt-2 min-w-36" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option><option value="NEW">NEW</option><option value="ANALYZED">ANALYZED</option><option value="ARCHIVED">ARCHIVED</option></select></label>
           <button className="icon-button mb-0.5" title="刷新" onClick={reload}><RefreshCw className="h-4 w-4" /></button>
+          <button className="button mb-0.5" onClick={bulkAddToScheduler}><CalendarClock className="h-4 w-4" />批量加入 Scheduler</button>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
         <Section title={`Unified Post Pool · ${data?.length ?? 0}`}>
@@ -796,6 +838,19 @@ function AIWorkspacePage() {
     }
   }
 
+  async function addToScheduler(taskId: unknown) {
+    try {
+      await apiRequest("/scheduler/tasks/from-approved", {
+        method: "POST",
+        body: JSON.stringify({ ai_task_id: Number(taskId), priority: "MEDIUM" }),
+      });
+      setFeedback("已加入 Scheduler 队列。");
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "加入 Scheduler 失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
@@ -842,6 +897,9 @@ function AIWorkspacePage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <StatusBadge value={task.status} />
+                    {task.status === "APPROVED" && (
+                      <button className="button-secondary" onClick={() => addToScheduler(task.id)}>Add to Scheduler</button>
+                    )}
                     {task.status !== "APPROVED" && (
                       <>
                         <button className="button-secondary" onClick={() => void regenerate(task)}>重新生成</button>
@@ -915,6 +973,7 @@ function SchedulerPage() {
     useApiData<RecordItem[]>("/scheduler/tasks");
   const aiTasks = useApiData<RecordItem[]>("/ai/tasks");
   const accounts = useApiData<RecordItem[]>("/accounts");
+  const logs = useApiData<RecordItem[]>("/scheduler/logs");
   const approved = (aiTasks.data ?? []).filter((task) => task.status === "APPROVED");
   const [aiTaskId, setAiTaskId] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -942,10 +1001,41 @@ function SchedulerPage() {
     }
   }
 
+  async function runOnce() {
+    try {
+      const result = await apiRequest<RecordItem>("/scheduler/run-once", { method: "POST" });
+      setFeedback(`Scheduler Run Once: ${String(result.status)} · processed ${String(result.processed ?? 0)}`);
+      await reload();
+      await logs.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "运行失败");
+    }
+  }
+
+  async function taskAction(taskId: unknown, action: "cancel" | "retry") {
+    try {
+      await apiRequest(`/scheduler/tasks/${String(taskId)}/${action}`, { method: "POST" });
+      setFeedback(action === "cancel" ? "任务已取消。" : "任务已重试入队。");
+      await reload();
+      await logs.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "操作失败");
+    }
+  }
+
+  const taskGroups = [
+    ["待调度任务", ["NEW", "WAITING_ACCOUNT", "WAITING_TIME"]],
+    ["已排队任务", ["QUEUED"]],
+    ["延迟中任务", ["DELAYED"]],
+    ["已派发任务", ["DISPATCHED", "READY"]],
+    ["失败任务", ["FAILED", "CANCELLED"]],
+    ["冷却中任务", ["COOLDOWN"]],
+  ] as const;
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
-        <div className="panel grid gap-3 p-4 md:grid-cols-[1fr_1fr_auto]">
+        <div className="panel grid gap-3 p-4 md:grid-cols-[1fr_1fr_auto_auto]">
           <select className="field" value={aiTaskId} onChange={(e) => setAiTaskId(e.target.value)}>
             <option value="">选择已批准 AI Task</option>
             {approved.map((task) => <option key={String(task.id)} value={String(task.id)}>Task #{String(task.id)} · {String(task.strategy)}</option>)}
@@ -955,21 +1045,59 @@ function SchedulerPage() {
             {(accounts.data ?? []).map((account) => <option key={String(account.id)} value={String(account.id)}>{String(account.username)}</option>)}
           </select>
           <button className="button" disabled={!aiTaskId} onClick={queueTask}><CalendarClock className="h-4 w-4" />加入队列</button>
+          <button className="button-secondary" onClick={runOnce}><Play className="h-4 w-4" />Run Once</button>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
-        <Section
-          title="Database Queue"
-          action={<span className="rounded bg-cyan/10 px-2 py-1 text-xs font-semibold text-cyan">Execution 唯一入口</span>}
-        >
+        {taskGroups.map(([title, statuses]) => {
+          const rows = (data ?? []).filter((task) => statuses.includes(String(task.status)));
+          return (
+            <Section key={title} title={`${title} · ${rows.length}`}>
+              <div className="panel overflow-x-auto">
+                <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
+                  <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                    {["task_id", "platform", "post_title", "account", "strategy", "priority", "status", "scheduled_at", "earliest_execute_at", "delay_seconds", "created_at", "error_message", "actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {rows.map((task) => (
+                      <tr key={String(task.uuid)} className="border-b border-line last:border-0">
+                        <td className="px-4 py-3 font-mono text-xs">{String(task.task_id ?? task.id)}</td>
+                        <td className="px-4 py-3 uppercase text-teal">{String(task.platform ?? "—")}</td>
+                        <td className="max-w-xs px-4 py-3 font-medium">{String(task.post_title ?? "—")}</td>
+                        <td className="px-4 py-3">{String(task.account ?? "—")}</td>
+                        <td className="px-4 py-3">{String(task.strategy ?? "—")}</td>
+                        <td className="px-4 py-3">{String(task.priority ?? "—")}</td>
+                        <td className="px-4 py-3"><StatusBadge value={task.status} /></td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{task.scheduled_at ? new Date(String(task.scheduled_at)).toLocaleString() : "—"}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{task.earliest_execute_at ? new Date(String(task.earliest_execute_at)).toLocaleString() : "—"}</td>
+                        <td className="px-4 py-3">{String(task.delay_seconds ?? 0)}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{task.created_at ? new Date(String(task.created_at)).toLocaleString() : "—"}</td>
+                        <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.error_message ?? "—")}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button className="button-secondary" onClick={() => void taskAction(task.id, "retry")}>重试</button>
+                            <button className="button-secondary" onClick={() => void taskAction(task.id, "cancel")}>取消</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          );
+        })}
+        <Section title="Scheduler Logs">
           <DataTable
             columns={[
-              { key: "task_type", label: "Task" },
-              { key: "priority", label: "Priority" },
-              { key: "account_id", label: "Account" },
-              { key: "scheduled_at", label: "Scheduled" },
-              { key: "status", label: "Status" },
+              { key: "action", label: "Action" },
+              { key: "old_status", label: "Old" },
+              { key: "new_status", label: "New" },
+              { key: "reason", label: "Reason" },
+              { key: "selected_account_id", label: "Account" },
+              { key: "delay_seconds", label: "Delay" },
+              { key: "created_at", label: "Created" },
             ]}
-            rows={data ?? []}
+            rows={logs.data ?? []}
           />
         </Section>
       </div>
@@ -1051,6 +1179,8 @@ function AccountCenterPage() {
 function SettingsPage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/settings");
   const providers = useApiData<LLMProviderItem[]>("/settings/llm-providers");
+  const schedulerSettings = useApiData<RecordItem>("/settings/scheduler");
+  const platformWeights = useApiData<RecordItem[]>("/settings/platform-weights");
   const [showProviderForm, setShowProviderForm] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
   const [providerName, setProviderName] = useState("Mock Provider");
@@ -1067,7 +1197,30 @@ function SettingsPage() {
   const [timeoutSeconds, setTimeoutSeconds] = useState("30");
   const [maxRetries, setMaxRetries] = useState("1");
   const [remark, setRemark] = useState("");
+  const [schedulerForm, setSchedulerForm] = useState<Record<string, unknown>>({});
+  const [weightEdits, setWeightEdits] = useState<Record<string, Record<string, unknown>>>({});
   const [feedback, setFeedback] = useState("");
+
+  useEffect(() => {
+    if (schedulerSettings.data && Object.keys(schedulerForm).length === 0) {
+      setSchedulerForm(schedulerSettings.data);
+    }
+  }, [schedulerSettings.data, schedulerForm]);
+
+  useEffect(() => {
+    if ((platformWeights.data ?? []).length && Object.keys(weightEdits).length === 0) {
+      const edits: Record<string, Record<string, unknown>> = {};
+      for (const item of platformWeights.data ?? []) {
+        edits[String(item.platform)] = {
+          platform: item.platform,
+          weight: item.weight,
+          enabled: item.enabled,
+          remark: item.remark,
+        };
+      }
+      setWeightEdits(edits);
+    }
+  }, [platformWeights.data, weightEdits]);
 
   function resetProviderForm() {
     setEditingProviderId(null);
@@ -1167,6 +1320,47 @@ function SettingsPage() {
     }
   }
 
+  function updateSchedulerField(key: string, value: unknown) {
+    setSchedulerForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function saveSchedulerSettings() {
+    try {
+      await apiRequest("/settings/scheduler", {
+        method: "PUT",
+        body: JSON.stringify({
+          scheduler_enabled: Boolean(schedulerForm.scheduler_enabled),
+          auto_queue_on_approval: Boolean(schedulerForm.auto_queue_on_approval),
+          default_strategy: String(schedulerForm.default_strategy ?? "ROUND_ROBIN"),
+          enable_random_delay: Boolean(schedulerForm.enable_random_delay),
+          min_delay_seconds: Number(schedulerForm.min_delay_seconds ?? 120),
+          max_delay_seconds: Number(schedulerForm.max_delay_seconds ?? 480),
+          enable_platform_round_robin: Boolean(schedulerForm.enable_platform_round_robin),
+          enable_weighted_round_robin: Boolean(schedulerForm.enable_weighted_round_robin),
+          max_tasks_per_account_per_day: Number(schedulerForm.max_tasks_per_account_per_day ?? 5),
+          max_tasks_per_platform_per_day: Number(schedulerForm.max_tasks_per_platform_per_day ?? 20),
+        }),
+      });
+      setFeedback("Scheduler 默认配置已保存。");
+      await schedulerSettings.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存 Scheduler 配置失败");
+    }
+  }
+
+  async function savePlatformWeights() {
+    try {
+      await apiRequest("/settings/platform-weights", {
+        method: "PUT",
+        body: JSON.stringify({ weights: Object.values(weightEdits) }),
+      });
+      setFeedback("平台权重已保存。");
+      await platformWeights.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存平台权重失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
@@ -1227,6 +1421,65 @@ function SettingsPage() {
           </form>
         )}
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <Section
+          title="Scheduler Defaults"
+          action={<button className="button" onClick={saveSchedulerSettings}><Settings className="h-4 w-4" />保存 Scheduler</button>}
+        >
+          <div className="panel grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["scheduler_enabled", "Scheduler Enabled"],
+              ["auto_queue_on_approval", "Auto Queue Approved"],
+              ["enable_random_delay", "Random Delay"],
+              ["enable_platform_round_robin", "Platform Round Robin"],
+              ["enable_weighted_round_robin", "Weighted Round Robin"],
+            ].map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" checked={Boolean(schedulerForm[key])} onChange={(e) => updateSchedulerField(key, e.target.checked)} />
+                {label}
+              </label>
+            ))}
+            {[
+              ["default_strategy", "Default Strategy"],
+              ["min_delay_seconds", "Min Delay"],
+              ["max_delay_seconds", "Max Delay"],
+              ["max_tasks_per_account_per_day", "Max / Account / Day"],
+              ["max_tasks_per_platform_per_day", "Max / Platform / Day"],
+            ].map(([key, label]) => (
+              <label key={key} className="text-xs font-semibold text-gray-600">
+                {label}
+                <input
+                  className="field mt-2"
+                  value={String(schedulerForm[key] ?? "")}
+                  onChange={(e) => updateSchedulerField(key, key === "default_strategy" ? e.target.value : Number(e.target.value))}
+                />
+              </label>
+            ))}
+          </div>
+        </Section>
+        <Section
+          title="Platform Weights"
+          action={<button className="button-secondary" onClick={savePlatformWeights}>保存权重</button>}
+        >
+          <div className="panel overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["Platform", "Weight", "Enabled", "Remark"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(platformWeights.data ?? []).map((item) => {
+                const key = String(item.platform);
+                const edit = weightEdits[key] ?? item;
+                return (
+                  <tr key={String(item.uuid)} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3 font-semibold uppercase text-teal">{String(item.platform)}</td>
+                    <td className="px-4 py-3"><input className="field w-24" type="number" value={String(edit.weight ?? 10)} onChange={(e) => setWeightEdits((current) => ({ ...current, [key]: { ...edit, platform: item.platform, weight: Number(e.target.value) } }))} /></td>
+                    <td className="px-4 py-3"><input type="checkbox" checked={Boolean(edit.enabled)} onChange={(e) => setWeightEdits((current) => ({ ...current, [key]: { ...edit, platform: item.platform, enabled: e.target.checked } }))} /></td>
+                    <td className="px-4 py-3"><input className="field min-w-64" value={String(edit.remark ?? "")} onChange={(e) => setWeightEdits((current) => ({ ...current, [key]: { ...edit, platform: item.platform, remark: e.target.value } }))} /></td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        </Section>
         <Section
           title="LLM Providers"
           action={
@@ -1309,11 +1562,11 @@ function ExecutionPage() {
           </div>
           <div>
             <h2 className="font-bold">Execution Runtime Status</h2>
-            <p className="mt-1 text-sm text-gray-500">只读显示 Scheduler 队列，本版本不连接 TGE、不执行浏览器动作。</p>
+            <p className="mt-1 text-sm text-gray-500">已接收 Scheduler DISPATCHED 任务，等待未来执行引擎。本版本不连接 TGE、不执行浏览器动作。</p>
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
-          {["QUEUED", "RUNNING", "FAILED"].map((state) => (
+          {["QUEUED", "DISPATCHED", "FAILED"].map((state) => (
             <div key={state} className="panel p-4">
               <p className="text-xs font-semibold uppercase text-gray-500">{state}</p>
               <p className="mt-4 text-2xl font-bold">{counts[state] ?? 0}</p>
@@ -1326,6 +1579,7 @@ function ExecutionPage() {
             { key: "task_type", label: "Task" },
             { key: "priority", label: "Priority" },
             { key: "account_id", label: "Account" },
+            { key: "error_message", label: "Message" },
             { key: "status", label: "Status" },
           ]}
           rows={data ?? []}
@@ -1453,7 +1707,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v0.3</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v0.4</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">

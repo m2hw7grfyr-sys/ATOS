@@ -12,6 +12,7 @@ from app.models import (
     DataSource,
     LLMProvider,
     Platform,
+    PlatformWeight,
     Post,
     PromptTemplate,
     Reply,
@@ -22,7 +23,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v0.3-acceptance"
+SEED_VERSION = "v0.4-acceptance"
 
 
 def main() -> None:
@@ -41,6 +42,8 @@ def main() -> None:
             ("Reddit", "reddit", "ACTIVE"),
             ("X", "x", "PLANNED"),
             ("Facebook", "facebook", "PLANNED"),
+            ("Instagram", "instagram", "PLANNED"),
+            ("TikTok", "tiktok", "PLANNED"),
         ]:
             item = db.scalar(select(Platform).where(Platform.slug == slug))
             if not item:
@@ -217,7 +220,15 @@ def main() -> None:
                     daily_limits={"browse": 20, "reply": 5, "like": 8},
                     working_time={
                         "timezone": "Asia/Shanghai",
-                        "ranges": ["09:00-12:00", "19:00-22:00"],
+                        "windows": [
+                            {"day": "MON", "start": "00:00", "end": "23:59"},
+                            {"day": "TUE", "start": "00:00", "end": "23:59"},
+                            {"day": "WED", "start": "00:00", "end": "23:59"},
+                            {"day": "THU", "start": "00:00", "end": "23:59"},
+                            {"day": "FRI", "start": "00:00", "end": "23:59"},
+                            {"day": "SAT", "start": "00:00", "end": "23:59"},
+                            {"day": "SUN", "start": "00:00", "end": "23:59"},
+                        ],
                     },
                     status="ACTIVE",
                 )
@@ -277,7 +288,24 @@ def main() -> None:
 
         setting_specs = [
             ("ai.default_provider", "AI", {"provider": "mock", "model": "mock-v0.3"}, False),
-            ("scheduler.defaults", "SCHEDULER", {"random_delay": False, "min_delay": 120, "max_delay": 480}, False),
+            (
+                "scheduler.defaults",
+                "SCHEDULER",
+                {
+                    "scheduler_enabled": True,
+                    "auto_queue_on_approval": False,
+                    "default_strategy": "ROUND_ROBIN",
+                    "enable_random_delay": False,
+                    "min_delay_seconds": 120,
+                    "max_delay_seconds": 480,
+                    "enable_platform_round_robin": True,
+                    "enable_weighted_round_robin": False,
+                    "max_tasks_per_account_per_day": 5,
+                    "max_tasks_per_platform_per_day": 20,
+                    "last_dispatched_platform_id": None,
+                },
+                False,
+            ),
             ("execution.tge", "EXECUTION", {"base_url": "http://127.0.0.1:50326", "enabled": False}, False),
             ("data.apify", "DATA_CENTER", {"enabled": False}, True),
         ]
@@ -317,7 +345,31 @@ def main() -> None:
                         period="TODAY",
                         metadata_json={"seed": True},
                 )
+                )
+
+        platform_weight_specs = {
+            "reddit": (50, "Primary discovery platform"),
+            "facebook": (30, "Secondary community platform"),
+            "x": (20, "Fast signal platform"),
+            "instagram": (15, "Future visual platform"),
+            "tiktok": (10, "Future video platform"),
+        }
+        for slug, (weight, remark) in platform_weight_specs.items():
+            platform = platforms.get(slug) or db.scalar(select(Platform).where(Platform.slug == slug))
+            if not platform:
+                continue
+            item = db.scalar(
+                select(PlatformWeight).where(PlatformWeight.platform_id == platform.id)
             )
+            if not item:
+                db.add(
+                    PlatformWeight(
+                        platform_id=platform.id,
+                        weight=weight,
+                        enabled=True,
+                        remark=remark,
+                    )
+                )
 
         provider_specs = [
             {
@@ -433,9 +485,10 @@ Community: {{community}}
             )
         db.commit()
         print(
-            "ATOS acceptance seed ready: 3 platforms, 2 data sources, "
+            "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
             "10 posts, 3 AI tasks, 3 scheduler tasks, 3 accounts, "
-            "2 TGE profiles, 6 statistics, 2 LLM providers, 2 prompt templates."
+            "2 TGE profiles, 6 statistics, 2 LLM providers, 2 prompt templates, "
+            "5 platform weights."
         )
     finally:
         db.close()

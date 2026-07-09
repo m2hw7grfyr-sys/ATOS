@@ -35,6 +35,28 @@ class SchedulerTaskCreate(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class SchedulerBulkApprovedCreate(BaseModel):
+    post_ids: list[int] = Field(default_factory=list)
+    priority: str = "MEDIUM"
+
+
+class SchedulerSettingsUpdate(BaseModel):
+    scheduler_enabled: bool = True
+    auto_queue_on_approval: bool = False
+    default_strategy: str = "ROUND_ROBIN"
+    enable_random_delay: bool = False
+    min_delay_seconds: int = 120
+    max_delay_seconds: int = 480
+    enable_platform_round_robin: bool = True
+    enable_weighted_round_robin: bool = False
+    max_tasks_per_account_per_day: int = 5
+    max_tasks_per_platform_per_day: int = 20
+
+
+class PlatformWeightUpdate(BaseModel):
+    weights: list[dict[str, Any]]
+
+
 class AccountCreate(BaseModel):
     platform_id: int
     username: str
