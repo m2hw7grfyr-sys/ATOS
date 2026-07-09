@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.2
+**Version:** 0.3
 
 **Status:** Draft
 
@@ -935,3 +935,604 @@ Dashboard：
 必须：
 
 Service。
+
+==============================================================
+
+# PART III Data Center
+
+---
+
+# Chapter 2 Data Center
+
+## 2.1 模块定位
+
+Data Center 是整个 ATOS 唯一的数据入口（Single Entry）。
+
+所有外部数据：
+
+必须先进入 Data Center。
+
+任何模块：
+
+不得直接采集。
+
+例如：
+
+- AI Workspace
+- Scheduler
+- Execution
+
+均禁止直接调用：
+
+- Apify
+- RSS
+- API
+- Crawler
+
+Data Center 是整个系统唯一的数据接入层。
+
+---
+
+## 2.2 系统职责
+
+Data Center 负责：
+
+- 数据采集
+- 数据标准化
+- 数据清洗
+- 去重
+- 标签
+- 统一编号
+- 平台识别
+- 帖子池入库
+- 事件通知
+
+Data Center：
+
+绝不负责：
+
+- AI
+- Scheduler
+- Execution
+
+---
+
+## 2.3 数据来源
+
+V1：
+
+支持：
+
+- Apify
+
+V2：
+
+增加：
+
+- RSS
+- JSON
+- Webhook
+- CSV
+- Manual Import
+- Official API
+
+所有来源：
+
+统一：
+
+Source Adapter。
+
+---
+
+## 2.4 Source Adapter
+
+所有采集器：
+
+必须实现：
+
+SourceAdapter Interface
+
+统一接口：
+
+- connect()
+- test()
+- crawl()
+- parse()
+- normalize()
+- validate()
+- close()
+
+新增平台：
+
+不得修改：
+
+Data Center。
+
+仅新增：
+
+Adapter。
+
+---
+
+## 2.5 Apify
+
+支持：
+
+- 多个 Token
+- 多个 Workspace
+- 多个 Actor
+- 多个 Input
+- 多个 Dataset
+- 多个 Schedule
+
+支持：
+
+- 备注
+- 状态
+- Owner
+- 更新时间
+- 失败次数
+- 成功率
+- 平均耗时
+
+---
+
+## 2.6 Actor 管理
+
+Actor：
+
+必须支持：
+
+- 启用
+- 停用
+- 测试
+- 复制
+- 版本
+- 备注
+- 默认 Input
+- 最近运行
+- 最近错误
+
+每个 Actor：
+
+绑定：
+
+平台。
+
+例如：
+
+- Reddit
+- Facebook
+- X
+- Instagram
+- TikTok
+
+---
+
+## 2.7 Platform Mapping
+
+平台：
+
+不是：
+
+Actor。
+
+Actor：
+
+属于：
+
+平台。
+
+例如：
+
+Platform：
+
+Reddit
+
+↓
+
+Actor：
+
+Search ADHD
+
+Actor：
+
+Search Adderall
+
+Actor：
+
+Search Vyvanse
+
+Actor：
+
+Search Concerta
+
+多个：
+
+Actor。
+
+统一：
+
+进入：
+
+Reddit。
+
+---
+
+## 2.8 Crawl Job
+
+每一次采集：
+
+都是：
+
+Job。
+
+Job：
+
+包含：
+
+- Job ID
+- Source
+- Platform
+- Actor
+- Status
+- Created Time
+- Start Time
+- End Time
+- Duration
+- Result Count
+- Duplicate Count
+- Error Count
+
+---
+
+## 2.9 数据标准化
+
+所有帖子：
+
+统一：
+
+Post Object。
+
+统一字段：
+
+- Platform
+- Community
+- Author
+- Author ID
+- Title
+- Content
+- URL
+- Media
+- Published Time
+- Language
+- Source
+- Source Post ID
+- Hash
+- Tags
+- Metadata
+
+禁止：
+
+平台：
+
+自定义字段：
+
+直接进入：
+
+Post Pool。
+
+---
+
+## 2.10 Parser
+
+Parser：
+
+负责：
+
+解析：
+
+原始 JSON。
+
+Parser：
+
+不得：
+
+写数据库。
+
+Parser：
+
+只返回：
+
+Post Object。
+
+---
+
+## 2.11 Normalizer
+
+Normalizer：
+
+负责：
+
+统一：
+
+- 时间
+- URL
+- 媒体
+- 编码
+- Emoji
+- Markdown
+- HTML
+- Mention
+- Link
+
+所有帖子：
+
+统一格式。
+
+---
+
+## 2.12 Validator
+
+Validator：
+
+负责：
+
+检查：
+
+是否：
+
+合法。
+
+例如：
+
+URL
+
+为空。
+
+标题：
+
+为空。
+
+作者：
+
+为空。
+
+时间：
+
+非法。
+
+全部：
+
+Reject。
+
+---
+
+## 2.13 Deduplicator
+
+重复检测：
+
+第一层：
+
+Platform
+
++
+
+Source Post ID
+
+第二层：
+
+Hash
+
+第三层：
+
+Embedding
+
+第四层：
+
+Semantic
+
+如果：
+
+重复。
+
+写入：
+
+Duplicate Log。
+
+不进入：
+
+Post Pool。
+
+---
+
+## 2.14 Post UUID
+
+进入：
+
+ATOS：
+
+以后。
+
+统一：
+
+生成：
+
+UUID。
+
+之后：
+
+整个系统：
+
+只使用：
+
+UUID。
+
+禁止：
+
+直接使用：
+
+Platform ID。
+
+---
+
+## 2.15 Tag Engine
+
+Data Center：
+
+负责：
+
+基础标签。
+
+例如：
+
+- Platform
+- Community
+- Language
+- Medication
+- Intent
+- Question
+- Experience
+- Review
+- Emergency
+
+这些标签：
+
+AI：
+
+继续扩展。
+
+---
+
+## 2.16 Event
+
+成功：
+
+POST_IMPORTED
+
+失败：
+
+POST_IMPORT_FAILED
+
+重复：
+
+POST_DUPLICATED
+
+Parser：
+
+POST_PARSED
+
+Normalizer：
+
+POST_NORMALIZED
+
+Validator：
+
+POST_VALIDATED
+
+事件：
+
+统一：
+
+Event Bus。
+
+---
+
+## 2.17 Retry
+
+采集失败：
+
+支持：
+
+Retry。
+
+默认：
+
+3次。
+
+指数退避。
+
+Retry：
+
+记录：
+
+日志。
+
+---
+
+## 2.18 Dashboard
+
+Dashboard：
+
+显示：
+
+- Today's Import
+- Today's Duplicate
+- Today's Error
+- Today's Job
+- Average Duration
+- Success Rate
+
+---
+
+## 2.19 Data Center API
+
+GET
+
+/data-center/source
+
+GET
+
+/data-center/job
+
+GET
+
+/data-center/platform
+
+POST
+
+/data-center/run
+
+POST
+
+/data-center/retry
+
+POST
+
+/data-center/test
+
+POST
+
+/data-center/import
+
+---
+
+## 2.20 开发原则
+
+Data Center：
+
+禁止：
+
+AI。
+
+禁止：
+
+Execution。
+
+禁止：
+
+Scheduler。
+
+禁止：
+
+Platform Logic。
+
+禁止：
+
+业务判断。
+
+Data Center：
+
+只负责：
+
+Data。

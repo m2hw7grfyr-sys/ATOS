@@ -3,6 +3,7 @@
 ## Software Specification
 
 - [x] Dashboard
+- [x] Data Center
 
 ## Specification
 

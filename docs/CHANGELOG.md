@@ -4,6 +4,19 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v0.3
+
+- Expanded Data Center Specification
+- Added Source Adapter Architecture
+- Added Crawl Job
+- Added Platform Mapping
+- Added Parser
+- Added Normalizer
+- Added Validator
+- Added Deduplicator
+- Added Event Bus
+- Added Retry Strategy
+
 ## v0.2
 
 - Expanded Dashboard Specification
