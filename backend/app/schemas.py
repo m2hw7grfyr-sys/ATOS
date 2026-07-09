@@ -30,8 +30,21 @@ class AccountCreate(BaseModel):
     platform_id: int
     username: str
     display_name: Optional[str] = None
+    environment_id: Optional[str] = None
+    environment_name: Optional[str] = None
     daily_limits: dict[str, Any] = Field(default_factory=dict)
     working_time: dict[str, Any] = Field(default_factory=dict)
+
+
+class MockAIGenerateRequest(BaseModel):
+    post_id: int
+    strategy: str = "EDUCATION"
+
+
+class SchedulerApprovedTaskCreate(BaseModel):
+    ai_task_id: int
+    account_id: Optional[int] = None
+    priority: str = "MEDIUM"
 
 
 class SettingUpdate(BaseModel):

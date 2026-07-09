@@ -124,7 +124,10 @@ make frontend
 - `GET|POST /data-sources`
 - `GET /posts`
 - `GET /ai/tasks`
+- `POST /ai/generate-mock`
+- `POST /ai/tasks/{id}/approve`
 - `GET|POST /scheduler/tasks`
+- `POST /scheduler/tasks/from-approved`
 - `GET|POST /accounts`
 - `GET /settings`
 - `PUT /settings/{key}`
@@ -159,3 +162,12 @@ DATABASE_URL=postgresql+psycopg://atos:password@localhost:5432/atos
 - Execution 不决定业务逻辑。
 - 页面只访问 API，不直接访问数据库。
 - Apify、LLM 和 TGE 均为可配置集成，默认关闭。
+
+## 本地 MVP 流程
+
+1. 在 Data Center 保存 Apify Actor 配置。本版本只保存配置，不运行 Actor。
+2. 在 Account Center 添加账号与 TGE Environment ID。本版本不连接 TGE。
+3. 在 System Settings 选择 LLM Provider；建议本地测试使用 Mock Provider。
+4. 在 AI Workspace 为种子帖子生成 Mock 回复并人工批准。
+5. 在 Scheduler 选择已批准 AI Task 和账号，将任务加入数据库队列。
+6. 在 Execution Center 查看任务状态。本版本不会执行、粘贴或提交任何内容。

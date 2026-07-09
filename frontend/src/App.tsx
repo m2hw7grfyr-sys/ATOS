@@ -24,7 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiGet } from "./api";
+import { apiGet, apiRequest } from "./api";
 
 type PageKey =
   | "dashboard"
@@ -338,28 +338,83 @@ function DashboardPage() {
 
 function DataCenterPage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/data-sources");
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("Apify Source");
+  const [actorId, setActorId] = useState("");
+  const [token, setToken] = useState("");
+  const [feedback, setFeedback] = useState("");
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setFeedback("");
+    try {
+      await apiRequest("/data-sources", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          source_type: "APIFY",
+          platform_id: 1,
+          adapter_key: "apify",
+          config: {
+            actor_id: actorId,
+            token_configured: Boolean(token),
+            token_preview: token ? `${token.slice(0, 4)}...` : "",
+          },
+        }),
+      });
+      setFeedback("Apify 配置已保存。本版本不会运行 Actor。");
+      setShowForm(false);
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
-      <Section
-        title="Configured Sources"
-        action={
-          <button className="button">
-            <Database className="h-4 w-4" />
-            新建数据源
-          </button>
-        }
-      >
-        <DataTable
-          columns={[
-            { key: "name", label: "Name" },
-            { key: "source_type", label: "Type" },
-            { key: "adapter_key", label: "Adapter" },
-            { key: "status", label: "Status" },
-            { key: "last_run_at", label: "Last Run" },
-          ]}
-          rows={data ?? []}
-        />
-      </Section>
+      <div className="space-y-5">
+        {showForm && (
+          <form className="panel grid gap-4 p-4 md:grid-cols-3" onSubmit={submit}>
+            <label className="text-xs font-semibold text-gray-600">
+              配置名称
+              <input className="field mt-2" value={name} onChange={(e) => setName(e.target.value)} required />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Actor ID
+              <input className="field mt-2" value={actorId} onChange={(e) => setActorId(e.target.value)} placeholder="owner/actor-name" required />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              API Token
+              <input className="field mt-2" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="仅保存配置状态" />
+            </label>
+            <div className="flex gap-2 md:col-span-3">
+              <button className="button" type="submit"><CheckCircle2 className="h-4 w-4" />保存配置</button>
+              <button className="button-secondary" type="button" onClick={() => setShowForm(false)}>取消</button>
+            </div>
+          </form>
+        )}
+        {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <Section
+          title="Configured Sources"
+          action={
+            <button className="button" onClick={() => setShowForm(true)}>
+              <Database className="h-4 w-4" />
+              新建数据源
+            </button>
+          }
+        >
+          <DataTable
+            columns={[
+              { key: "name", label: "Name" },
+              { key: "source_type", label: "Type" },
+              { key: "adapter_key", label: "Adapter" },
+              { key: "status", label: "Status" },
+              { key: "last_run_at", label: "Last Run" },
+            ]}
+            rows={data ?? []}
+          />
+        </Section>
+      </div>
     </StateView>
   );
 }
@@ -399,21 +454,74 @@ function PostPoolPage() {
 
 function AIWorkspacePage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/ai/tasks");
+  const posts = useApiData<RecordItem[]>("/posts");
+  const [postId, setPostId] = useState("1");
+  const [feedback, setFeedback] = useState("");
+
+  async function generateMock() {
+    try {
+      await apiRequest("/ai/generate-mock", {
+        method: "POST",
+        body: JSON.stringify({ post_id: Number(postId), strategy: "EDUCATION" }),
+      });
+      setFeedback("Mock Provider 已生成回复，等待人工批准。");
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "生成失败");
+    }
+  }
+
+  async function approve(taskId: unknown) {
+    try {
+      await apiRequest(`/ai/tasks/${String(taskId)}/approve`, { method: "POST" });
+      setFeedback("任务已批准，可进入 Scheduler。");
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "批准失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
-      <Section title="Review Queue">
-        <DataTable
-          columns={[
-            { key: "strategy", label: "Strategy" },
-            { key: "provider", label: "Provider" },
-            { key: "model", label: "Model" },
-            { key: "commercial_score", label: "Commercial" },
-            { key: "risk_score", label: "Risk" },
-            { key: "status", label: "Status" },
-          ]}
-          rows={data ?? []}
-        />
-      </Section>
+      <div className="space-y-5">
+        <div className="panel flex flex-wrap items-end gap-3 p-4">
+          <label className="min-w-64 flex-1 text-xs font-semibold text-gray-600">
+            选择帖子
+            <select className="field mt-2" value={postId} onChange={(e) => setPostId(e.target.value)}>
+              {(posts.data ?? []).map((post) => (
+                <option key={String(post.id)} value={String(post.id)}>{String(post.title)}</option>
+              ))}
+            </select>
+          </label>
+          <button className="button" onClick={generateMock}><Sparkles className="h-4 w-4" />Mock 生成</button>
+        </div>
+        {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <Section title="Review Queue">
+          <div className="space-y-3">
+            {(data ?? []).map((task) => (
+              <div key={String(task.uuid)} className="panel p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{String(task.strategy)} · {String(task.model)}</p>
+                    <p className="mt-1 text-xs text-gray-500">{String(task.provider)} · Commercial {String(task.commercial_score)} · Risk {String(task.risk_score)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge value={task.status} />
+                    {task.status !== "APPROVED" && (
+                      <button className="button-secondary" onClick={() => approve(task.id)}>批准</button>
+                    )}
+                  </div>
+                </div>
+                {Boolean(task.reply) && (
+                  <p className="mt-4 border-t border-line pt-3 text-sm text-gray-600">
+                    {String((task.reply as RecordItem).content)}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      </div>
     </StateView>
   );
 }
@@ -421,76 +529,295 @@ function AIWorkspacePage() {
 function SchedulerPage() {
   const { data, error, loading, reload } =
     useApiData<RecordItem[]>("/scheduler/tasks");
+  const aiTasks = useApiData<RecordItem[]>("/ai/tasks");
+  const accounts = useApiData<RecordItem[]>("/accounts");
+  const approved = (aiTasks.data ?? []).filter((task) => task.status === "APPROVED");
+  const [aiTaskId, setAiTaskId] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [feedback, setFeedback] = useState("");
+
+  useEffect(() => {
+    if (!aiTaskId && approved[0]) setAiTaskId(String(approved[0].id));
+    if (!accountId && accounts.data?.[0]) setAccountId(String(accounts.data[0].id));
+  }, [approved, aiTaskId, accounts.data, accountId]);
+
+  async function queueTask() {
+    try {
+      await apiRequest("/scheduler/tasks/from-approved", {
+        method: "POST",
+        body: JSON.stringify({
+          ai_task_id: Number(aiTaskId),
+          account_id: accountId ? Number(accountId) : null,
+          priority: "HIGH",
+        }),
+      });
+      setFeedback("已批准任务已加入数据库队列。Execution 不会自动运行。");
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "入队失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
-      <Section
-        title="Database Queue"
-        action={
-          <span className="rounded bg-cyan/10 px-2 py-1 text-xs font-semibold text-cyan">
-            Execution 唯一入口
-          </span>
-        }
-      >
-        <DataTable
-          columns={[
-            { key: "task_type", label: "Task" },
-            { key: "priority", label: "Priority" },
-            { key: "account_id", label: "Account" },
-            { key: "scheduled_at", label: "Scheduled" },
-            { key: "status", label: "Status" },
-          ]}
-          rows={data ?? []}
-        />
-      </Section>
+      <div className="space-y-5">
+        <div className="panel grid gap-3 p-4 md:grid-cols-[1fr_1fr_auto]">
+          <select className="field" value={aiTaskId} onChange={(e) => setAiTaskId(e.target.value)}>
+            <option value="">选择已批准 AI Task</option>
+            {approved.map((task) => <option key={String(task.id)} value={String(task.id)}>Task #{String(task.id)} · {String(task.strategy)}</option>)}
+          </select>
+          <select className="field" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <option value="">不指定账号</option>
+            {(accounts.data ?? []).map((account) => <option key={String(account.id)} value={String(account.id)}>{String(account.username)}</option>)}
+          </select>
+          <button className="button" disabled={!aiTaskId} onClick={queueTask}><CalendarClock className="h-4 w-4" />加入队列</button>
+        </div>
+        {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <Section
+          title="Database Queue"
+          action={<span className="rounded bg-cyan/10 px-2 py-1 text-xs font-semibold text-cyan">Execution 唯一入口</span>}
+        >
+          <DataTable
+            columns={[
+              { key: "task_type", label: "Task" },
+              { key: "priority", label: "Priority" },
+              { key: "account_id", label: "Account" },
+              { key: "scheduled_at", label: "Scheduled" },
+              { key: "status", label: "Status" },
+            ]}
+            rows={data ?? []}
+          />
+        </Section>
+      </div>
     </StateView>
   );
 }
 
 function AccountCenterPage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/accounts");
+  const [showForm, setShowForm] = useState(false);
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [environmentId, setEnvironmentId] = useState("");
+  const [feedback, setFeedback] = useState("");
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      await apiRequest("/accounts", {
+        method: "POST",
+        body: JSON.stringify({
+          platform_id: 1,
+          username,
+          display_name: displayName,
+          environment_id: environmentId,
+          daily_limits: { browse: 20, like: 8, reply: 5 },
+          working_time: { timezone: "Asia/Shanghai", ranges: ["09:00-12:00"] },
+        }),
+      });
+      setFeedback("账号与 TGE Environment ID 已保存；本版本不会连接 TGE。");
+      setShowForm(false);
+      setUsername("");
+      setEnvironmentId("");
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存失败");
+    }
+  }
+
+  const rows = (data ?? []).map((item) => ({
+    ...item,
+    environment_id: item.tge_profile
+      ? (item.tge_profile as RecordItem).environment_id
+      : "—",
+  }));
   return (
     <StateView loading={loading} error={error} reload={reload}>
-      <Section title="Account Assets">
-        <DataTable
-          columns={[
-            { key: "username", label: "Username" },
-            { key: "display_name", label: "Display Name" },
-            { key: "health_score", label: "Health" },
-            { key: "risk_level", label: "Risk" },
-            { key: "daily_limits", label: "Daily Limits" },
-            { key: "status", label: "Status" },
-          ]}
-          rows={data ?? []}
-        />
-      </Section>
+      <div className="space-y-5">
+        {showForm && (
+          <form className="panel grid gap-4 p-4 md:grid-cols-3" onSubmit={submit}>
+            <input className="field" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+            <input className="field" placeholder="Display Name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            <input className="field" placeholder="TGE Environment ID" value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} required />
+            <div className="flex gap-2 md:col-span-3">
+              <button className="button" type="submit">保存账号</button>
+              <button className="button-secondary" type="button" onClick={() => setShowForm(false)}>取消</button>
+            </div>
+          </form>
+        )}
+        {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <Section title="Account Assets" action={<button className="button" onClick={() => setShowForm(true)}><Users className="h-4 w-4" />添加账号</button>}>
+          <DataTable
+            columns={[
+              { key: "username", label: "Username" },
+              { key: "display_name", label: "Display Name" },
+              { key: "environment_id", label: "TGE Environment" },
+              { key: "health_score", label: "Health" },
+              { key: "risk_level", label: "Risk" },
+              { key: "status", label: "Status" },
+            ]}
+            rows={rows}
+          />
+        </Section>
+      </div>
     </StateView>
   );
 }
 
 function SettingsPage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/settings");
+  const aiSetting = (data ?? []).find((item) => item.key === "ai.default_provider");
+  const aiValue = (aiSetting?.value ?? {}) as RecordItem;
+  const [provider, setProvider] = useState("");
+  const [model, setModel] = useState("");
+  const [feedback, setFeedback] = useState("");
+
+  useEffect(() => {
+    if (aiSetting && !provider) {
+      setProvider(String(aiValue.provider ?? "mock"));
+      setModel(String(aiValue.model ?? "mock-v0.1"));
+    }
+  }, [aiSetting, aiValue, provider]);
+
+  async function saveProvider() {
+    try {
+      await apiRequest("/settings/ai.default_provider", {
+        method: "PUT",
+        body: JSON.stringify({ value: { provider, model, enabled: true } }),
+      });
+      setFeedback("LLM Provider 配置已保存。Mock 生成不会调用外部 API。");
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
-      <Section title="Configuration Service">
-        <div className="grid gap-3 lg:grid-cols-2">
-          {(data ?? []).map((item, index) => (
-            <div key={String(item.uuid ?? index)} className="panel p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{String(item.key)}</p>
-                  <p className="mt-1 text-xs uppercase text-gray-500">
-                    {String(item.category)}
-                  </p>
+      <div className="space-y-5">
+        <div className="panel grid gap-3 p-4 md:grid-cols-[1fr_1fr_auto]">
+          <label className="text-xs font-semibold text-gray-600">
+            LLM Provider
+            <select className="field mt-2" value={provider} onChange={(e) => setProvider(e.target.value)}>
+              <option value="mock">Mock Provider</option>
+              <option value="ollama">Ollama</option>
+              <option value="openai">OpenAI (未连接)</option>
+              <option value="anthropic">Anthropic (未连接)</option>
+              <option value="custom">Custom API (未连接)</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-gray-600">
+            Model
+            <input className="field mt-2" value={model} onChange={(e) => setModel(e.target.value)} />
+          </label>
+          <button className="button self-end" onClick={saveProvider}><Settings className="h-4 w-4" />保存</button>
+        </div>
+        {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <Section title="Configuration Service">
+          <div className="grid gap-3 lg:grid-cols-2">
+            {(data ?? []).map((item, index) => (
+              <div key={String(item.uuid ?? index)} className="panel p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{String(item.key)}</p>
+                    <p className="mt-1 text-xs uppercase text-gray-500">
+                      {String(item.category)}
+                    </p>
+                  </div>
+                  <StatusBadge value={item.status} />
                 </div>
-                <StatusBadge value={item.status} />
+                <pre className="mt-4 overflow-x-auto border-t border-line pt-3 text-xs text-gray-600">
+                  {JSON.stringify(item.value, null, 2)}
+                </pre>
               </div>
-              <pre className="mt-4 overflow-x-auto border-t border-line pt-3 text-xs text-gray-600">
-                {JSON.stringify(item.value, null, 2)}
-              </pre>
+            ))}
+          </div>
+        </Section>
+      </div>
+    </StateView>
+  );
+}
+
+function ExecutionPage() {
+  const { data, error, loading, reload } =
+    useApiData<RecordItem[]>("/scheduler/tasks");
+  const counts = (data ?? []).reduce<Record<string, number>>((result, task) => {
+    const status = String(task.status);
+    result[status] = (result[status] ?? 0) + 1;
+    return result;
+  }, {});
+  return (
+    <StateView loading={loading} error={error} reload={reload}>
+      <div className="space-y-6">
+        <div className="panel flex items-start gap-4 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-gray-100">
+            <Play className="h-5 w-5 text-gray-600" />
+          </div>
+          <div>
+            <h2 className="font-bold">Execution Runtime Status</h2>
+            <p className="mt-1 text-sm text-gray-500">只读显示 Scheduler 队列，本版本不连接 TGE、不执行浏览器动作。</p>
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {["QUEUED", "RUNNING", "FAILED"].map((state) => (
+            <div key={state} className="panel p-4">
+              <p className="text-xs font-semibold uppercase text-gray-500">{state}</p>
+              <p className="mt-4 text-2xl font-bold">{counts[state] ?? 0}</p>
+              <p className="mt-1 text-xs text-gray-400">来自 Scheduler 数据库队列</p>
             </div>
           ))}
         </div>
-      </Section>
+        <DataTable
+          columns={[
+            { key: "task_type", label: "Task" },
+            { key: "priority", label: "Priority" },
+            { key: "account_id", label: "Account" },
+            { key: "status", label: "Status" },
+          ]}
+          rows={data ?? []}
+        />
+      </div>
+    </StateView>
+  );
+}
+
+function EngagementPage() {
+  const settings = useApiData<RecordItem[]>("/settings");
+  const schedulerConfig = (settings.data ?? []).find(
+    (item) => item.key === "scheduler.defaults",
+  );
+  return (
+    <StateView loading={settings.loading} error={settings.error} reload={settings.reload}>
+      <div className="space-y-6">
+        <div className="panel flex items-start gap-4 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-gray-100">
+            <Activity className="h-5 w-5 text-gray-600" />
+          </div>
+          <div>
+            <h2 className="font-bold">Engagement Configuration</h2>
+            <p className="mt-1 text-sm text-gray-500">仅展示任务配置占位，不创建或执行平台互动。</p>
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {[
+            ["Browse", "Disabled"],
+            ["Like", "Disabled"],
+            ["Warm-up", "Disabled"],
+          ].map(([name, state]) => (
+            <div key={name} className="panel p-4">
+              <p className="text-xs font-semibold uppercase text-gray-500">{name}</p>
+              <p className="mt-4 font-bold">{state}</p>
+              <p className="mt-1 text-xs text-gray-400">Future configurable strategy</p>
+            </div>
+          ))}
+        </div>
+        <div className="panel p-4">
+          <p className="text-sm font-semibold">Scheduler defaults</p>
+          <pre className="mt-3 overflow-x-auto text-xs text-gray-600">
+            {JSON.stringify(schedulerConfig?.value ?? {}, null, 2)}
+          </pre>
+        </div>
+      </div>
     </StateView>
   );
 }
@@ -548,23 +875,9 @@ function PageContent({ page }: { page: PageKey }) {
     case "settings":
       return <SettingsPage />;
     case "execution":
-      return (
-        <PlaceholderPage
-          icon={Play}
-          title="Execution Runtime"
-          detail="Execution 只消费 Scheduler 分发的任务；当前版本不执行浏览器动作。"
-          states={["Waiting", "Running", "Error"]}
-        />
-      );
+      return <ExecutionPage />;
     case "engagement":
-      return (
-        <PlaceholderPage
-          icon={Activity}
-          title="Engagement Strategies"
-          detail="策略、配置和任务边界已预留，v0.1 不自动执行平台互动。"
-          states={["Strategies", "Queued", "Cooling"]}
-        />
-      );
+      return <EngagementPage />;
     case "statistics":
       return (
         <PlaceholderPage

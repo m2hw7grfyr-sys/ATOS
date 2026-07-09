@@ -10,11 +10,31 @@ export type ApiResponse<T> = {
 };
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${response.statusText}`);
+  return apiRequest<T>(path);
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const requestOptions: RequestInit = {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  };
+  const configuredResponse = await fetch(`${API_BASE_URL}${path}`, requestOptions);
+  if (!configuredResponse.ok) {
+    const errorPayload = (await configuredResponse.json().catch(() => null)) as
+      | ApiResponse<unknown>
+      | null;
+    throw new Error(
+      errorPayload?.message ??
+        `API ${configuredResponse.status}: ${configuredResponse.statusText}`,
+    );
   }
-  const payload = (await response.json()) as ApiResponse<T>;
+  const payload = (await configuredResponse.json()) as ApiResponse<T>;
   if (!payload.success) {
     throw new Error(payload.message);
   }
