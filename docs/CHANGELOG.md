@@ -4,6 +4,19 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v0.8
+
+- Expanded Account Center
+- Added Account Entity
+- Added Session Service
+- Added Health Score
+- Added Auto Downgrade
+- Added Auto Recovery
+- Added ER Diagram
+- Added RBAC
+- Added DTO
+- Added Configuration
+
 ## v0.7
 
 - Expanded Engagement

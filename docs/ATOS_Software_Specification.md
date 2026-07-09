@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.7
+**Version:** 0.8
 
 **Status:** Draft
 
@@ -4236,3 +4236,613 @@ Scheduler。
 执行：
 
 Execution。
+
+==============================================================
+
+# PART VIII Account Center
+
+---
+
+# Chapter 7 Account Center
+
+## 7.1 模块定位
+
+Account Center 是整个 ATOS 的账号资产管理中心（Account Asset Management）。
+
+所有平台账号必须统一纳入 Account Center。
+
+禁止任何模块直接维护账号。
+
+Scheduler、Execution、Statistics、Engagement 只能读取 Account Service。
+
+---
+
+## 7.2 设计目标
+
+Account Center 负责：
+
+- 平台账号管理
+- TGE Environment 绑定
+- Proxy 管理
+- Health Score
+- Daily Limit
+- Working Time
+- Risk Control
+- Platform Identity
+- Session 生命周期
+- 自动降级
+- 自动恢复
+
+Account 是整个系统最重要的资产。
+
+任何行为最终都归属于某个 Account。
+
+---
+
+# 7.3 UI Layout
+
+页面分为：
+
+Account List
+
+↓
+
+Account Detail
+
+↓
+
+Health Panel
+
+↓
+
+Environment Panel
+
+↓
+
+Daily Limit
+
+↓
+
+Working Time
+
+↓
+
+History
+
+↓
+
+Statistics
+
+---
+
+# 7.4 Account List
+
+显示：
+
+- Platform
+- Avatar
+- Username
+- Nickname
+- Health Score
+- Risk Level
+- Environment
+- Today's Browse
+- Today's Reply
+- Today's Like
+- Today's Success Rate
+- Status
+- Last Active
+
+支持：
+
+- 搜索
+- 排序
+- 批量编辑
+- 批量暂停
+- 批量恢复
+
+---
+
+# 7.5 Account Detail
+
+详情页：
+
+包含：
+
+- Basic Info
+- Platform Identity
+- Proxy
+- TGE
+- Cookies
+- Scheduler
+- Statistics
+- History
+- Configuration
+
+---
+
+# 7.6 Platform Identity
+
+统一字段：
+
+- Platform
+- Platform User ID
+- Username
+- Display Name
+- Profile URL
+- Avatar URL
+- Created Time
+- Followers
+- Following
+- Karma
+- Verified
+- Language
+- Country
+- Timezone
+
+---
+
+# 7.7 TGE Environment
+
+每个账号：
+
+绑定：
+
+唯一：
+
+Environment。
+
+字段：
+
+- Environment ID
+- Environment Name
+- Device ID
+- Browser Version
+- Proxy
+- Status
+- Heartbeat
+
+Execution：
+
+默认：
+
+Attach。
+
+而不是：
+
+重新打开。
+
+---
+
+# 7.8 Proxy
+
+支持：
+
+- HTTP
+- HTTPS
+- SOCKS5
+- Residential
+- Datacenter
+- ISP
+
+支持：
+
+Proxy Group。
+
+支持：
+
+自动轮换。
+
+---
+
+# 7.9 Health Score
+
+默认：
+
+100。
+
+评分：
+
+组成：
+
+Execution Success
+
++
+
+Reply Success
+
++
+
+Browse Success
+
++
+
+Login Stability
+
++
+
+Cookie Stability
+
+-
+
+429
+
+-
+
+403
+
+-
+
+Captcha
+
+-
+
+Cooldown
+
+最终：
+
+Health Score。
+
+Scheduler：
+
+读取。
+
+---
+
+# 7.10 Risk Level
+
+Risk：
+
+- Low
+- Medium
+- High
+- Critical
+
+达到：
+
+Critical。
+
+Scheduler：
+
+自动：
+
+停止：
+
+Reply。
+
+允许：
+
+Browse。
+
+---
+
+# 7.11 Auto Downgrade
+
+连续：
+
+失败。
+
+自动：
+
+降低：
+
+Daily Limit。
+
+增加：
+
+Cooldown。
+
+减少：
+
+Reply。
+
+增加：
+
+Browse。
+
+无需：
+
+人工。
+
+---
+
+# 7.12 Auto Recovery
+
+连续：
+
+成功。
+
+逐步：
+
+恢复：
+
+Health。
+
+恢复：
+
+Reply。
+
+恢复：
+
+Daily Limit。
+
+全部：
+
+自动。
+
+---
+
+# 7.13 Working Time
+
+支持：
+
+星期。
+
+支持：
+
+多个：
+
+时间段。
+
+支持：
+
+平台：
+
+覆盖。
+
+例如：
+
+Reddit：
+
+09~12
+
+Facebook：
+
+18~22
+
+---
+
+# 7.14 Daily Limit
+
+独立：
+
+- Browse
+- Like
+- Bookmark
+- Visit
+- Reply
+- DM
+- Follow
+- Share
+
+Scheduler：
+
+实时：
+
+检查。
+
+---
+
+# 7.15 Entity
+
+Account
+
+- account_id
+- platform
+- username
+- display_name
+- health_score
+- risk_level
+- environment_id
+- proxy_id
+- status
+- created_at
+- updated_at
+
+---
+
+# 7.16 Account Session
+
+Session：
+
+包括：
+
+- Cookie
+- Login
+- CSRF
+- Last Refresh
+- Expire Time
+- Platform Version
+
+Execution：
+
+不得：
+
+自己：
+
+维护。
+
+统一：
+
+Session Service。
+
+---
+
+# 7.17 ER Diagram
+
+```mermaid
+erDiagram
+
+ACCOUNT ||--|| ENVIRONMENT : bind
+
+ACCOUNT ||--o{ ACCOUNT_LIMIT : owns
+
+ACCOUNT ||--o{ ACCOUNT_HISTORY : owns
+
+ACCOUNT ||--o{ EXECUTION_HISTORY : execute
+
+ACCOUNT ||--o{ ACCOUNT_SESSION : login
+
+ACCOUNT ||--o{ ACCOUNT_STATISTICS : statistics
+```
+
+---
+
+# 7.18 DTO
+
+CreateAccountRequest
+
+- platform
+- username
+- environment_id
+- proxy_id
+- working_time
+- daily_limit
+
+CreateAccountResponse
+
+- account_id
+- status
+- health_score
+
+---
+
+# 7.19 RBAC
+
+Administrator
+
+全部。
+
+Operator
+
+修改：
+
+- Daily Limit
+- Working Time
+- Proxy
+
+Reviewer
+
+查看。
+
+Viewer
+
+只读。
+
+---
+
+# 7.20 API
+
+GET
+
+/accounts
+
+GET
+
+/accounts/{id}
+
+POST
+
+/accounts
+
+PUT
+
+/accounts/{id}
+
+DELETE
+
+/accounts/{id}
+
+POST
+
+/accounts/pause
+
+POST
+
+/accounts/recover
+
+POST
+
+/accounts/recalculate-health
+
+---
+
+# 7.21 Dashboard
+
+新增：
+
+- Today's Active Accounts
+- Cooling Accounts
+- Health Distribution
+- Risk Distribution
+- Proxy Distribution
+- Environment Status
+
+---
+
+# 7.22 Configuration
+
+- default_health_score
+- max_daily_reply
+- max_daily_like
+- max_daily_browse
+- auto_recovery
+- auto_downgrade
+- health_decay
+- health_recover
+
+---
+
+# 7.23 Performance
+
+列表：
+
+<500ms
+
+详情：
+
+<1s
+
+Health：
+
+实时。
+
+Dashboard：
+
+缓存：
+
+30秒。
+
+---
+
+# 7.24 Developer Rules
+
+Account：
+
+唯一：
+
+资产。
+
+Execution：
+
+不得：
+
+修改：
+
+Health。
+
+Scheduler：
+
+不得：
+
+修改：
+
+Cookie。
+
+所有：
+
+状态：
+
+统一：
+
+Account Service。
