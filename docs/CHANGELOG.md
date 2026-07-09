@@ -4,6 +4,19 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v2.0
+
+- Introduced Engineering Convention
+- Added Naming Convention
+- Added Folder Convention
+- Added API Convention
+- Added DTO Convention
+- Added Event Convention
+- Added State Convention
+- Added Queue Convention
+- Added Redis Convention
+- Added Golden Rules
+
 ## v1.2
 
 - Introduced Screen Specification

@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 1.2
+**Version:** 2.0
 
 **Status:** Draft
 
@@ -13,6 +13,373 @@
 **Source of Truth:** This document is the primary product and system specification for ATOS.
 
 ---
+
+# PART 0 Engineering Convention
+
+本章节定义整个 ATOS 的统一工程规范。
+
+所有模块必须遵守。
+
+任何新增模块不得违反本规范。
+
+==============================================================
+
+# Chapter EC-001 Naming Convention
+
+整个系统统一命名。
+
+禁止同义词混用。
+
+统一如下：
+
+Application
+
+↓
+
+Subsystem
+
+↓
+
+Screen
+
+↓
+
+Layout
+
+↓
+
+Region
+
+↓
+
+Component
+
+↓
+
+Widget
+
+↓
+
+Control
+
+例如：
+
+- Dashboard 属于 Subsystem。
+- Dashboard Home 属于 Screen。
+- Overview 属于 Region。
+- Today's Reply 属于 Widget。
+- Reply Button 属于 Control。
+
+禁止混用：
+
+- Block
+- Tile
+- Panel
+- Area
+- Module
+
+==============================================================
+
+# Chapter EC-002 Folder Convention
+
+统一目录：
+
+- src/
+- application/
+- subsystems/
+- shared/
+- infrastructure/
+- interfaces/
+- workers/
+- domain/
+- config/
+- docs/
+
+禁止业务代码直接放入 utils。
+
+==============================================================
+
+# Chapter EC-003 Domain Convention
+
+一个 Domain 必须包含：
+
+- Entity
+- Repository
+- Service
+- DTO
+- Event
+- Exception
+- Configuration
+
+禁止跨 Domain 共享 Entity。
+
+==============================================================
+
+# Chapter EC-004 Screen Convention
+
+每个 Screen 固定结构：
+
+- Purpose
+- Layout
+- Component
+- Permission
+- State
+- API
+- Telemetry
+- Test Case
+- Future
+
+禁止自由发挥。
+
+==============================================================
+
+# Chapter EC-005 Component Convention
+
+每个 Component 必须具有唯一 Component ID。
+
+例如：
+
+- COMP-001
+- COMP-002
+- COMP-003
+
+Widget 同理。
+
+Widget 必须具有唯一 Widget ID。
+
+例如：
+
+- WGT-001
+- WGT-002
+
+==============================================================
+
+# Chapter EC-006 API Convention
+
+统一使用 REST。
+
+统一使用 OpenAPI。
+
+统一 Response：
+
+```text
+{
+  success
+  code
+  message
+  trace_id
+  data
+}
+```
+
+禁止返回不同格式。
+
+==============================================================
+
+# Chapter EC-007 DTO Convention
+
+Request 独立。
+
+Response 独立。
+
+禁止 Entity 直接返回 API。
+
+==============================================================
+
+# Chapter EC-008 Event Convention
+
+事件统一使用 Past Tense。
+
+例如：
+
+- POST_IMPORTED
+- TASK_DISPATCHED
+- EXECUTION_COMPLETED
+- ACCOUNT_COOLED_DOWN
+
+禁止：
+
+- RunTask
+- DoReply
+- ExecuteNow
+
+==============================================================
+
+# Chapter EC-009 State Convention
+
+所有状态统一使用 UPPER_SNAKE_CASE。
+
+例如：
+
+- NEW
+- QUEUED
+- RUNNING
+- WAITING_CONFIRM
+- SUCCESS
+- FAILED
+- COOLDOWN
+
+禁止：
+
+- Running
+- running
+- Run
+
+==============================================================
+
+# Chapter EC-010 Database Convention
+
+所有表统一使用 snake_case。
+
+字段统一使用 snake_case。
+
+所有主键使用 uuid。
+
+保留 id（内部）。
+
+所有业务统一使用 uuid。
+
+==============================================================
+
+# Chapter EC-011 Redis Convention
+
+Redis Key 统一使用 `atos:` 前缀。
+
+例如：
+
+- atos:account:health
+- atos:scheduler:queue
+- atos:execution:running
+
+禁止随意命名。
+
+==============================================================
+
+# Chapter EC-012 Queue Convention
+
+统一 queue_name 使用 snake_case。
+
+例如：
+
+- execution_queue
+- scheduler_queue
+- engagement_queue
+- statistics_queue
+
+==============================================================
+
+# Chapter EC-013 Logging Convention
+
+统一使用 JSON。
+
+统一包含：
+
+- trace_id
+- request_id
+- correlation_id
+
+禁止使用 print。
+
+==============================================================
+
+# Chapter EC-014 Error Convention
+
+统一使用模块前缀：
+
+- AI
+- SCH
+- EXE
+- ENG
+- ACC
+- PLA
+- STA
+- SYS
+
+错误码固定四位。
+
+例如：
+
+EXE-0001
+
+==============================================================
+
+# Chapter EC-015 Configuration Convention
+
+所有配置进入 Configuration Service。
+
+禁止 Magic Number。
+
+禁止 Hard Code。
+
+==============================================================
+
+# Chapter EC-016 Security Convention
+
+- 所有 Secret：加密。
+- 所有 Token：加密。
+- 所有 Password：Hash。
+- 所有 Audit：永久。
+
+==============================================================
+
+# Chapter EC-017 Documentation Convention
+
+每个 Subsystem 必须包含：
+
+- Screen
+- API
+- Entity
+- DTO
+- State
+- Event
+- Permission
+- Test
+- Developer Notes
+
+禁止缺少章节。
+
+==============================================================
+
+# Chapter EC-018 Coding Convention
+
+- Backend：PEP8。
+- Frontend：ESLint。
+- Commit：Conventional Commit。
+- PR：必须 Review。
+
+==============================================================
+
+# Chapter EC-019 Architecture Principle
+
+ATOS 遵守：
+
+- Single Responsibility
+- Open Closed
+- Dependency Injection
+- Configuration First
+- Event Driven
+- Plugin Architecture
+- Platform Agnostic
+- AI Replaceable
+
+==============================================================
+
+# Chapter EC-020 Golden Rules
+
+以下规则属于整个项目最高规则：
+
+1. 任何业务逻辑不得写在 UI。
+2. 任何业务逻辑不得写在 Playwright。
+3. Execution 永远不知道 Reddit。
+4. Scheduler 永远不知道 DOM。
+5. AI 永远不知道 Browser。
+6. Platform Adapter 永远不知道 Business。
+7. 所有业务必须配置化。
+8. 所有状态必须事件化。
+9. 所有数据必须可追踪。
+10. 任何新增模块必须符合本规范。
+
+==============================================================
 
 ## 1. 项目定位
 
