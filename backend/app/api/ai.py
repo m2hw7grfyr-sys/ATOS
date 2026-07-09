@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import AIAnalysisResult, AITask, Post, Reply
 from app.response import ok
-from app.schemas import MockAIGenerateRequest, ReplyGenerateRequest, ReplyUpdate
+from app.schemas import MockAIGenerateRequest, PromptPreviewRequest, ReplyGenerateRequest, ReplyUpdate
 from app.serializers import serialize_model
-from app.services.ai import AIAnalysisService, AIProviderError, ReplyGenerationService
+from app.services.ai import AIAnalysisService, AIProviderError, ReplyGenerationService, preview_prompt
 from app.services.scheduler import get_scheduler_settings, queue_approved_ai_task
 
 
@@ -88,6 +88,26 @@ def regenerate_task(
         task_id=task.id,
     )
     return ok(serialize_task(result["task"], db), request.state.trace_id, "reply regenerated")
+
+
+@router.post("/tasks/{task_id}/preview-prompt")
+def preview_task_prompt(
+    task_id: int,
+    payload: PromptPreviewRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    try:
+        result = preview_prompt(
+            db,
+            task_id=task_id,
+            strategy=payload.strategy,
+            tone=payload.tone,
+            variables=payload.variables,
+        )
+    except AIProviderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ok(result, request.state.trace_id, "prompt preview generated")
 
 
 @router.post("/generate-mock", status_code=status.HTTP_201_CREATED)

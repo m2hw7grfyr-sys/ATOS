@@ -48,11 +48,20 @@
 
 ## v1.1 建议
 
-- [ ] Real Apify Actor Adapter Mapping
-- [ ] Real OpenAI / Multi-LLM Production Mode
+- [x] Real Apify Actor Adapter Mapping
+- [x] Real OpenAI / Multi-LLM Production Mode
 - [ ] Real TGE Attach
 - [ ] Platform Selector Refinement
 - [ ] Execution Replay UI
 - [ ] Embedding Similarity
 - [ ] Advanced Scheduler Optimization
 - [ ] User Permission UI
+
+## v1.3 建议
+
+- [ ] Real Anthropic / Gemini / Ollama adapters
+- [ ] Provider-specific pricing table
+- [ ] Embedding Similarity
+- [ ] Prompt Diff and Approval History
+- [ ] AI Cost Budget Alerts
+- [ ] Production Secret Vault

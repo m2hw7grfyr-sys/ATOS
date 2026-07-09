@@ -160,6 +160,13 @@ class AITask(Base, TimestampMixin):
     commercial_score: Mapped[int] = mapped_column(Integer, default=0)
     risk_score: Mapped[int] = mapped_column(Integer, default=0)
     result: Mapped[dict] = mapped_column(JSON, default=dict)
+    provider_id: Mapped[Optional[int]] = mapped_column(ForeignKey("llm_providers.id"), index=True)
+    fallback_provider_id: Mapped[Optional[int]] = mapped_column(ForeignKey("llm_providers.id"), index=True)
+    prompt_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("prompt_versions.id"), index=True)
+    generation_source: Mapped[str] = mapped_column(String(40), default="MOCK", index=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    fallback_reason: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="NEW", index=True)
 
 
@@ -181,6 +188,28 @@ class LLMProvider(Base, TimestampMixin):
     is_mock: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     timeout_seconds: Mapped[int] = mapped_column(Integer, default=30)
     max_retries: Mapped[int] = mapped_column(Integer, default=1)
+    remark: Mapped[Optional[str]] = mapped_column(Text)
+    health_status: Mapped[str] = mapped_column(String(30), default="UNKNOWN", index=True)
+    last_health_check_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_health_error: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class ProviderRouting(Base, TimestampMixin):
+    __tablename__ = "provider_routing"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    task_type: Mapped[str] = mapped_column(String(40), index=True)
+    strategy: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    min_commercial_score: Mapped[int] = mapped_column(Integer, default=0)
+    max_risk_score: Mapped[int] = mapped_column(Integer, default=100)
+    preferred_provider_id: Mapped[Optional[int]] = mapped_column(ForeignKey("llm_providers.id"), index=True)
+    fallback_provider_id: Mapped[Optional[int]] = mapped_column(ForeignKey("llm_providers.id"), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100, index=True)
     remark: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
@@ -234,6 +263,23 @@ class PromptTemplate(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
+class PromptVersion(Base, TimestampMixin):
+    __tablename__ = "prompt_versions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    prompt_template_id: Mapped[int] = mapped_column(ForeignKey("prompt_templates.id"), index=True)
+    version: Mapped[str] = mapped_column(String(40), default="v1")
+    content: Mapped[str] = mapped_column(Text)
+    variables_schema: Mapped[dict] = mapped_column(JSON, default=dict)
+    platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    strategy: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    tone: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
 class AIGenerationLog(Base):
     __tablename__ = "ai_generation_logs"
 
@@ -244,11 +290,21 @@ class AIGenerationLog(Base):
     provider: Mapped[str] = mapped_column(String(120), index=True)
     model: Mapped[str] = mapped_column(String(160))
     prompt_version: Mapped[str] = mapped_column(String(40), default="v0.3")
+    prompt_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("prompt_versions.id"), index=True)
     purpose: Mapped[str] = mapped_column(String(40), index=True)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     token_estimate: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    currency: Mapped[str] = mapped_column(String(10), default="USD")
+    provider_latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     generation_source: Mapped[str] = mapped_column(String(40), default="MOCK", index=True)
     fallback_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    fallback_reason: Mapped[Optional[str]] = mapped_column(Text)
+    fallback_from_provider: Mapped[Optional[str]] = mapped_column(String(120))
+    fallback_to_provider: Mapped[Optional[str]] = mapped_column(String(120))
     status: Mapped[str] = mapped_column(String(30), default="SUCCESS", index=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

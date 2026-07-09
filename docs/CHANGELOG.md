@@ -4,6 +4,16 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## App v1.2
+
+- Added LLM Provider abstraction methods
+- Added Provider Routing configuration
+- Added Prompt Version storage and Prompt Preview
+- Added Provider health checks
+- Added token, latency, and estimated cost logging
+- Added fallback chain logging from primary to fallback provider
+- Added AI dashboard metrics for provider health, fallback rate, latency, and cost
+
 ## v1.1
 
 - Added Apify Actor Mapping

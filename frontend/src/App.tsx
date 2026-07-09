@@ -118,6 +118,10 @@ type DashboardData = {
     today_profile_visit?: number;
     warmup_tasks?: number;
     engagement_success_rate?: number;
+    llm_provider_health?: string;
+    fallback_rate?: number;
+    average_latency_ms?: number;
+    ai_cost_today?: number;
   };
   platform_health: Array<{
     name: string;
@@ -422,6 +426,30 @@ function DashboardPage() {
           value: data.overview.engagement_success_rate ?? 0,
           icon: CheckCircle2,
           tone: "text-emerald-700",
+        },
+        {
+          label: "LLM Health",
+          value: data.overview.llm_provider_health ?? "—",
+          icon: BrainCircuit,
+          tone: "text-teal",
+        },
+        {
+          label: "Fallback Rate",
+          value: `${data.overview.fallback_rate ?? 0}%`,
+          icon: RefreshCw,
+          tone: "text-amber",
+        },
+        {
+          label: "AI Latency",
+          value: `${data.overview.average_latency_ms ?? 0}ms`,
+          icon: Activity,
+          tone: "text-cyan",
+        },
+        {
+          label: "AI Cost",
+          value: `$${data.overview.ai_cost_today ?? 0}`,
+          icon: Database,
+          tone: "text-blue-700",
         },
       ]
     : [];
@@ -960,6 +988,7 @@ function AIWorkspacePage() {
   const [tone, setTone] = useState("supportive");
   const [feedback, setFeedback] = useState("");
   const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
+  const [promptPreview, setPromptPreview] = useState<RecordItem | null>(null);
 
   async function analyzeSelected() {
     try {
@@ -1044,6 +1073,19 @@ function AIWorkspacePage() {
     }
   }
 
+  async function previewPromptForTask(task: RecordItem) {
+    try {
+      const result = await apiRequest<RecordItem>(`/ai/tasks/${String(task.id)}/preview-prompt`, {
+        method: "POST",
+        body: JSON.stringify({ strategy: String(task.strategy ?? strategy), tone, variables: {} }),
+      });
+      setPromptPreview(result);
+      setFeedback("Prompt Preview 已生成。");
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Prompt Preview 失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
@@ -1096,6 +1138,7 @@ function AIWorkspacePage() {
                     {task.status !== "APPROVED" && (
                       <>
                         <button className="button-secondary" onClick={() => void regenerate(task)}>重新生成</button>
+                        <button className="button-secondary" onClick={() => void previewPromptForTask(task)}>Preview Prompt</button>
                         <button className="button-secondary" onClick={() => reject(task.id)}>拒绝</button>
                         <button className="button" onClick={() => approve(task.id)}>批准</button>
                       </>
@@ -1156,6 +1199,22 @@ function AIWorkspacePage() {
             ))}
           </div>
         </Section>
+        {promptPreview && (
+          <Section title="Prompt Preview" action={<button className="button-secondary" onClick={() => setPromptPreview(null)}>关闭</button>}>
+            <div className="panel grid gap-4 p-4 lg:grid-cols-2">
+              {["system_prompt", "platform_prompt", "strategy_prompt", "variables"].map((key) => (
+                <div key={key}>
+                  <p className="text-xs font-semibold uppercase text-gray-500">{key}</p>
+                  <pre className="mt-2 overflow-x-auto rounded border border-line bg-gray-50 p-3 text-xs text-gray-600">{typeof promptPreview[key] === "object" ? JSON.stringify(promptPreview[key], null, 2) : String(promptPreview[key] ?? "—")}</pre>
+                </div>
+              ))}
+              <div className="lg:col-span-2">
+                <p className="text-xs font-semibold uppercase text-gray-500">Final Prompt · {String(promptPreview.prompt_version ?? "fallback")}</p>
+                <pre className="mt-2 max-h-[420px] overflow-auto rounded border border-line bg-gray-50 p-3 text-xs text-gray-600">{String(promptPreview.final_prompt ?? "")}</pre>
+              </div>
+            </div>
+          </Section>
+        )}
       </div>
     </StateView>
   );
@@ -1582,6 +1641,9 @@ function AccountCenterPage() {
 function SettingsPage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/settings");
   const providers = useApiData<LLMProviderItem[]>("/settings/llm-providers");
+  const providerRoutes = useApiData<RecordItem[]>("/settings/provider-routing");
+  const promptTemplates = useApiData<RecordItem[]>("/prompt-templates");
+  const promptVersions = useApiData<RecordItem[]>("/prompt-versions");
   const schedulerSettings = useApiData<RecordItem>("/settings/scheduler");
   const platformWeights = useApiData<RecordItem[]>("/settings/platform-weights");
   const tgeSettings = useApiData<RecordItem>("/settings/tge");
@@ -1613,6 +1675,39 @@ function SettingsPage() {
     selector_type: "css",
     enabled: true,
     remark: "",
+  });
+  const [routeForm, setRouteForm] = useState<Record<string, unknown>>({
+    name: "Default Reply Route",
+    platform: "",
+    task_type: "REPLY",
+    strategy: "",
+    min_commercial_score: 0,
+    max_risk_score: 100,
+    preferred_provider_id: "",
+    fallback_provider_id: "",
+    enabled: true,
+    priority: 100,
+    remark: "",
+  });
+  const [templateForm, setTemplateForm] = useState<Record<string, unknown>>({
+    name: "Custom Reply Prompt",
+    template_type: "reply_prompt",
+    platform: "",
+    strategy: "",
+    tone: "supportive",
+    content: "Write a helpful reply.\n\nTitle: {{title}}\nContent: {{content}}",
+    version: "v1",
+    enabled: true,
+  });
+  const [versionForm, setVersionForm] = useState<Record<string, unknown>>({
+    prompt_template_id: "",
+    version: "v1",
+    content: "",
+    platform: "",
+    strategy: "",
+    tone: "",
+    enabled: true,
+    is_default: false,
   });
   const [weightEdits, setWeightEdits] = useState<Record<string, Record<string, unknown>>>({});
   const [feedback, setFeedback] = useState("");
@@ -1748,6 +1843,88 @@ function SettingsPage() {
     }
   }
 
+  async function testProvider(provider: LLMProviderItem) {
+    try {
+      const result = await apiRequest<RecordItem>(`/settings/llm-providers/${provider.id}/test`, { method: "POST" });
+      setFeedback(`Provider 测试完成：${String(result.health_status)} · ${String(result.message ?? "")}`);
+      await providers.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Provider 测试失败");
+    }
+  }
+
+  function updateRouteField(key: string, value: unknown) {
+    setRouteForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createProviderRoute() {
+    try {
+      await apiRequest("/settings/provider-routing", {
+        method: "POST",
+        body: JSON.stringify({
+          ...routeForm,
+          platform: routeForm.platform || null,
+          strategy: routeForm.strategy || null,
+          preferred_provider_id: routeForm.preferred_provider_id ? Number(routeForm.preferred_provider_id) : null,
+          fallback_provider_id: routeForm.fallback_provider_id ? Number(routeForm.fallback_provider_id) : null,
+          min_commercial_score: Number(routeForm.min_commercial_score ?? 0),
+          max_risk_score: Number(routeForm.max_risk_score ?? 100),
+          priority: Number(routeForm.priority ?? 100),
+        }),
+      });
+      setFeedback("Provider Routing 已创建。");
+      await providerRoutes.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "创建 Routing 失败");
+    }
+  }
+
+  function updateTemplateField(key: string, value: unknown) {
+    setTemplateForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createPromptTemplate() {
+    try {
+      await apiRequest("/prompt-templates", {
+        method: "POST",
+        body: JSON.stringify({
+          ...templateForm,
+          platform: templateForm.platform || null,
+          strategy: templateForm.strategy || null,
+          tone: templateForm.tone || null,
+        }),
+      });
+      setFeedback("Prompt Template 已创建。");
+      await promptTemplates.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "创建 Prompt Template 失败");
+    }
+  }
+
+  function updateVersionField(key: string, value: unknown) {
+    setVersionForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createPromptVersion() {
+    try {
+      await apiRequest("/prompt-versions", {
+        method: "POST",
+        body: JSON.stringify({
+          ...versionForm,
+          prompt_template_id: Number(versionForm.prompt_template_id),
+          platform: versionForm.platform || null,
+          strategy: versionForm.strategy || null,
+          tone: versionForm.tone || null,
+          variables_schema: {},
+        }),
+      });
+      setFeedback("Prompt Version 已创建。");
+      await promptVersions.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "创建 Prompt Version 失败");
+    }
+  }
+
   function updateSchedulerField(key: string, value: unknown) {
     setSchedulerForm((current) => ({ ...current, [key]: value }));
   }
@@ -1875,7 +2052,7 @@ function SettingsPage() {
                 setProviderType(e.target.value);
                 setIsMock(e.target.value === "mock");
               }}>
-                {["mock", "openai", "anthropic", "gemini", "ollama", "custom"].map((type) => <option key={type} value={type}>{type}</option>)}
+                {["mock", "openai", "anthropic", "gemini", "ollama", "custom_http", "custom"].map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </label>
             <label className="text-xs font-semibold text-gray-600">
@@ -2087,7 +2264,7 @@ function SettingsPage() {
           <div className="panel overflow-x-auto">
             <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                {["Provider", "Type", "Model", "Key", "Purpose", "Priority", "Status", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+                {["Provider", "Type", "Model", "Key", "Purpose", "Priority", "Health", "Status", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
               </tr></thead>
               <tbody>
                 {(providers.data ?? []).map((provider) => (
@@ -2102,16 +2279,132 @@ function SettingsPage() {
                       provider.use_for_embedding ? "Embedding" : "",
                     ].filter(Boolean).join(" / ") || "—"}</td>
                     <td className="px-4 py-3 text-gray-600">{provider.priority}</td>
+                    <td className="px-4 py-3"><StatusBadge value={provider.health_status ?? "UNKNOWN"} /></td>
                     <td className="px-4 py-3"><StatusBadge value={provider.enabled ? provider.status : "DISABLED"} /></td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <button className="icon-button" title="编辑" onClick={() => startProviderEdit(provider)}><Pencil className="h-4 w-4" /></button>
+                        <button className="button-secondary" onClick={() => void testProvider(provider)}>测试</button>
                         <button className="button-secondary" onClick={() => void toggleProvider(provider)}>{provider.enabled ? "停用" : "启用"}</button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
+            </table>
+          </div>
+        </Section>
+        <Section
+          title="Provider Routing"
+          action={<button className="button" onClick={createProviderRoute}><Settings className="h-4 w-4" />新增 Routing</button>}
+        >
+          <div className="panel grid gap-3 p-4 md:grid-cols-3 xl:grid-cols-6">
+            <input className="field" value={String(routeForm.name ?? "")} onChange={(e) => updateRouteField("name", e.target.value)} placeholder="name" />
+            <input className="field" value={String(routeForm.platform ?? "")} onChange={(e) => updateRouteField("platform", e.target.value)} placeholder="platform or empty" />
+            <select className="field" value={String(routeForm.task_type ?? "REPLY")} onChange={(e) => updateRouteField("task_type", e.target.value)}>
+              {["ANALYSIS", "REPLY", "EMBEDDING"].map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+            <input className="field" value={String(routeForm.strategy ?? "")} onChange={(e) => updateRouteField("strategy", e.target.value)} placeholder="strategy or empty" />
+            <select className="field" value={String(routeForm.preferred_provider_id ?? "")} onChange={(e) => updateRouteField("preferred_provider_id", e.target.value)}>
+              <option value="">Preferred Provider</option>
+              {(providers.data ?? []).map((provider) => <option key={provider.id} value={provider.id}>{provider.provider_name}</option>)}
+            </select>
+            <select className="field" value={String(routeForm.fallback_provider_id ?? "")} onChange={(e) => updateRouteField("fallback_provider_id", e.target.value)}>
+              <option value="">Fallback Provider</option>
+              {(providers.data ?? []).map((provider) => <option key={provider.id} value={provider.id}>{provider.provider_name}</option>)}
+            </select>
+            <input className="field" type="number" value={String(routeForm.min_commercial_score ?? 0)} onChange={(e) => updateRouteField("min_commercial_score", Number(e.target.value))} placeholder="min commercial" />
+            <input className="field" type="number" value={String(routeForm.max_risk_score ?? 100)} onChange={(e) => updateRouteField("max_risk_score", Number(e.target.value))} placeholder="max risk" />
+            <input className="field" type="number" value={String(routeForm.priority ?? 100)} onChange={(e) => updateRouteField("priority", Number(e.target.value))} placeholder="priority" />
+            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(routeForm.enabled)} onChange={(e) => updateRouteField("enabled", e.target.checked)} />Enabled</label>
+          </div>
+          <div className="panel mt-3 overflow-x-auto">
+            <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["Name", "Platform", "Task", "Strategy", "Scores", "Preferred", "Fallback", "Priority", "Status"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(providerRoutes.data ?? []).map((route) => (
+                <tr key={String(route.uuid)} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3 font-semibold">{String(route.name)}</td>
+                  <td className="px-4 py-3">{String(route.platform ?? "any")}</td>
+                  <td className="px-4 py-3">{String(route.task_type)}</td>
+                  <td className="px-4 py-3">{String(route.strategy ?? "any")}</td>
+                  <td className="px-4 py-3 text-xs">{String(route.min_commercial_score)} / {String(route.max_risk_score)}</td>
+                  <td className="px-4 py-3">{String(route.preferred_provider ?? "—")}</td>
+                  <td className="px-4 py-3">{String(route.fallback_provider ?? "—")}</td>
+                  <td className="px-4 py-3">{String(route.priority)}</td>
+                  <td className="px-4 py-3"><StatusBadge value={route.enabled ? "ACTIVE" : "DISABLED"} /></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </Section>
+        <Section
+          title="Prompt Templates"
+          action={<button className="button" onClick={createPromptTemplate}><Settings className="h-4 w-4" />新增 Template</button>}
+        >
+          <div className="panel grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-5">
+            <input className="field" value={String(templateForm.name ?? "")} onChange={(e) => updateTemplateField("name", e.target.value)} placeholder="name" />
+            <select className="field" value={String(templateForm.template_type ?? "reply_prompt")} onChange={(e) => updateTemplateField("template_type", e.target.value)}>
+              {["analysis_prompt", "reply_prompt"].map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+            <input className="field" value={String(templateForm.platform ?? "")} onChange={(e) => updateTemplateField("platform", e.target.value)} placeholder="platform" />
+            <input className="field" value={String(templateForm.strategy ?? "")} onChange={(e) => updateTemplateField("strategy", e.target.value)} placeholder="strategy" />
+            <input className="field" value={String(templateForm.tone ?? "")} onChange={(e) => updateTemplateField("tone", e.target.value)} placeholder="tone" />
+            <textarea className="field min-h-28 md:col-span-2 xl:col-span-5" value={String(templateForm.content ?? "")} onChange={(e) => updateTemplateField("content", e.target.value)} />
+          </div>
+          <div className="panel mt-3 overflow-x-auto">
+            <table className="w-full min-w-[840px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["Name", "Type", "Platform", "Strategy", "Tone", "Version", "Enabled"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(promptTemplates.data ?? []).map((template) => (
+                <tr key={String(template.uuid)} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3 font-semibold">{String(template.name)}</td>
+                  <td className="px-4 py-3">{String(template.template_type)}</td>
+                  <td className="px-4 py-3">{String(template.platform ?? "any")}</td>
+                  <td className="px-4 py-3">{String(template.strategy ?? "any")}</td>
+                  <td className="px-4 py-3">{String(template.tone ?? "any")}</td>
+                  <td className="px-4 py-3">{String(template.version)}</td>
+                  <td className="px-4 py-3"><StatusBadge value={template.enabled ? "ACTIVE" : "DISABLED"} /></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </Section>
+        <Section
+          title="Prompt Versions"
+          action={<button className="button" onClick={createPromptVersion}><Settings className="h-4 w-4" />新增 Version</button>}
+        >
+          <div className="panel grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-5">
+            <select className="field" value={String(versionForm.prompt_template_id ?? "")} onChange={(e) => updateVersionField("prompt_template_id", e.target.value)}>
+              <option value="">Prompt Template</option>
+              {(promptTemplates.data ?? []).map((template) => <option key={String(template.id)} value={String(template.id)}>{String(template.name)}</option>)}
+            </select>
+            <input className="field" value={String(versionForm.version ?? "v1")} onChange={(e) => updateVersionField("version", e.target.value)} placeholder="version" />
+            <input className="field" value={String(versionForm.platform ?? "")} onChange={(e) => updateVersionField("platform", e.target.value)} placeholder="platform" />
+            <input className="field" value={String(versionForm.strategy ?? "")} onChange={(e) => updateVersionField("strategy", e.target.value)} placeholder="strategy" />
+            <input className="field" value={String(versionForm.tone ?? "")} onChange={(e) => updateVersionField("tone", e.target.value)} placeholder="tone" />
+            <textarea className="field min-h-28 md:col-span-2 xl:col-span-5" value={String(versionForm.content ?? "")} onChange={(e) => updateVersionField("content", e.target.value)} placeholder="prompt content" />
+            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(versionForm.is_default)} onChange={(e) => updateVersionField("is_default", e.target.checked)} />Default</label>
+          </div>
+          <div className="panel mt-3 overflow-x-auto">
+            <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["Template", "Type", "Version", "Platform", "Strategy", "Tone", "Default", "Enabled"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(promptVersions.data ?? []).map((version) => (
+                <tr key={String(version.uuid)} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3 font-semibold">{String(version.template_name ?? version.prompt_template_id)}</td>
+                  <td className="px-4 py-3">{String(version.template_type ?? "—")}</td>
+                  <td className="px-4 py-3">{String(version.version)}</td>
+                  <td className="px-4 py-3">{String(version.platform ?? "any")}</td>
+                  <td className="px-4 py-3">{String(version.strategy ?? "any")}</td>
+                  <td className="px-4 py-3">{String(version.tone ?? "any")}</td>
+                  <td className="px-4 py-3">{String(version.is_default)}</td>
+                  <td className="px-4 py-3"><StatusBadge value={version.enabled ? "ACTIVE" : "DISABLED"} /></td>
+                </tr>
+              ))}</tbody>
             </table>
           </div>
         </Section>
@@ -2494,7 +2787,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v1.1</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v1.2</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">

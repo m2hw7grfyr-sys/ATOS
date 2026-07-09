@@ -1,6 +1,6 @@
 # ATOS
 
-ATOS（AI Traffic Operating System）v1.1 本地可运行 MVP。
+ATOS（AI Traffic Operating System）v1.2 本地可运行 MVP。
 
 当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环、Account Center / TGE Profile 绑定、Execution Center 的 TGE / Playwright 半自动回复准备链路，以及 Engagement Strategy / Warm-up 工作流。
 
@@ -9,6 +9,8 @@ v0.8 仍然保持 human-in-the-loop：支持打开目标帖子、定位评论框
 v0.9 增加 Engagement Center：支持独立浏览、点赞、主页访问和 Reply Warm-up 的任务结构；Mock Mode 下可完整测试，不自动提交评论。
 
 v1.1 增加 Apify Actor Mapping：不同 Actor 的 raw item 可以通过 dot notation 映射为统一 Post Object。
+
+v1.2 增强 AI Workspace：支持多 LLM Provider 抽象、Provider Routing、Prompt Version、Prompt Preview、fallback 日志和 token/cost 统计。
 
 ## 技术栈
 
@@ -36,7 +38,10 @@ v1.1 增加 Apify Actor Mapping：不同 Actor 的 raw item 可以通过 dot not
 - API Key 前端 masked 显示，后端不返回明文
 - Mock Provider 无 key 可完整跑通
 - OpenAI Provider 有 key 时可真实调用，失败自动 fallback 到 Mock
-- AI 调用日志、Prompt Template、Analysis Result 数据结构
+- Provider Routing 可按平台、任务类型、策略、商业分和风险分选择 Provider
+- Prompt Template / Prompt Version 可在 System Settings 管理
+- AI Workspace 支持 Prompt Preview
+- AI 调用日志、Prompt Template、Prompt Version、Analysis Result、token/cost 数据结构
 - Scheduler 数据库状态队列
 - AI Approved Reply 可手动或自动加入 Scheduler
 - Scheduler 支持随机延迟、平台轮询、权重轮询、账号选择
@@ -170,11 +175,75 @@ Seed 默认创建 Mock Provider。无需 API Key。
 1. 打开 System Settings。
 2. 在 LLM Providers 中新增或编辑 OpenAI Provider。
 3. 填写 `api_base_url`、`api_key`、`model_name`。
-4. 启用 `use_for_analysis` 和 `use_for_reply`。
-5. 设置比 Mock 更高的优先级，例如 `10`。
-6. 保存后回到 AI Workspace 运行 Analyze / Generate。
+4. 点击 Provider 行里的“测试”，确认配置状态。
+5. 启用 `use_for_analysis` 和 `use_for_reply`。
+6. 设置比 Mock 更高的优先级，例如 `10`。
+7. 保存后回到 AI Workspace 运行 Analyze / Generate。
 
 如果 OpenAI 调用失败，系统会自动 fallback 到 Mock Provider，并在 `ai_generation_logs` 记录失败原因。
+
+### Provider Routing
+
+System Settings 的 `Provider Routing` 支持按条件选择 Provider：
+
+- `platform`
+- `task_type`: `ANALYSIS / REPLY / EMBEDDING`
+- `strategy`
+- `min_commercial_score`
+- `max_risk_score`
+- `preferred_provider_id`
+- `fallback_provider_id`
+- `priority`
+
+调用链路：
+
+```text
+Primary Provider
+↓
+Fallback Provider
+↓
+Mock Provider
+↓
+Template / Manual Required
+```
+
+所有 fallback 都会记录：
+
+- `fallback_used`
+- `fallback_reason`
+- `fallback_from_provider`
+- `fallback_to_provider`
+
+### Prompt Template / Prompt Version
+
+System Settings 支持：
+
+- 新增 Prompt Template
+- 新增 Prompt Version
+- 设置 default version
+- 按 platform / strategy / tone 匹配版本
+
+AI 调用会写入：
+
+- `prompt_version`
+- `prompt_version_id`
+- `input_tokens`
+- `output_tokens`
+- `total_tokens`
+- `estimated_cost`
+- `provider_latency_ms`
+
+### Prompt Preview
+
+AI Workspace 的任务卡片支持 `Preview Prompt`。
+
+Preview 不调用 LLM，只展示：
+
+- System Prompt
+- Platform Prompt
+- Strategy Prompt
+- Variables
+- Final Prompt
 
 ## Scheduler 使用流程
 

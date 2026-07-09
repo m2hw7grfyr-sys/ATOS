@@ -21,7 +21,9 @@ from app.models import (
     PlatformWeight,
     PlatformSelector,
     Post,
+    ProviderRouting,
     PromptTemplate,
+    PromptVersion,
     Reply,
     ReplayFile,
     SchedulerTask,
@@ -31,7 +33,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v1.1-acceptance"
+SEED_VERSION = "v1.2-acceptance"
 
 
 def main() -> None:
@@ -698,7 +700,10 @@ def main() -> None:
                 )
             )
             if not provider:
-                db.add(LLMProvider(**spec))
+                provider = LLMProvider(**spec)
+                db.add(provider)
+                db.flush()
+            provider.health_status = provider.health_status or "UNKNOWN"
 
         prompt_specs = [
             (
@@ -746,16 +751,70 @@ Community: {{community}}
                 select(PromptTemplate).where(PromptTemplate.name == name)
             )
             if not template:
+                template = PromptTemplate(
+                    name=name,
+                    template_type=template_type,
+                    platform=platform,
+                    strategy=strategy,
+                    tone=tone,
+                    content=content,
+                    version="v1.2",
+                    enabled=True,
+                )
+                db.add(template)
+                db.flush()
+            prompt_version = db.scalar(
+                select(PromptVersion).where(
+                    PromptVersion.prompt_template_id == template.id,
+                    PromptVersion.version == "v1.2",
+                )
+            )
+            if not prompt_version:
                 db.add(
-                    PromptTemplate(
-                        name=name,
-                        template_type=template_type,
-                        platform=platform,
-                        strategy=strategy,
-                        tone=tone,
-                        content=content,
-                        version="v0.3",
+                    PromptVersion(
+                        prompt_template_id=template.id,
+                        version="v1.2",
+                        content=template.content,
+                        variables_schema={
+                            "title": "post title",
+                            "content": "post body",
+                            "community": "community/subreddit",
+                            "author": "post author",
+                            "strategy": "reply strategy",
+                            "tone": "reply tone",
+                            "variables": "runtime variables JSON",
+                        },
+                        platform=template.platform,
+                        strategy=template.strategy,
+                        tone=template.tone,
                         enabled=True,
+                        is_default=True,
+                    )
+                )
+
+        mock_provider = db.scalar(select(LLMProvider).where(LLMProvider.provider_type == "mock"))
+        openai_provider = db.scalar(select(LLMProvider).where(LLMProvider.provider_type == "openai"))
+        route_specs = [
+            ("Default Analysis Route", "ANALYSIS", None),
+            ("Default Reply Route", "REPLY", None),
+            ("Default Embedding Route", "EMBEDDING", None),
+        ]
+        for name, task_type, strategy in route_specs:
+            route = db.scalar(select(ProviderRouting).where(ProviderRouting.name == name))
+            if not route:
+                db.add(
+                    ProviderRouting(
+                        name=name,
+                        platform=None,
+                        task_type=task_type,
+                        strategy=strategy,
+                        min_commercial_score=0,
+                        max_risk_score=100,
+                        preferred_provider_id=openai_provider.id if openai_provider and openai_provider.enabled else mock_provider.id if mock_provider else None,
+                        fallback_provider_id=mock_provider.id if mock_provider else None,
+                        enabled=True,
+                        priority=10 if task_type != "EMBEDDING" else 50,
+                        remark="Seed provider routing rule. Falls back to Mock Provider when real providers are unavailable.",
                     )
                 )
 
@@ -774,7 +833,8 @@ Community: {{community}}
             "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
             "10 posts, 5 AI tasks, 5 scheduler tasks, 4 accounts, "
             "4 TGE profiles, 11 statistics, 2 LLM providers, 2 prompt templates, "
-            "5 platform weights, 2 engagement strategies, 5 execution tasks, 5 engagement tasks, 1 actor mapping."
+            "2 prompt versions, 3 provider routes, 5 platform weights, 2 engagement strategies, "
+            "5 execution tasks, 5 engagement tasks, 1 actor mapping."
         )
     finally:
         db.close()

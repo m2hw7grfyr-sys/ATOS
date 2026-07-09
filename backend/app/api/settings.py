@@ -3,19 +3,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import LLMProvider, Platform, PlatformWeight, SystemSetting
+from app.models import LLMProvider, Platform, PlatformWeight, ProviderRouting, SystemSetting
 from app.response import ok
 from app.schemas import (
     LLMProviderCreate,
     LLMProviderUpdate,
     PlatformWeightUpdate,
     PlaywrightSettingsUpdate,
+    ProviderRoutingCreate,
+    ProviderRoutingUpdate,
     SchedulerSettingsUpdate,
     SettingUpdate,
     TgeSettingsUpdate,
 )
 from app.serializers import serialize_model
-from app.services.ai import mask_secret
+from app.services.ai import mask_secret, test_provider_config
 from app.services.scheduler import (
     ensure_platform_weights,
     get_scheduler_settings,
@@ -28,7 +30,8 @@ from app.services.playwright_runner import get_playwright_settings, save_playwri
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-ALLOWED_PROVIDER_TYPES = {"openai", "anthropic", "gemini", "ollama", "custom", "mock"}
+ALLOWED_PROVIDER_TYPES = {"openai", "anthropic", "gemini", "ollama", "custom", "custom_http", "mock"}
+ALLOWED_TASK_TYPES = {"ANALYSIS", "REPLY", "EMBEDDING"}
 
 
 def serialize_llm_provider(provider: LLMProvider) -> dict:
@@ -36,6 +39,15 @@ def serialize_llm_provider(provider: LLMProvider) -> dict:
     item["api_key"] = None
     item["api_key_configured"] = bool(provider.api_key)
     item["api_key_masked"] = mask_secret(provider.api_key)
+    return item
+
+
+def serialize_provider_routing(route: ProviderRouting, db: Session) -> dict:
+    item = serialize_model(route)
+    preferred = db.get(LLMProvider, route.preferred_provider_id) if route.preferred_provider_id else None
+    fallback = db.get(LLMProvider, route.fallback_provider_id) if route.fallback_provider_id else None
+    item["preferred_provider"] = preferred.provider_name if preferred else None
+    item["fallback_provider"] = fallback.provider_name if fallback else None
     return item
 
 
@@ -202,6 +214,72 @@ def update_llm_provider(
     db.commit()
     db.refresh(provider)
     return ok(serialize_llm_provider(provider), request.state.trace_id, "LLM provider updated")
+
+
+@router.post("/llm-providers/{provider_id}/test")
+def test_llm_provider(provider_id: int, request: Request, db: Session = Depends(get_db)):
+    provider = db.get(LLMProvider, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="LLM provider not found")
+    return ok(test_provider_config(db, provider), request.state.trace_id, "LLM provider tested")
+
+
+@router.get("/provider-routing")
+def list_provider_routing(request: Request, db: Session = Depends(get_db)):
+    routes = db.scalars(
+        select(ProviderRouting).order_by(ProviderRouting.priority.asc(), ProviderRouting.id.asc())
+    ).all()
+    return ok([serialize_provider_routing(route, db) for route in routes], request.state.trace_id)
+
+
+@router.post("/provider-routing")
+def create_provider_routing(
+    payload: ProviderRoutingCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    task_type = payload.task_type.upper()
+    if task_type not in ALLOWED_TASK_TYPES:
+        raise HTTPException(status_code=422, detail="unsupported task_type")
+    route = ProviderRouting(
+        name=payload.name,
+        platform=payload.platform,
+        task_type=task_type,
+        strategy=payload.strategy,
+        min_commercial_score=payload.min_commercial_score,
+        max_risk_score=payload.max_risk_score,
+        preferred_provider_id=payload.preferred_provider_id,
+        fallback_provider_id=payload.fallback_provider_id,
+        enabled=payload.enabled,
+        priority=payload.priority,
+        remark=payload.remark,
+    )
+    db.add(route)
+    db.commit()
+    db.refresh(route)
+    return ok(serialize_provider_routing(route, db), request.state.trace_id, "provider route created")
+
+
+@router.put("/provider-routing/{route_id}")
+def update_provider_routing(
+    route_id: int,
+    payload: ProviderRoutingUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    route = db.get(ProviderRouting, route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="provider route not found")
+    updates = payload.model_dump(exclude_unset=True)
+    if "task_type" in updates and updates["task_type"]:
+        updates["task_type"] = str(updates["task_type"]).upper()
+        if updates["task_type"] not in ALLOWED_TASK_TYPES:
+            raise HTTPException(status_code=422, detail="unsupported task_type")
+    for key, value in updates.items():
+        setattr(route, key, value)
+    db.commit()
+    db.refresh(route)
+    return ok(serialize_provider_routing(route, db), request.state.trace_id, "provider route updated")
 
 
 @router.put("/{key}")

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AITask, Account, DataSource, EngagementTask, ExecutionTask, Platform, Post, SchedulerTask, StatisticSnapshot, TGEProfile
+from app.models import AIGenerationLog, AITask, Account, DataSource, EngagementTask, ExecutionTask, LLMProvider, Platform, Post, SchedulerTask, StatisticSnapshot, TGEProfile
 from app.response import ok
 
 
@@ -26,6 +26,13 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 StatisticSnapshot.period == "TODAY",
             )
         ) or 0
+
+    total_ai_logs = count(AIGenerationLog)
+    fallback_logs = count(AIGenerationLog, AIGenerationLog.fallback_used.is_(True))
+    avg_latency = db.scalar(select(func.coalesce(func.avg(AIGenerationLog.provider_latency_ms), 0))) or 0
+    ai_cost = db.scalar(select(func.coalesce(func.sum(AIGenerationLog.estimated_cost), 0))) or 0
+    healthy_providers = count(LLMProvider, LLMProvider.health_status.in_(["HEALTHY", "UNKNOWN"]))
+    unhealthy_providers = count(LLMProvider, LLMProvider.health_status.in_(["WARNING", "ERROR", "DISABLED"]))
 
     return ok(
         {
@@ -79,6 +86,10 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "today_profile_visit": metric_value("visit_profile_count"),
                 "warmup_tasks": count(EngagementTask, EngagementTask.status.in_(["NEW", "QUEUED", "RUNNING", "WAITING_EXECUTION"])),
                 "engagement_success_rate": metric_value("engagement_success_rate"),
+                "llm_provider_health": f"{healthy_providers} healthy / {unhealthy_providers} attention",
+                "fallback_rate": round((fallback_logs / total_ai_logs) * 100, 2) if total_ai_logs else 0,
+                "average_latency_ms": round(float(avg_latency), 2),
+                "ai_cost_today": round(float(ai_cost), 6),
             },
             "platform_health": [
                 {

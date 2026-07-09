@@ -230,6 +230,63 @@ class ReplyUpdate(BaseModel):
     content: str
 
 
+class ProviderRoutingCreate(BaseModel):
+    name: str
+    platform: Optional[str] = None
+    task_type: str = "ANALYSIS"
+    strategy: Optional[str] = None
+    min_commercial_score: int = 0
+    max_risk_score: int = 100
+    preferred_provider_id: Optional[int] = None
+    fallback_provider_id: Optional[int] = None
+    enabled: bool = True
+    priority: int = 100
+    remark: Optional[str] = None
+
+
+class ProviderRoutingUpdate(BaseModel):
+    name: Optional[str] = None
+    platform: Optional[str] = None
+    task_type: Optional[str] = None
+    strategy: Optional[str] = None
+    min_commercial_score: Optional[int] = None
+    max_risk_score: Optional[int] = None
+    preferred_provider_id: Optional[int] = None
+    fallback_provider_id: Optional[int] = None
+    enabled: Optional[bool] = None
+    priority: Optional[int] = None
+    remark: Optional[str] = None
+
+
+class PromptTemplateCreate(BaseModel):
+    name: str
+    template_type: str = "reply_prompt"
+    platform: Optional[str] = None
+    strategy: Optional[str] = None
+    tone: Optional[str] = None
+    content: str
+    version: str = "v1"
+    enabled: bool = True
+
+
+class PromptVersionCreate(BaseModel):
+    prompt_template_id: int
+    version: str = "v1"
+    content: str
+    variables_schema: dict[str, Any] = Field(default_factory=dict)
+    platform: Optional[str] = None
+    strategy: Optional[str] = None
+    tone: Optional[str] = None
+    enabled: bool = True
+    is_default: bool = False
+
+
+class PromptPreviewRequest(BaseModel):
+    strategy: str = "PURE_HELP"
+    tone: str = "supportive"
+    variables: dict[str, Any] = Field(default_factory=dict)
+
+
 class PlatformSelectorCreate(BaseModel):
     platform: str
     selector_key: str
