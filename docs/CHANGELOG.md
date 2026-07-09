@@ -4,6 +4,18 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v0.7
+
+- Expanded Engagement
+- Added Behavior Engine
+- Added Warm-up Strategy
+- Added Entity Definition
+- Added DTO
+- Added Mermaid State Machine
+- Added Mermaid Sequence Diagram
+- Added Configuration Section
+- Added Performance Requirements
+
 ## v0.6
 
 - Expanded Execution Kernel

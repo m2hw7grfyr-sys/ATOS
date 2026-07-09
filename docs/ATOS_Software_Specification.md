@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.6
+**Version:** 0.7
 
 **Status:** Draft
 
@@ -3658,3 +3658,581 @@ Execution：
 目标：
 
 Execute。
+
+==============================================================
+
+# PART VII Engagement
+
+---
+
+# Chapter 6 Engagement
+
+## 6.1 模块定位
+
+Engagement（互动中心）负责模拟真实用户行为。
+
+目标不是增加互动数量。
+
+目标是建立：
+
+Natural Behavior Pattern（自然行为轨迹）。
+
+Engagement 可以：
+
+独立运行。
+
+也可以：
+
+作为 Reply 前置流程。
+
+---
+
+# 6.2 设计原则
+
+Engagement 永远不是：
+
+点赞机器人。
+
+也不是：
+
+浏览机器人。
+
+Engagement 是：
+
+Behavior Engine。
+
+所有行为：
+
+都由：
+
+Strategy 决定。
+
+Scheduler：
+
+负责：
+
+时间。
+
+Execution：
+
+负责：
+
+执行。
+
+Engagement：
+
+负责：
+
+行为组合。
+
+---
+
+# 6.3 Supported Behavior
+
+支持：
+
+- Browse
+- Like
+- Bookmark
+- Visit Profile
+- Expand Comment
+- Scroll
+- Pause
+- Read
+- Media View
+- Follow（预留）
+- DM（预留）
+- Share（预留）
+
+---
+
+# 6.4 Behavior Strategy
+
+系统内置：
+
+- Warm-up
+- Silent Browse
+- Like Only
+- Community Reading
+- Profile Visit
+- Mixed Engagement
+- Reply Warm-up
+- Custom Strategy
+
+支持：
+
+自定义。
+
+支持：
+
+导入。
+
+支持：
+
+版本。
+
+---
+
+# 6.5 Warm-up Strategy
+
+Warm-up：
+
+例如：
+
+Browse：
+
+3
+
+↓
+
+Pause：
+
+20~60 秒
+
+↓
+
+Like：
+
+1
+
+↓
+
+Browse：
+
+2
+
+↓
+
+Visit Profile：
+
+1
+
+↓
+
+Reply
+
+Warm-up：
+
+参数：
+
+可配置。
+
+---
+
+# 6.6 Browse Strategy
+
+支持：
+
+- Keyword
+- Community
+- Trending
+- Random
+- Recent
+- Bookmark History
+
+Browse：
+
+支持：
+
+随机：
+
+阅读深度。
+
+随机：
+
+滚动。
+
+随机：
+
+停留。
+
+---
+
+# 6.7 Like Strategy
+
+支持：
+
+Like Rate。
+
+例如：
+
+- 30%
+- 50%
+- 70%
+
+支持：
+
+每日：
+
+Like Limit。
+
+支持：
+
+平台：
+
+覆盖。
+
+---
+
+# 6.8 Visit Profile
+
+支持：
+
+随机：
+
+进入：
+
+主页。
+
+浏览：
+
+多个：
+
+帖子。
+
+随机：
+
+停留。
+
+然后：
+
+退出。
+
+避免：
+
+固定行为。
+
+---
+
+# 6.9 Mixed Engagement
+
+允许：
+
+组合：
+
+Browse
+
+↓
+
+Like
+
+↓
+
+Browse
+
+↓
+
+Profile
+
+↓
+
+Browse
+
+↓
+
+Reply
+
+Scheduler：
+
+随机：
+
+插入。
+
+---
+
+# 6.10 Behavior Randomization
+
+支持：
+
+随机：
+
+- Scroll
+- Pause
+- Mouse Move
+- Hover
+- Read Time
+- Open Media
+- 返回
+- 继续阅读
+
+所有：
+
+行为：
+
+随机。
+
+禁止：
+
+固定。
+
+---
+
+# 6.11 Risk Protection
+
+每个平台：
+
+独立：
+
+限制：
+
+- Browse
+- Like
+- Bookmark
+- Visit
+- Reply
+
+达到：
+
+Threshold。
+
+自动：
+
+Cooling。
+
+---
+
+# 6.12 Cooling
+
+Cooling：
+
+期间。
+
+禁止：
+
+Reply。
+
+允许：
+
+Browse。
+
+允许：
+
+Read。
+
+允许：
+
+Media。
+
+支持：
+
+后台：
+
+配置。
+
+---
+
+# 6.13 Engagement Task
+
+任务：
+
+类型：
+
+- Independent
+- Before Reply
+- Scheduled
+- Daily
+- Campaign
+- Manual
+
+---
+
+# 6.14 Dashboard
+
+新增：
+
+- Today's Browse
+- Today's Like
+- Today's Bookmark
+- Today's Reading Time
+- Today's Profile Visit
+- Today's Warm-up
+- Today's Mixed
+
+---
+
+# 6.15 Entity
+
+Entity：
+
+EngagementTask
+
+字段：
+
+- task_id
+- strategy_id
+- account_id
+- platform
+- behavior_type
+- priority
+- status
+- created_at
+- started_at
+- finished_at
+- duration
+- result
+- risk_level
+
+---
+
+# 6.16 DTO
+
+CreateEngagementTaskRequest
+
+- strategy_id
+- account_id
+- platform
+- behavior_count
+- priority
+- schedule_time
+
+CreateEngagementTaskResponse
+
+- task_id
+- status
+- estimated_start
+
+---
+
+# 6.17 State Machine
+
+```mermaid
+stateDiagram-v2
+
+NEW --> QUEUED
+
+QUEUED --> RUNNING
+
+RUNNING --> COOLING
+
+RUNNING --> SUCCESS
+
+RUNNING --> FAILED
+
+FAILED --> RETRY
+
+RETRY --> RUNNING
+
+COOLING --> QUEUED
+```
+
+---
+
+# 6.18 Sequence Diagram
+
+```mermaid
+sequenceDiagram
+
+Scheduler->>Execution: Dispatch Engagement
+
+Execution->>PlatformAdapter: Browse
+
+PlatformAdapter-->>Execution: Success
+
+Execution->>PlatformAdapter: Like
+
+PlatformAdapter-->>Execution: Success
+
+Execution->>Statistics: Record
+
+Statistics-->>Dashboard: Update
+```
+
+---
+
+# 6.19 API
+
+GET
+
+/engagement/tasks
+
+GET
+
+/engagement/statistics
+
+POST
+
+/engagement/create
+
+POST
+
+/engagement/run
+
+POST
+
+/engagement/pause
+
+POST
+
+/engagement/resume
+
+POST
+
+/engagement/cancel
+
+---
+
+# 6.20 Configuration
+
+- enable_engagement
+- enable_random_pause
+- enable_random_scroll
+- enable_profile_visit
+- enable_media_view
+- max_daily_browse
+- max_daily_like
+- max_daily_bookmark
+- warmup_before_reply
+
+---
+
+# 6.21 Performance
+
+任务创建：
+
+<200ms
+
+执行开始：
+
+<1s
+
+Dashboard：
+
+刷新：
+
+<500ms
+
+---
+
+# 6.22 Developer Rules
+
+Engagement：
+
+不得：
+
+直接：
+
+Scheduler。
+
+不得：
+
+直接：
+
+AI。
+
+所有：
+
+行为：
+
+Strategy。
+
+所有：
+
+时间：
+
+Scheduler。
+
+所有：
+
+执行：
+
+Execution。

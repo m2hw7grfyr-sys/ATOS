@@ -7,6 +7,7 @@
 - [x] AI Workspace
 - [x] Scheduler
 - [x] Execution
+- [x] Engagement
 
 ## Specification
 
