@@ -4,6 +4,14 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## Architecture Handbook v0.1
+
+- Created Architecture Handbook
+- Added Kernel
+- Added Runtime
+- Added Subsystem
+- Added Golden Architecture Rules
+
 ## v2.1
 
 - Added Subsystem Contract
