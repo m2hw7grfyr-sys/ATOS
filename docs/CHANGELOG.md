@@ -4,6 +4,18 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v0.5
+
+- Expanded Scheduler
+- Added Platform Weight
+- Added Weighted Round Robin
+- Added Platform Round Robin
+- Added Working Time
+- Added Health Score Scheduling
+- Added Behavior Mix
+- Added Engagement Injection
+- Added Scheduler Events
+
 ## v0.4
 
 - Expanded AI Workspace

@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.4
+**Version:** 0.5
 
 **Status:** Draft
 
@@ -2152,3 +2152,787 @@ Variables：
 必须：
 
 Config。
+
+==============================================================
+
+# PART V Scheduler
+
+---
+
+# Chapter 4 Scheduler
+
+## 4.1 模块定位
+
+Scheduler 是整个 ATOS 的中央调度引擎（Central Scheduling Engine）。
+
+整个系统只有一个 Scheduler。
+
+任何任务：
+
+包括：
+
+- Browse
+- Like
+- Bookmark
+- Visit Profile
+- Follow
+- Reply
+- Future DM
+- Future Posting
+
+全部必须进入 Scheduler。
+
+任何模块：
+
+禁止：
+
+直接调用：
+
+Execution。
+
+---
+
+# 4.2 Scheduler Philosophy
+
+Scheduler 的职责：
+
+不是：
+
+决定：
+
+回复。
+
+Scheduler：
+
+决定：
+
+- 什么时候
+- 哪个账号
+- 哪个平台
+- 执行什么行为。
+
+一句话：
+
+Scheduler：
+
+负责：
+
+时间。
+
+Execution：
+
+负责：
+
+动作。
+
+---
+
+# 4.3 Scheduler Pipeline
+
+Approved Task
+
+↓
+
+Risk Check
+
+↓
+
+Platform Selection
+
+↓
+
+Account Selection
+
+↓
+
+Working Time Check
+
+↓
+
+Cooling Check
+
+↓
+
+Random Delay
+
+↓
+
+Behavior Mix
+
+↓
+
+Execution Queue
+
+↓
+
+Execution
+
+↓
+
+Feedback
+
+↓
+
+Statistics
+
+---
+
+# 4.4 Scheduler Queue
+
+系统存在多个 Queue。
+
+- AI Queue
+- Review Queue
+- Scheduler Queue
+- Execution Queue
+- Statistics Queue
+
+Scheduler：
+
+仅负责：
+
+Scheduler Queue。
+
+---
+
+# 4.5 Platform Weight
+
+平台：
+
+支持：
+
+权重。
+
+例如：
+
+Reddit
+
+50
+
+Facebook
+
+30
+
+X
+
+20
+
+Instagram
+
+15
+
+TikTok
+
+10
+
+YouTube
+
+5
+
+Quora
+
+5
+
+权重：
+
+支持：
+
+后台修改。
+
+实时生效。
+
+---
+
+# 4.6 Platform Round Robin
+
+如果：
+
+多个平台：
+
+开启。
+
+Scheduler：
+
+默认：
+
+轮询。
+
+例如：
+
+Reddit
+
+↓
+
+Facebook
+
+↓
+
+X
+
+↓
+
+Reddit
+
+↓
+
+Facebook
+
+↓
+
+X
+
+同一个平台：
+
+连续出现：
+
+必须：
+
+满足：
+
+冷却。
+
+---
+
+# 4.7 Weighted Round Robin
+
+平台：
+
+允许：
+
+权重。
+
+例如：
+
+50
+
+30
+
+20
+
+Scheduler：
+
+自动：
+
+计算：
+
+比例。
+
+例如：
+
+100任务。
+
+Reddit：
+
+50
+
+Facebook：
+
+30
+
+X：
+
+20
+
+---
+
+# 4.8 Account Selection
+
+账号：
+
+选择：
+
+不是：
+
+随机。
+
+评分：
+
+包括：
+
+- Health Score
+- Karma
+- Followers
+- Cooling
+- Daily Limit
+- Working Time
+- Success Rate
+- Risk Level
+- Recent Activity
+
+最终：
+
+Score。
+
+最高：
+
+优先。
+
+---
+
+# 4.9 Health Score
+
+账号：
+
+Health：
+
+默认：
+
+100。
+
+成功：
+
++
+
+失败：
+
+-
+
+限制：
+
+-
+
+封号：
+
+-
+
+长期：
+
+稳定：
+
++
+
+Scheduler：
+
+优先：
+
+高分账号。
+
+---
+
+# 4.10 Working Time
+
+每个账号：
+
+支持：
+
+多个：
+
+时间段。
+
+例如：
+
+09:00
+
+12:00
+
+14:00
+
+18:00
+
+20:00
+
+23:00
+
+Scheduler：
+
+禁止：
+
+工作时间外：
+
+派发。
+
+---
+
+# 4.11 Random Delay
+
+支持：
+
+- Enable
+- Min Delay
+- Max Delay
+
+例如：
+
+120
+
+~
+
+480
+
+Scheduler：
+
+随机。
+
+每个平台：
+
+可配置。
+
+每账号：
+
+可配置。
+
+---
+
+# 4.12 Cooling
+
+账号：
+
+Reply：
+
+完成。
+
+Cooling：
+
+例如：
+
+35分钟。
+
+Browse：
+
+完成。
+
+Cooling：
+
+8分钟。
+
+Like：
+
+完成。
+
+Cooling：
+
+5分钟。
+
+平台：
+
+分别：
+
+配置。
+
+---
+
+# 4.13 Daily Limit
+
+- Browse
+- Like
+- Bookmark
+- Visit
+- Reply
+- DM
+- Follow
+
+全部：
+
+每日：
+
+独立：
+
+限制。
+
+支持：
+
+平台：
+
+覆盖。
+
+---
+
+# 4.14 Behavior Mix
+
+Scheduler：
+
+不是：
+
+一直：
+
+Reply。
+
+Scheduler：
+
+允许：
+
+插入：
+
+- Browse
+- Like
+- Bookmark
+- Visit Profile
+
+随机：
+
+混合。
+
+例如：
+
+Browse
+
+Browse
+
+Like
+
+Reply
+
+Browse
+
+Bookmark
+
+Reply
+
+这样：
+
+行为：
+
+更加：
+
+真人。
+
+---
+
+# 4.15 Engagement Injection
+
+如果：
+
+开启：
+
+Reply Warm-up。
+
+Scheduler：
+
+自动：
+
+插入：
+
+Engagement。
+
+例如：
+
+Reply：
+
+之前。
+
+Browse：
+
+3
+
+Like：
+
+2
+
+Visit：
+
+1
+
+然后：
+
+Reply。
+
+---
+
+# 4.16 Risk Check
+
+派发：
+
+之前。
+
+检查：
+
+- Platform
+- Account
+- Cookie
+- Login
+- Health
+- Risk
+- Proxy
+- Working Time
+- Daily Limit
+- Cooldown
+
+任何：
+
+失败。
+
+Reject。
+
+---
+
+# 4.17 Retry
+
+Execution：
+
+失败。
+
+支持：
+
+Retry。
+
+默认：
+
+3次。
+
+Retry：
+
+指数退避。
+
+记录：
+
+日志。
+
+---
+
+# 4.18 Queue Priority
+
+支持：
+
+Priority。
+
+例如：
+
+- VIP
+- High
+- Medium
+- Low
+- Emergency
+
+Scheduler：
+
+优先：
+
+高等级。
+
+---
+
+# 4.19 Manual Override
+
+Operator：
+
+允许：
+
+暂停：
+
+Scheduler。
+
+允许：
+
+手动：
+
+派发。
+
+允许：
+
+指定：
+
+账号。
+
+允许：
+
+指定：
+
+平台。
+
+全部：
+
+Audit。
+
+---
+
+# 4.20 Scheduler Event
+
+- TASK_CREATED
+- TASK_APPROVED
+- TASK_QUEUED
+- TASK_DELAYED
+- TASK_DISPATCHED
+- TASK_EXECUTED
+- TASK_FAILED
+- ACCOUNT_COOLING
+- ACCOUNT_RECOVERED
+
+全部：
+
+Event Bus。
+
+---
+
+# 4.21 Scheduler Dashboard
+
+Dashboard：
+
+增加：
+
+- Today's Queue
+- Today's Dispatch
+- Today's Delay
+- Today's Retry
+- Today's Cooldown
+- Today's Success
+- Today's Failure
+
+---
+
+# 4.22 Scheduler API
+
+GET
+
+/scheduler/task
+
+GET
+
+/scheduler/account
+
+GET
+
+/scheduler/platform
+
+POST
+
+/scheduler/run
+
+POST
+
+/scheduler/pause
+
+POST
+
+/scheduler/resume
+
+POST
+
+/scheduler/retry
+
+POST
+
+/scheduler/rebuild
+
+---
+
+# 4.23 Scheduler Rules
+
+Scheduler：
+
+禁止：
+
+业务判断。
+
+Scheduler：
+
+禁止：
+
+AI。
+
+Scheduler：
+
+禁止：
+
+平台DOM。
+
+Scheduler：
+
+只负责：
+
+调度。
+
+Execution：
+
+负责：
+
+执行。
