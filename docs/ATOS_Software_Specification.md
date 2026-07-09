@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.5
+**Version:** 0.6
 
 **Status:** Draft
 
@@ -2936,3 +2936,725 @@ Execution：
 负责：
 
 执行。
+
+==============================================================
+
+# PART VI Execution
+
+---
+
+# Chapter 5 Execution
+
+## 5.1 模块定位
+
+Execution 是整个 ATOS 唯一执行层。
+
+Execution 不负责：
+
+- AI
+- Strategy
+- Scheduler
+- Business Logic
+
+Execution 只负责：
+
+把 Scheduler 分发下来的任务，准确、安全、可追踪地执行。
+
+Execution 的输入：
+
+Task。
+
+Execution 的输出：
+
+Execution Result。
+
+---
+
+# 5.2 Execution Kernel
+
+Execution Kernel 由：
+
+Environment Manager
+
+↓
+
+Browser Manager
+
+↓
+
+Tab Manager
+
+↓
+
+Platform Adapter
+
+↓
+
+Playwright Driver
+
+↓
+
+Execution Result
+
+组成。
+
+Execution Kernel：
+
+不得：
+
+包含：
+
+业务逻辑。
+
+---
+
+# 5.3 Environment Manager
+
+每一个账号：
+
+绑定：
+
+唯一：
+
+TGE Environment。
+
+Scheduler：
+
+派发：
+
+任务。
+
+Execution：
+
+首先：
+
+检查：
+
+Environment。
+
+如果：
+
+已经运行：
+
+Attach。
+
+如果：
+
+未运行：
+
+Start。
+
+Environment：
+
+保持：
+
+长期在线。
+
+禁止：
+
+每次：
+
+启动。
+
+---
+
+# 5.4 Environment Health
+
+Environment：
+
+实时：
+
+Health。
+
+包括：
+
+- Running
+- Disconnected
+- Busy
+- Error
+- Recovering
+- Offline
+
+Dashboard：
+
+实时：
+
+显示。
+
+---
+
+# 5.5 Browser Manager
+
+Browser：
+
+管理：
+
+整个：
+
+Browser。
+
+包括：
+
+- Window
+- Profile
+- Context
+- Memory
+- CPU
+- Proxy
+- Heartbeat
+
+Execution：
+
+不得：
+
+重复：
+
+创建：
+
+Browser。
+
+---
+
+# 5.6 Tab Manager
+
+真正：
+
+工作的：
+
+不是：
+
+Browser。
+
+而是：
+
+Tab。
+
+生命周期：
+
+Create
+
+↓
+
+Load
+
+↓
+
+Execute
+
+↓
+
+Save
+
+↓
+
+Close
+
+Browser：
+
+继续：
+
+保留。
+
+---
+
+# 5.7 Tab Pool
+
+Execution：
+
+维护：
+
+Tab Pool。
+
+避免：
+
+频繁：
+
+创建：
+
+Tab。
+
+支持：
+
+Reuse。
+
+支持：
+
+Auto Close。
+
+支持：
+
+Health Check。
+
+---
+
+# 5.8 Platform Adapter
+
+Execution：
+
+绝不：
+
+知道：
+
+Reddit。
+
+Execution：
+
+只知道：
+
+Platform Adapter。
+
+例如：
+
+- adapter.open()
+- adapter.reply()
+- adapter.like()
+- adapter.visit()
+- adapter.bookmark()
+- adapter.follow()
+
+以后：
+
+增加：
+
+Threads。
+
+无需：
+
+修改：
+
+Execution。
+
+---
+
+# 5.9 Playwright Driver
+
+Execution：
+
+统一：
+
+调用：
+
+Playwright Driver。
+
+Driver：
+
+负责：
+
+- Locator
+- Click
+- Input
+- Scroll
+- Wait
+- Hover
+- Screenshot
+- Replay
+
+Execution：
+
+禁止：
+
+直接：
+
+Selector。
+
+---
+
+# 5.10 Execution Strategy
+
+Execution：
+
+支持：
+
+- Browse
+- Like
+- Bookmark
+- Visit Profile
+- Reply
+- Reply + Browse
+- Reply + Like
+- Mixed
+
+全部：
+
+来自：
+
+Strategy。
+
+Execution：
+
+不决定：
+
+行为。
+
+---
+
+# 5.11 Semi Auto
+
+半自动：
+
+Execution：
+
+负责：
+
+打开：
+
+页面。
+
+↓
+
+定位：
+
+输入框。
+
+↓
+
+填写：
+
+回复。
+
+↓
+
+定位：
+
+Submit。
+
+↓
+
+等待：
+
+人工。
+
+↓
+
+检测：
+
+页面变化。
+
+↓
+
+Close Tab。
+
+↓
+
+Next Task。
+
+人工：
+
+只点击：
+
+一次。
+
+---
+
+# 5.12 Full Auto
+
+全自动：
+
+Execution：
+
+完成：
+
+全部。
+
+提交：
+
+之前：
+
+再次：
+
+Risk Check。
+
+成功：
+
+Close Tab。
+
+失败：
+
+Retry。
+
+---
+
+# 5.13 Auto Close
+
+任务：
+
+完成。
+
+立即：
+
+Close Current Tab。
+
+禁止：
+
+浏览器：
+
+越来越多：
+
+Tab。
+
+Environment：
+
+保持。
+
+Tab：
+
+关闭。
+
+---
+
+# 5.14 Auto Attach
+
+Execution：
+
+默认：
+
+Attach。
+
+已经：
+
+打开：
+
+Environment。
+
+只有：
+
+不存在：
+
+Environment。
+
+才：
+
+Start。
+
+减少：
+
+启动：
+
+次数。
+
+---
+
+# 5.15 Pre Check
+
+执行：
+
+之前：
+
+检查：
+
+- Cookie
+- Login
+- Proxy
+- Page
+- Comment Box
+- Rate Limit
+- Network
+- Platform Status
+
+任何：
+
+失败。
+
+Reject。
+
+---
+
+# 5.16 Runtime Check
+
+执行：
+
+过程中：
+
+持续：
+
+检查：
+
+- Captcha
+- 429
+- 403
+- Login Lost
+- Popup
+- Dialog
+
+任何：
+
+异常。
+
+暂停：
+
+Execution。
+
+---
+
+# 5.17 Replay
+
+Execution：
+
+自动：
+
+保存：
+
+- Screenshot
+- HTML
+- Console
+- Network
+- Timeline
+- Replay JSON
+
+方便：
+
+Debug。
+
+---
+
+# 5.18 Execution Result
+
+统一：
+
+Result。
+
+- SUCCESS
+- FAILED
+- RETRY
+- BLOCKED
+- COOLDOWN
+- SKIPPED
+
+全部：
+
+保存。
+
+---
+
+# 5.19 Retry Strategy
+
+Retry：
+
+默认：
+
+3次。
+
+支持：
+
+Exponential Backoff。
+
+支持：
+
+Manual Retry。
+
+支持：
+
+Scheduler Retry。
+
+---
+
+# 5.20 Execution Event
+
+EXECUTION_STARTED
+
+↓
+
+PAGE_OPENED
+
+↓
+
+ACTION_STARTED
+
+↓
+
+ACTION_FINISHED
+
+↓
+
+EXECUTION_SUCCESS
+
+↓
+
+EXECUTION_FAILED
+
+↓
+
+REPLAY_SAVED
+
+↓
+
+TAB_CLOSED
+
+全部：
+
+Event Bus。
+
+---
+
+# 5.21 Dashboard
+
+Execution：
+
+新增：
+
+- Today's Execution
+- Execution Time
+- Average Duration
+- Retry Count
+- Replay Count
+- Current Running
+- Current Waiting
+- Current Error
+
+---
+
+# 5.22 API
+
+GET
+
+/execution/task
+
+GET
+
+/execution/replay
+
+POST
+
+/execution/start
+
+POST
+
+/execution/retry
+
+POST
+
+/execution/attach
+
+POST
+
+/execution/close-tab
+
+POST
+
+/execution/recover
+
+---
+
+# 5.23 Developer Rules
+
+Execution：
+
+不得：
+
+Scheduler。
+
+不得：
+
+AI。
+
+不得：
+
+Business。
+
+Execution：
+
+唯一：
+
+目标：
+
+Execute。

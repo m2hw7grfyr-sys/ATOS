@@ -6,6 +6,7 @@
 - [x] Data Center
 - [x] AI Workspace
 - [x] Scheduler
+- [x] Execution
 
 ## Specification
 
