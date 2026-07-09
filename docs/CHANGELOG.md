@@ -4,6 +4,15 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## App v0.8
+
+- Added semi-auto PREPARE_REPLY flow
+- Added Platform Selector Registry
+- Added Platform Adapter reply box operations
+- Added WAITING_MANUAL and Mark Submitted workflow
+- Added before/after fill replay fields
+- Added Scheduler and Account Usage writeback
+
 ## Architecture Handbook v0.1
 
 - Created Architecture Handbook

@@ -183,6 +183,24 @@ class ReplyUpdate(BaseModel):
     content: str
 
 
+class PlatformSelectorCreate(BaseModel):
+    platform: str
+    selector_key: str
+    selector_value: str
+    selector_type: str = "css"
+    enabled: bool = True
+    remark: Optional[str] = None
+
+
+class PlatformSelectorUpdate(BaseModel):
+    platform: Optional[str] = None
+    selector_key: Optional[str] = None
+    selector_value: Optional[str] = None
+    selector_type: Optional[str] = None
+    enabled: Optional[bool] = None
+    remark: Optional[str] = None
+
+
 class LLMProviderCreate(BaseModel):
     provider_name: str
     provider_type: str = "mock"

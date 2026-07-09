@@ -7,7 +7,7 @@ from app.models import Account, ExecutionLog, ExecutionTask, ReplayFile, Schedul
 from app.response import ok
 from app.serializers import serialize_model
 from app.services.execution import run_precheck, set_execution_status
-from app.services.playwright_runner import run_open_page
+from app.services.playwright_runner import close_execution_tab, mark_submitted, prepare_reply, run_open_page
 
 
 router = APIRouter(prefix="/execution", tags=["execution"])
@@ -22,6 +22,9 @@ def serialize_execution_task(task: ExecutionTask, db: Session) -> dict:
     item["scheduler_status"] = scheduler_task.status if scheduler_task else None
     item["execution_status"] = task.status
     item["account"] = account.username if account else None
+    item["reply_content_preview"] = (task.payload_json or {}).get("reply_content_preview") or (task.payload_json or {}).get("reply_content")
+    item["fill_status"] = (task.payload_json or {}).get("fill_status")
+    item["manual_confirmed"] = (task.payload_json or {}).get("manual_confirmed")
     item["tge_environment_id"] = (
         profile.tge_environment_id or profile.environment_id if profile else None
     )
@@ -80,12 +83,54 @@ def run_open_page_task(task_id: int, request: Request, db: Session = Depends(get
     return ok(serialize_execution_task(task, db), request.state.trace_id, "open page flow completed")
 
 
+@router.post("/tasks/{task_id}/prepare-reply")
+def prepare_reply_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    task = db.get(ExecutionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="execution task not found")
+    task.action_type = "PREPARE_REPLY"
+    if task.precheck_status != "SUCCESS":
+        run_precheck(db, task)
+        if task.status == "FAILED":
+            db.commit()
+            return ok(serialize_execution_task(task, db), request.state.trace_id, "precheck failed")
+    prepare_reply(db, task)
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "reply prepared")
+
+
+@router.post("/tasks/{task_id}/retry-fill")
+def retry_fill_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    task = db.get(ExecutionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="execution task not found")
+    task.error_code = None
+    task.error_message = None
+    task.status = "ENVIRONMENT_READY"
+    prepare_reply(db, task)
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "reply fill retried")
+
+
+@router.post("/tasks/{task_id}/mark-submitted")
+def mark_submitted_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    task = db.get(ExecutionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="execution task not found")
+    mark_submitted(db, task)
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "manual submission confirmed")
+
+
 @router.post("/tasks/{task_id}/close-tab")
 def close_tab_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     task = db.get(ExecutionTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="execution task not found")
-    set_execution_status(db, task, "TAB_CLOSED", "TAB_CLOSED", message="Close tab scaffold completed")
+    close_execution_tab(db, task)
     db.commit()
     return ok(serialize_execution_task(task, db), request.state.trace_id, "tab closed")
 

@@ -1,10 +1,10 @@
 # ATOS
 
-ATOS（AI Traffic Operating System）v0.7 本地可运行 MVP。
+ATOS（AI Traffic Operating System）v0.8 本地可运行 MVP。
 
-当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环、Account Center / TGE Profile 绑定，以及 Execution Center 的 TGE / Playwright OPEN_PAGE 执行链路。
+当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环、Account Center / TGE Profile 绑定，以及 Execution Center 的 TGE / Playwright 半自动回复准备链路。
 
-v0.7 仍然保持 human-in-the-loop：只支持 attach / open page / load check / screenshot / HTML snapshot / close tab，不自动粘贴，不自动提交，不自动评论。
+v0.8 仍然保持 human-in-the-loop：支持打开目标帖子、定位评论框、填入回复、等待人工提交、人工确认后关闭当前 Tab；系统绝不自动点击 Submit。
 
 ## 技术栈
 
@@ -46,6 +46,8 @@ v0.7 仍然保持 human-in-the-loop：只支持 attach / open page / load check 
 - System Settings 支持 TGE API 配置，API Key masked 显示
 - System Settings 支持 Playwright 配置和 Mock Mode
 - Execution 支持 OPEN_PAGE 执行链：Precheck、Attach、Open URL、Wait Load、Screenshot、HTML Snapshot、Close Tab
+- Execution 支持 PREPARE_REPLY 半自动链：Find Reply Box、Fill Reply、WAITING_MANUAL、Mark Submitted
+- Platform Selector Registry 支持按平台配置 `reply_box / login_required / rate_limited / comment_disabled`
 - Replay 文件保存到 `storage/replay/{execution_task_uuid}/`
 - Account Center 初版
 - Execution、Engagement、Statistics 占位页面
@@ -315,7 +317,7 @@ Scheduler `Run Once` 后，如果任务进入 `DISPATCHED`：
 3. Execution 页面可看到任务。
 4. 点击 `Precheck` 可执行初版环境检查。
 
-v0.6 只做 TGE 连接与状态管理。v0.7 开始支持 OPEN_PAGE，但不会粘贴或提交任何内容。
+v0.6 只做 TGE 连接与状态管理。v0.7 开始支持 OPEN_PAGE。v0.8 开始支持 PREPARE_REPLY，但提交动作必须人工完成。
 
 ## Playwright OPEN_PAGE 使用流程
 
@@ -360,6 +362,39 @@ SUCCESS
 ```
 
 当前版本只打开目标页面、检测加载、保存 replay、关闭 tab，不会定位评论框、不会自动粘贴、不会自动提交。
+
+## Semi-Auto PREPARE_REPLY 使用流程
+
+### 配置 Selector
+
+打开 System Settings 的 `Platform Selector Registry`：
+
+1. `platform` 填平台 slug，例如 `reddit`。
+2. `selector_key` 选择 `reply_box`。
+3. `selector_value` 填平台评论框 selector。
+4. `selector_type` 支持 `css / xpath / text`。
+5. 保存。
+
+Seed 默认包含 Reddit 示例：
+
+```text
+reply_box = div[contenteditable="true"]
+```
+
+### 执行 PREPARE_REPLY
+
+1. AI Workspace 批准回复。
+2. 加入 Scheduler。
+3. Scheduler `Run Once` 派发到 Execution。
+4. 打开 Execution 页面。
+5. 点击 `Prepare Reply`。
+6. 系统打开帖子、定位评论框、填入回复。
+7. 状态进入 `WAITING_MANUAL`。
+8. 你在平台页面人工检查并点击提交。
+9. 回到 ATOS 点击 `Mark Submitted`。
+10. 系统关闭当前 Tab，并回写 Execution / Scheduler / Account Usage。
+
+当前版本不会自动点击 Submit，不会自动发帖，不会自动点赞或私信。
 
 ### 查看 Replay 文件
 
@@ -427,6 +462,9 @@ storage/replay/{execution_task_uuid}/page.html
 - `POST /execution/tasks/{id}/mark-failed`
 - `POST /execution/tasks/{id}/attach`
 - `POST /execution/tasks/{id}/run-open-page`
+- `POST /execution/tasks/{id}/prepare-reply`
+- `POST /execution/tasks/{id}/mark-submitted`
+- `POST /execution/tasks/{id}/retry-fill`
 - `POST /execution/tasks/{id}/close-tab`
 - `GET /execution/tasks/{id}/replay`
 - `GET /execution/tasks/{id}/logs`
@@ -434,6 +472,9 @@ storage/replay/{execution_task_uuid}/page.html
 - `PUT /settings/tge`
 - `GET /settings/playwright`
 - `PUT /settings/playwright`
+- `GET /platform-selectors`
+- `POST /platform-selectors`
+- `PUT /platform-selectors/{id}`
 - `GET /settings`
 - `GET /statistics`
 
@@ -466,11 +507,11 @@ storage/replay/{execution_task_uuid}/page.html
 - 28 个工作时间窗口
 - 6 条统计快照
 
-## v0.7 边界
+## v0.8 边界
 
-- 不自动粘贴评论框。
+- 可以定位评论框并填入草稿。
+- 不自动点击 Submit。
 - 不自动评论、点赞、私信、发帖。
-- 不定位评论框。
 - 不提交表单。
 - 不引入 Redis/Celery。
 - 不做 Embedding 相似度。

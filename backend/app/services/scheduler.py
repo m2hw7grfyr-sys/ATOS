@@ -148,9 +148,10 @@ def queue_approved_ai_task(
             "ai_task_id": ai_task.id,
             "strategy": ai_task.strategy,
             "mode": "HUMAN_IN_THE_LOOP",
-            "action_type": "OPEN_PAGE",
+            "action_type": "PREPARE_REPLY",
             "url": post.url,
             "post_url": post.url,
+            "reply_content": reply.content,
         },
         status="NEW",
     )

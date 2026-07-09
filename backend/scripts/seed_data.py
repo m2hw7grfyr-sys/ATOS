@@ -15,6 +15,7 @@ from app.models import (
     LLMProvider,
     Platform,
     PlatformWeight,
+    PlatformSelector,
     Post,
     PromptTemplate,
     Reply,
@@ -25,7 +26,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v0.7-acceptance"
+SEED_VERSION = "v0.8-acceptance"
 
 
 def main() -> None:
@@ -349,11 +350,39 @@ def main() -> None:
                         payload={
                             "mode": "HUMAN_IN_THE_LOOP",
                             "seed": True,
-                            "action_type": "OPEN_PAGE",
+                            "action_type": "PREPARE_REPLY" if task_type == "REPLY" else "OPEN_PAGE",
                             "url": post.url,
                             "post_url": post.url,
+                            "reply_content": reply.content if reply else None,
                         },
                         status="QUEUED",
+                    )
+                )
+
+        selector_specs = [
+            ("reddit", "reply_box", 'div[contenteditable="true"]', "css", "Primary Reddit contenteditable reply box"),
+            ("reddit", "comment_button", 'button:has-text("Comment")', "css", "Manual submit button reference only; ATOS never clicks it in v0.8"),
+            ("reddit", "login_required", 'text="Log In"', "text", "Detect login prompt"),
+            ("reddit", "rate_limited", 'text="You are doing that too much"', "text", "Detect rate limit text"),
+            ("reddit", "comment_disabled", 'text="comments are locked"', "text", "Detect disabled comments"),
+        ]
+        for platform, key, value, selector_type, remark in selector_specs:
+            selector = db.scalar(
+                select(PlatformSelector).where(
+                    PlatformSelector.platform == platform,
+                    PlatformSelector.selector_key == key,
+                    PlatformSelector.selector_value == value,
+                )
+            )
+            if not selector:
+                db.add(
+                    PlatformSelector(
+                        platform=platform,
+                        selector_key=key,
+                        selector_value=value,
+                        selector_type=selector_type,
+                        enabled=True,
+                        remark=remark,
                     )
                 )
 
@@ -388,7 +417,7 @@ def main() -> None:
                     "enable_auto_start_environment": False,
                     "enable_auto_attach_environment": False,
                     "enable_auto_close_tab": True,
-                    "remark": "Seed TGE adapter config. v0.7 supports OPEN_PAGE only.",
+                    "remark": "Seed TGE adapter config. v0.8 supports semi-auto PREPARE_REPLY only.",
                 },
                 True,
             ),

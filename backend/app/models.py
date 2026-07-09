@@ -238,6 +238,7 @@ class Account(Base, TimestampMixin):
     daily_limits: Mapped[dict] = mapped_column(JSON, default=dict)
     working_time: Mapped[dict] = mapped_column(JSON, default=dict)
     cooling_down_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_failure_reason: Mapped[Optional[str]] = mapped_column(Text)
     failure_count_24h: Mapped[int] = mapped_column(Integer, default=0)
     restriction_count_7d: Mapped[int] = mapped_column(Integer, default=0)
@@ -389,6 +390,25 @@ class ExecutionLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
 
+class PlatformSelector(Base, TimestampMixin):
+    __tablename__ = "platform_selectors"
+    __table_args__ = (
+        UniqueConstraint(
+            "platform", "selector_key", "selector_value", name="uq_platform_selector_value"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    selector_key: Mapped[str] = mapped_column(String(120), index=True)
+    selector_value: Mapped[str] = mapped_column(String(1000))
+    selector_type: Mapped[str] = mapped_column(String(40), default="css")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    remark: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
 class ReplayFile(Base):
     __tablename__ = "replay_files"
 
@@ -396,9 +416,12 @@ class ReplayFile(Base):
     uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
     execution_task_id: Mapped[int] = mapped_column(ForeignKey("execution_tasks.id"), index=True)
     screenshot_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    before_fill_screenshot_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    after_fill_screenshot_path: Mapped[Optional[str]] = mapped_column(String(1000))
     html_path: Mapped[Optional[str]] = mapped_column(String(1000))
     console_log_path: Mapped[Optional[str]] = mapped_column(String(1000))
     network_log_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    timeline_path: Mapped[Optional[str]] = mapped_column(String(1000))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

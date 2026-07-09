@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 from typing import Any
 
@@ -8,8 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import ExecutionTask, ReplayFile, SystemSetting, TGEProfile
+from app.models import Account, AccountLimit, ExecutionLog, ExecutionTask, ReplayFile, SchedulerLog, SchedulerTask, SystemSetting, TGEProfile
 from app.services.execution import execution_log, set_execution_status
+from app.services.platform_adapter import PlatformAdapter
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -114,11 +116,132 @@ class PlaywrightService:
     def disconnect(self):
         if self.settings.get("playwright_mock_mode", True):
             return {"status": "DISCONNECTED"}
-        if self.browser:
-            self.browser.close()
         if hasattr(self, "_playwright"):
             self._playwright.stop()
         return {"status": "DISCONNECTED"}
+
+
+def _task_url(task: ExecutionTask) -> str:
+    payload = task.payload_json or {}
+    return str(payload.get("url") or payload.get("post_url") or payload.get("target_url") or "about:blank")
+
+
+def _reply_content(db: Session, task: ExecutionTask) -> str:
+    payload = task.payload_json or {}
+    if payload.get("reply_content"):
+        return str(payload["reply_content"])
+    scheduler_task = db.get(SchedulerTask, task.scheduler_task_id) if task.scheduler_task_id else None
+    if scheduler_task and scheduler_task.reply_id:
+        from app.models import Reply
+
+        reply = db.get(Reply, scheduler_task.reply_id)
+        if reply:
+            return reply.content
+    return str(payload.get("draft") or payload.get("comment") or "")
+
+
+def _replay_for_task(db: Session, task: ExecutionTask) -> ReplayFile:
+    replay = db.scalar(select(ReplayFile).where(ReplayFile.execution_task_id == task.id))
+    if not replay:
+        replay = ReplayFile(execution_task_id=task.id)
+        db.add(replay)
+        db.flush()
+    return replay
+
+
+def _write_timeline(db: Session, task: ExecutionTask, replay: ReplayFile, replay_dir: Path) -> None:
+    logs = db.scalars(
+        select(ExecutionLog)
+        .where(ExecutionLog.execution_task_id == task.id)
+        .order_by(ExecutionLog.created_at.asc())
+    ).all()
+    replay_dir.mkdir(parents=True, exist_ok=True)
+    timeline_path = replay_dir / "timeline.json"
+    timeline_path.write_text(
+        json.dumps(
+            [
+                {
+                    "action": log.action,
+                    "old_status": log.old_status,
+                    "new_status": log.new_status,
+                    "message": log.message,
+                    "created_at": log.created_at.isoformat(),
+                }
+                for log in logs
+            ],
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    replay.timeline_path = str(timeline_path)
+
+
+def _update_scheduler_success(db: Session, task: ExecutionTask) -> None:
+    if not task.scheduler_task_id:
+        return
+    scheduler_task = db.get(SchedulerTask, task.scheduler_task_id)
+    if not scheduler_task:
+        return
+    old_status = scheduler_task.status
+    scheduler_task.status = "EXECUTED"
+    db.add(
+        SchedulerLog(
+            task_id=scheduler_task.id,
+            action="EXECUTION_SUCCESS",
+            old_status=old_status,
+            new_status="EXECUTED",
+            reason="Execution task completed successfully",
+            selected_account_id=task.account_id,
+        )
+    )
+
+
+def _update_scheduler_failed(db: Session, task: ExecutionTask, reason: str) -> None:
+    if not task.scheduler_task_id:
+        return
+    scheduler_task = db.get(SchedulerTask, task.scheduler_task_id)
+    if not scheduler_task:
+        return
+    old_status = scheduler_task.status
+    scheduler_task.status = "FAILED"
+    scheduler_task.error_message = reason
+    db.add(
+        SchedulerLog(
+            task_id=scheduler_task.id,
+            action="EXECUTION_FAILED",
+            old_status=old_status,
+            new_status="FAILED",
+            reason=reason,
+            selected_account_id=task.account_id,
+        )
+    )
+
+
+def _update_account_success(db: Session, task: ExecutionTask) -> None:
+    if not task.account_id:
+        return
+    from app.models import utc_now
+
+    account = db.get(Account, task.account_id)
+    if not account:
+        return
+    account.last_active_at = utc_now()
+    account.health_score = min(100, (account.health_score or 0) + 1)
+    limits = db.scalar(select(AccountLimit).where(AccountLimit.account_id == account.id))
+    if limits:
+        limits.current_reply_count += 1
+
+
+def _update_account_failed(db: Session, task: ExecutionTask, reason: str) -> None:
+    if not task.account_id:
+        return
+    account = db.get(Account, task.account_id)
+    if not account:
+        return
+    account.health_score = max(0, (account.health_score or 0) - 5)
+    account.failure_count_24h += 1
+    account.last_failure_reason = reason
 
 
 def run_open_page(db: Session, task: ExecutionTask) -> ExecutionTask:
@@ -170,4 +293,118 @@ def run_open_page(db: Session, task: ExecutionTask) -> ExecutionTask:
     service.disconnect()
     set_execution_status(db, task, "SUCCESS", "EXECUTION_SUCCESS")
     execution_log(db, task, "REPLAY_CAPTURED", message="Replay artifact placeholders saved.", metadata={"replay_dir": str(replay_dir)})
+    return task
+
+
+def prepare_reply(db: Session, task: ExecutionTask) -> ExecutionTask:
+    settings = get_playwright_settings(db)
+    profile = db.get(TGEProfile, task.tge_profile_id) if task.tge_profile_id else None
+    service = PlaywrightService(settings)
+    platform = task.platform or "reddit"
+    adapter = PlatformAdapter(platform, db, mock_mode=bool(settings.get("playwright_mock_mode", True)))
+    reply_content = _reply_content(db, task)
+    if not reply_content:
+        set_execution_status(db, task, "FAILED", "FILL_REPLY_FAILED", error_code="NO_REPLY_CONTENT", error_message="Reply content is missing")
+        _update_scheduler_failed(db, task, "Reply content is missing")
+        _update_account_failed(db, task, "Reply content is missing")
+        return task
+
+    set_execution_status(db, task, "ATTACHING", "ATTACH_STARTED")
+    attach_info = profile.websocket_url if profile else None
+    if not attach_info and profile and profile.debug_port:
+        attach_info = f"http://127.0.0.1:{profile.debug_port}"
+    attached = service.connect_to_browser(attach_info)
+    if attached["status"] in {"ATTACH_INFO_MISSING", "ATTACH_FAILED"}:
+        message = str(attached.get("message") or "Missing websocket_url or debug_port")
+        set_execution_status(db, task, "ATTACH_FAILED", attached["status"], error_code=attached["status"], error_message=message)
+        _update_scheduler_failed(db, task, message)
+        _update_account_failed(db, task, message)
+        return task
+    set_execution_status(db, task, "ATTACHED", "ATTACH_SUCCESS", message="Browser attached")
+
+    url = _task_url(task)
+    set_execution_status(db, task, "PAGE_OPENING", "PAGE_OPEN_STARTED", message=url)
+    service.open_new_tab(url)
+    service.wait_for_page_load()
+    set_execution_status(db, task, "PAGE_LOADED", "PAGE_LOAD_SUCCESS")
+
+    disabled = adapter.detect_comment_disabled(service.page)
+    if disabled.get("detected"):
+        set_execution_status(db, task, "COMMENT_DISABLED", "COMMENT_DISABLED", error_code="COMMENT_DISABLED", error_message="Commenting is disabled")
+        _update_scheduler_failed(db, task, "Commenting is disabled")
+        return task
+    login_required = adapter.detect_login_required(service.page)
+    if login_required.get("detected"):
+        set_execution_status(db, task, "LOGIN_REQUIRED", "LOGIN_REQUIRED", error_code="LOGIN_REQUIRED", error_message="Login is required")
+        _update_scheduler_failed(db, task, "Login is required")
+        return task
+    rate_limited = adapter.detect_rate_limited(service.page)
+    if rate_limited.get("detected"):
+        set_execution_status(db, task, "RATE_LIMITED", "RATE_LIMITED", error_code="RATE_LIMITED", error_message="Platform rate limited this account")
+        _update_scheduler_failed(db, task, "Platform rate limited this account")
+        return task
+
+    replay = _replay_for_task(db, task)
+    replay_dir = REPLAY_ROOT / task.uuid
+    if settings.get("enable_screenshot", True):
+        before = service.capture_screenshot(replay_dir / "before_fill.png")
+        replay.before_fill_screenshot_path = before["path"]
+
+    set_execution_status(db, task, "FINDING_REPLY_BOX", "FIND_REPLY_BOX_STARTED")
+    reply_box = adapter.find_reply_box(service.page)
+    if not reply_box.get("found"):
+        reason = str(reply_box.get("reason") or "Reply box not found")
+        set_execution_status(db, task, "COMMENT_BOX_NOT_FOUND", "COMMENT_BOX_NOT_FOUND", error_code="COMMENT_BOX_NOT_FOUND", error_message=reason)
+        _update_scheduler_failed(db, task, reason)
+        return task
+    set_execution_status(db, task, "REPLY_BOX_FOUND", "REPLY_BOX_FOUND")
+
+    adapter.focus_reply_box(service.page, reply_box.get("locator"))
+    set_execution_status(db, task, "FILLING_REPLY", "FILL_REPLY_STARTED")
+    adapter.fill_reply_box(service.page, reply_box.get("locator"), reply_content)
+    set_execution_status(db, task, "REPLY_FILLED", "REPLY_FILLED", message=f"Filled {len(reply_content)} characters")
+    if settings.get("enable_screenshot", True):
+        after = service.capture_screenshot(replay_dir / "after_fill.png")
+        replay.after_fill_screenshot_path = after["path"]
+        replay.screenshot_path = after["path"]
+    if settings.get("enable_html_snapshot", True):
+        html = service.capture_html(replay_dir / "page.html")
+        replay.html_path = html["path"]
+    _write_timeline(db, task, replay, replay_dir)
+    task.payload_json = {
+        **(task.payload_json or {}),
+        "reply_content_preview": reply_content[:500],
+        "fill_status": "REPLY_FILLED",
+    }
+    set_execution_status(db, task, "WAITING_MANUAL", "WAITING_MANUAL", message="Reply content filled. Waiting for operator to submit manually.")
+    service.disconnect()
+    return task
+
+
+def close_execution_tab(db: Session, task: ExecutionTask, *, final_status: str | None = None) -> ExecutionTask:
+    settings = get_playwright_settings(db)
+    service = PlaywrightService(settings)
+    service.close_current_tab()
+    set_execution_status(db, task, "TAB_CLOSED", "TAB_CLOSED", message="Current tab closed")
+    if final_status:
+        set_execution_status(db, task, final_status, "EXECUTION_SUCCESS" if final_status == "SUCCESS" else "EXECUTION_FAILED")
+    return task
+
+
+def mark_submitted(db: Session, task: ExecutionTask) -> ExecutionTask:
+    set_execution_status(db, task, "MANUAL_SUBMITTED", "MANUAL_SUBMITTED", message="Operator confirmed platform submit click")
+    settings = get_playwright_settings(db)
+    adapter = PlatformAdapter(task.platform or "reddit", db, mock_mode=bool(settings.get("playwright_mock_mode", True)))
+    detected = adapter.detect_submitted(None)
+    task.payload_json = {
+        **(task.payload_json or {}),
+        "manual_confirmed": True,
+        "submission_detected": bool(detected.get("submitted")),
+    }
+    set_execution_status(db, task, "SUBMISSION_CONFIRMED", "SUBMISSION_CONFIRMED", message="Submission confirmed by operator")
+    close_execution_tab(db, task, final_status="SUCCESS")
+    _update_scheduler_success(db, task)
+    _update_account_success(db, task)
+    replay = _replay_for_task(db, task)
+    _write_timeline(db, task, replay, REPLAY_ROOT / task.uuid)
     return task

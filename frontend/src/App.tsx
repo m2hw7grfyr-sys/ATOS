@@ -1445,6 +1445,7 @@ function SettingsPage() {
   const platformWeights = useApiData<RecordItem[]>("/settings/platform-weights");
   const tgeSettings = useApiData<RecordItem>("/settings/tge");
   const playwrightSettings = useApiData<RecordItem>("/settings/playwright");
+  const platformSelectors = useApiData<RecordItem[]>("/platform-selectors");
   const [showProviderForm, setShowProviderForm] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
   const [providerName, setProviderName] = useState("Mock Provider");
@@ -1464,6 +1465,14 @@ function SettingsPage() {
   const [schedulerForm, setSchedulerForm] = useState<Record<string, unknown>>({});
   const [tgeForm, setTgeForm] = useState<Record<string, unknown>>({});
   const [playwrightForm, setPlaywrightForm] = useState<Record<string, unknown>>({});
+  const [selectorForm, setSelectorForm] = useState<Record<string, unknown>>({
+    platform: "reddit",
+    selector_key: "reply_box",
+    selector_value: "",
+    selector_type: "css",
+    enabled: true,
+    remark: "",
+  });
   const [weightEdits, setWeightEdits] = useState<Record<string, Record<string, unknown>>>({});
   const [feedback, setFeedback] = useState("");
 
@@ -1669,6 +1678,10 @@ function SettingsPage() {
     setPlaywrightForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updateSelectorField(key: string, value: unknown) {
+    setSelectorForm((current) => ({ ...current, [key]: value }));
+  }
+
   async function savePlaywrightSettings() {
     try {
       await apiRequest("/settings/playwright", {
@@ -1689,6 +1702,20 @@ function SettingsPage() {
       await playwrightSettings.reload();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "保存 Playwright 配置失败");
+    }
+  }
+
+  async function createSelector() {
+    try {
+      await apiRequest("/platform-selectors", {
+        method: "POST",
+        body: JSON.stringify(selectorForm),
+      });
+      setFeedback("Platform selector 已创建。");
+      setSelectorForm((current) => ({ ...current, selector_value: "", remark: "" }));
+      await platformSelectors.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "创建 selector 失败");
     }
   }
 
@@ -1813,6 +1840,39 @@ function SettingsPage() {
               Default Wait MS
               <input className="field mt-2" type="number" value={String(playwrightForm.playwright_default_wait_ms ?? 1000)} onChange={(e) => updatePlaywrightField("playwright_default_wait_ms", Number(e.target.value))} />
             </label>
+          </div>
+        </Section>
+        <Section
+          title="Platform Selector Registry"
+          action={<button className="button" onClick={createSelector}><Settings className="h-4 w-4" />新增 Selector</button>}
+        >
+          <div className="panel grid gap-3 p-4 md:grid-cols-3 xl:grid-cols-6">
+            <input className="field" value={String(selectorForm.platform ?? "")} onChange={(e) => updateSelectorField("platform", e.target.value)} placeholder="platform" />
+            <select className="field" value={String(selectorForm.selector_key ?? "reply_box")} onChange={(e) => updateSelectorField("selector_key", e.target.value)}>
+              {["reply_box", "comment_button", "login_required", "rate_limited", "comment_disabled"].map((key) => <option key={key} value={key}>{key}</option>)}
+            </select>
+            <input className="field xl:col-span-2" value={String(selectorForm.selector_value ?? "")} onChange={(e) => updateSelectorField("selector_value", e.target.value)} placeholder="selector value" />
+            <select className="field" value={String(selectorForm.selector_type ?? "css")} onChange={(e) => updateSelectorField("selector_type", e.target.value)}>
+              {["css", "xpath", "text"].map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(selectorForm.enabled)} onChange={(e) => updateSelectorField("enabled", e.target.checked)} />Enabled</label>
+          </div>
+          <div className="panel mt-3 overflow-x-auto">
+            <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["platform", "key", "type", "selector", "enabled", "remark"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(platformSelectors.data ?? []).map((selector) => (
+                <tr key={String(selector.id)} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3 uppercase text-teal">{String(selector.platform)}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{String(selector.selector_key)}</td>
+                  <td className="px-4 py-3">{String(selector.selector_type)}</td>
+                  <td className="max-w-md px-4 py-3 font-mono text-xs">{String(selector.selector_value)}</td>
+                  <td className="px-4 py-3">{String(selector.enabled)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{String(selector.remark ?? "")}</td>
+                </tr>
+              ))}</tbody>
+            </table>
           </div>
         </Section>
         <Section
@@ -1949,21 +2009,27 @@ function ExecutionPage() {
   }, {});
   const [feedback, setFeedback] = useState("");
 
-  async function executionAction(taskId: unknown, action: "precheck" | "mark-success" | "mark-failed" | "run-open-page" | "attach" | "close-tab") {
+  async function executionAction(taskId: unknown, action: "precheck" | "mark-success" | "mark-failed" | "run-open-page" | "attach" | "close-tab" | "prepare-reply" | "mark-submitted" | "retry-fill") {
     try {
       await apiRequest(`/execution/tasks/${String(taskId)}/${action}`, { method: "POST" });
       setFeedback(
         action === "precheck"
           ? "Precheck 已完成。"
-          : action === "run-open-page"
-            ? "OPEN_PAGE 执行链已完成。"
-            : action === "attach"
-              ? "Attach 已完成。"
-              : action === "close-tab"
-                ? "Tab 已关闭。"
-                : action === "mark-success"
-                  ? "已标记成功。"
-                  : "已标记失败。",
+          : action === "prepare-reply"
+            ? "回复已填入，等待人工提交。"
+            : action === "mark-submitted"
+              ? "已确认人工提交并关闭当前 Tab。"
+              : action === "retry-fill"
+                ? "已重新执行填充。"
+                : action === "run-open-page"
+                  ? "OPEN_PAGE 执行链已完成。"
+                  : action === "attach"
+                    ? "Attach 已完成。"
+                    : action === "close-tab"
+                      ? "Tab 已关闭。"
+                      : action === "mark-success"
+                        ? "已标记成功。"
+                        : "已标记失败。",
       );
       await reload();
     } catch (reason) {
@@ -1973,11 +2039,11 @@ function ExecutionPage() {
 
   const groups = [
     ["待执行任务", ["NEW", "RECEIVED"]],
-    ["环境检测中", ["PRECHECKING"]],
-    ["已接收任务", ["ENVIRONMENT_READY"]],
-    ["等待人工", ["WAITING_MANUAL"]],
-    ["成功", ["SUCCESS"]],
-    ["失败", ["FAILED", "CANCELLED"]],
+    ["环境检测中", ["PRECHECKING", "ATTACHING", "PAGE_OPENING", "FINDING_REPLY_BOX", "FILLING_REPLY"]],
+    ["已填充", ["ENVIRONMENT_READY", "REPLY_BOX_FOUND", "REPLY_FILLED"]],
+    ["等待人工", ["WAITING_MANUAL", "MANUAL_SUBMITTED", "SUBMISSION_CONFIRMED"]],
+    ["成功", ["SUCCESS", "TAB_CLOSED"]],
+    ["失败", ["FAILED", "CANCELLED", "COMMENT_BOX_NOT_FOUND", "COMMENT_DISABLED", "LOGIN_REQUIRED", "RATE_LIMITED", "ATTACH_FAILED"]],
   ] as const;
   return (
     <StateView loading={loading} error={error} reload={reload}>
@@ -1988,7 +2054,7 @@ function ExecutionPage() {
           </div>
           <div>
             <h2 className="font-bold">Execution Runtime Status</h2>
-            <p className="mt-1 text-sm text-gray-500">已接收 Scheduler DISPATCHED 任务。v0.7 支持 OPEN_PAGE、页面检测、Replay 保存与关闭 Tab，不粘贴或提交评论。</p>
+            <p className="mt-1 text-sm text-gray-500">v0.8 支持 PREPARE_REPLY：打开帖子、定位评论框、填入回复，然后等待你在平台页面人工点击提交。</p>
           </div>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
@@ -2008,7 +2074,7 @@ function ExecutionPage() {
               <div className="panel overflow-x-auto">
                 <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
                   <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                    {["task_id", "platform", "account", "tge_environment_id", "execution_status", "scheduler_status", "action_type", "created_at", "started_at", "finished_at", "error_message", "actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+                    {["task_id", "platform", "account", "tge_environment_id", "execution_status", "scheduler_status", "action_type", "fill_status", "reply", "created_at", "error_message", "actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
                   </tr></thead>
                   <tbody>{rows.map((task) => (
                     <tr key={String(task.uuid)} className="border-b border-line last:border-0">
@@ -2019,12 +2085,15 @@ function ExecutionPage() {
                       <td className="px-4 py-3"><StatusBadge value={task.execution_status ?? task.status} /></td>
                       <td className="px-4 py-3"><StatusBadge value={task.scheduler_status ?? "—"} /></td>
                       <td className="px-4 py-3">{String(task.action_type ?? "—")}</td>
+                      <td className="px-4 py-3">{String(task.fill_status ?? "—")}</td>
+                      <td className="max-w-sm px-4 py-3 text-xs text-gray-600">{String(task.reply_content_preview ?? "—")}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{task.created_at ? new Date(String(task.created_at)).toLocaleString() : "—"}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{task.started_at ? new Date(String(task.started_at)).toLocaleString() : "—"}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{task.finished_at ? new Date(String(task.finished_at)).toLocaleString() : "—"}</td>
                       <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.error_message ?? "—")}</td>
                       <td className="px-4 py-3"><div className="flex flex-wrap gap-2">
                         <button className="button-secondary" onClick={() => void executionAction(task.id, "precheck")}>Precheck</button>
+                        <button className="button" onClick={() => void executionAction(task.id, "prepare-reply")}>Prepare Reply</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-submitted")}>Mark Submitted</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "retry-fill")}>Retry Fill</button>
                         <button className="button" onClick={() => void executionAction(task.id, "run-open-page")}>Run OPEN_PAGE</button>
                         <button className="button-secondary" onClick={() => void executionAction(task.id, "attach")}>Attach</button>
                         <button className="button-secondary" onClick={() => void executionAction(task.id, "close-tab")}>Close Tab</button>
@@ -2039,8 +2108,13 @@ function ExecutionPage() {
           );
         })}
         <Section title="Replay 占位">
-          <div className="panel p-5 text-sm text-gray-600">Replay files are available after OPEN_PAGE runs. v0.7 can save screenshot and HTML snapshots, but it does not paste or submit comments.</div>
+          <div className="panel p-5 text-sm text-gray-600">Replay files are available after OPEN_PAGE or PREPARE_REPLY runs. v0.8 can save before/after fill screenshots and HTML snapshots, but it never clicks submit.</div>
         </Section>
+        {(data ?? []).some((task) => task.status === "WAITING_MANUAL") && (
+          <div className="panel border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+            回复内容已填入浏览器，请在平台页面人工确认并点击提交。提交后回到 ATOS 点击 Mark Submitted。
+          </div>
+        )}
       </div>
     </StateView>
   );
@@ -2164,7 +2238,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v0.7</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v0.8</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">
