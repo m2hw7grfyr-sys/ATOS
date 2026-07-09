@@ -2,20 +2,18 @@
 
 ATOS 项目文档、原型、数据库、API 与源代码的统一仓库。
 
-## 目录
+## 核心目录
 
-- `docs/`：产品、架构、实施和决策文档
-  - `specifications/`：正式规范与冻结版本
-  - `drafts/`：评审稿与工作草稿
-  - `diagrams/`：Mermaid、draw.io 和架构图
-  - `ui-wireframes/`：页面原型与交互线框
-  - `adr/`：架构决策记录
-  - `templates/`：可复用文档模板
-- `assets/`：图片、架构图和 UI 资源
-- `prototype/`：产品原型
-- `sql/`：数据库脚本
-- `api/`：API 定义与服务
+- `docs/`：软件规范、技术参考及项目文档
+- `architecture/`：系统架构设计
+- `wireframe/`：页面线框与交互原型
+- `diagram/`：Mermaid、draw.io 及流程图
+- `prompt/`：AI Prompt 与版本记录
+- `openapi/`：OpenAPI 接口契约
+- `database/`：数据库模型、迁移与设计资料
 - `src/`：应用源代码
+
+现有的 `api/`、`sql/`、`assets/` 和 `prototype/` 暂时保留，后续按模块成熟度逐步迁移到新的标准目录。
 
 ## 项目管理
 
