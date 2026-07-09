@@ -42,6 +42,17 @@
 
 ## Delivery
 
-- [ ] 确定 v0.1 实施范围
-- [ ] 将实施任务拆分到 GitHub Project
-- [ ] 为任务关联 Milestone
+- [x] 确定 v0.1 实施范围
+- [x] 将实施任务拆分到 GitHub Project
+- [x] 为任务关联 Milestone
+
+## v1.1 建议
+
+- [ ] Real Apify Actor Adapter Mapping
+- [ ] Real OpenAI / Multi-LLM Production Mode
+- [ ] Real TGE Attach
+- [ ] Platform Selector Refinement
+- [ ] Execution Replay UI
+- [ ] Embedding Similarity
+- [ ] Advanced Scheduler Optimization
+- [ ] User Permission UI

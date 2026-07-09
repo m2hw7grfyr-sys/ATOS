@@ -1,6 +1,6 @@
 # ATOS
 
-ATOS（AI Traffic Operating System）v0.9 本地可运行 MVP。
+ATOS（AI Traffic Operating System）v1.0 本地可运行 MVP。
 
 当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环、Account Center / TGE Profile 绑定、Execution Center 的 TGE / Playwright 半自动回复准备链路，以及 Engagement Strategy / Warm-up 工作流。
 

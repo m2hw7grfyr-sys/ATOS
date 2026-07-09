@@ -2388,7 +2388,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v0.9</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v1.0</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">

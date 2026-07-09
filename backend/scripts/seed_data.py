@@ -14,6 +14,7 @@ from app.models import (
     DataSource,
     EngagementStrategy,
     EngagementTask,
+    ExecutionTask,
     LLMProvider,
     Platform,
     PlatformWeight,
@@ -21,6 +22,7 @@ from app.models import (
     Post,
     PromptTemplate,
     Reply,
+    ReplayFile,
     SchedulerTask,
     StatisticSnapshot,
     SystemSetting,
@@ -28,7 +30,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v0.9-acceptance"
+SEED_VERSION = "v1.0-acceptance"
 
 
 def main() -> None:
@@ -142,6 +144,8 @@ def main() -> None:
             (posts[0], "EDUCATION", 74, 18, "REVIEWING"),
             (posts[1], "PURE_HELP", 81, 12, "APPROVED"),
             (posts[2], "EXPERIENCE", 69, 16, "APPROVED"),
+            (posts[3], "SUPPORTIVE", 63, 10, "APPROVED"),
+            (posts[6], "EDUCATION", 72, 14, "GENERATED"),
         ]
         for index, (post, strategy, commercial, risk, task_status) in enumerate(
             ai_specs, start=1
@@ -328,6 +332,8 @@ def main() -> None:
             ("REPLY", accounts[0], posts[1], ai_tasks[1][1], "HIGH"),
             ("REPLY", accounts[1], posts[2], ai_tasks[2][1], "MEDIUM"),
             ("BROWSE", accounts[2], posts[7], None, "LOW"),
+            ("REPLY", accounts[0], posts[3], ai_tasks[3][1], "MEDIUM"),
+            ("ENGAGEMENT", accounts[0], posts[0], None, "LOW"),
         ]
         for index, (task_type, account, post, reply, priority) in enumerate(
             scheduler_specs, start=1
@@ -352,7 +358,7 @@ def main() -> None:
                         payload={
                             "mode": "HUMAN_IN_THE_LOOP",
                             "seed": True,
-                            "action_type": "PREPARE_REPLY" if task_type == "REPLY" else "OPEN_PAGE",
+                            "action_type": "PREPARE_REPLY" if task_type == "REPLY" else "MIXED_ENGAGEMENT" if task_type == "ENGAGEMENT" else "OPEN_PAGE",
                             "url": post.url,
                             "post_url": post.url,
                             "reply_content": reply.content if reply else None,
@@ -527,6 +533,7 @@ def main() -> None:
                 select(EngagementTask).where(
                     EngagementTask.strategy_id == strategy.id,
                     EngagementTask.account_id == account.id,
+                    EngagementTask.source_value == "seed",
                 )
             )
             if not task:
@@ -545,6 +552,55 @@ def main() -> None:
                         scheduled_at=now + timedelta(minutes=10 * index),
                     )
                 )
+
+        existing_engagement_count = len(db.scalars(select(EngagementTask)).all())
+        for index in range(existing_engagement_count + 1, 6):
+            strategy = strategies[index % len(strategies)]
+            db.add(
+                EngagementTask(
+                    strategy_id=strategy.id,
+                    account_id=accounts[0].id,
+                    platform=strategy.platform,
+                    source_type="POST_POOL",
+                    source_value=f"seed-extra-{index}",
+                    status="QUEUED",
+                    browse_target_count=2,
+                    like_target_count=1,
+                    visit_profile_target_count=1 if index % 2 == 0 else 0,
+                    priority="LOW",
+                    scheduled_at=now + timedelta(minutes=12 * index),
+                )
+            )
+
+        scheduler_items = db.scalars(select(SchedulerTask).order_by(SchedulerTask.id.asc())).all()
+        for scheduler_task in scheduler_items[:5]:
+            existing_execution = db.scalar(
+                select(ExecutionTask).where(ExecutionTask.scheduler_task_id == scheduler_task.id)
+            )
+            if existing_execution:
+                continue
+            profile = db.scalar(
+                select(TGEProfile).where(
+                    (TGEProfile.bound_account_id == scheduler_task.account_id)
+                    | (TGEProfile.account_id == scheduler_task.account_id)
+                )
+            )
+            platform = db.get(Platform, scheduler_task.platform_id)
+            execution = ExecutionTask(
+                scheduler_task_id=scheduler_task.id,
+                account_id=scheduler_task.account_id,
+                tge_profile_id=profile.id if profile else None,
+                platform=platform.slug if platform else None,
+                action_type=(scheduler_task.payload or {}).get("action_type", "OPEN_PAGE"),
+                strategy=(scheduler_task.payload or {}).get("strategy"),
+                payload_json=scheduler_task.payload or {},
+                status="RECEIVED",
+                precheck_status="PENDING",
+                environment_status=profile.runtime_status if profile else "UNKNOWN",
+            )
+            db.add(execution)
+            db.flush()
+            db.add(ReplayFile(execution_task_id=execution.id))
 
         platform_weight_specs = {
             "reddit": (50, "Primary discovery platform"),
@@ -685,9 +741,9 @@ Community: {{community}}
         db.commit()
         print(
             "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
-            "10 posts, 3 AI tasks, 3 scheduler tasks, 4 accounts, "
+            "10 posts, 5 AI tasks, 5 scheduler tasks, 4 accounts, "
             "4 TGE profiles, 11 statistics, 2 LLM providers, 2 prompt templates, "
-            "5 platform weights, 2 engagement strategies."
+            "5 platform weights, 2 engagement strategies, 5 execution tasks, 5 engagement tasks."
         )
     finally:
         db.close()

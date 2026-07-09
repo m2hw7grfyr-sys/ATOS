@@ -4,6 +4,13 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v1.0
+
+- Released ATOS runnable MVP
+- Integrated Data Center, AI Workspace, Scheduler, Account Center, Execution, Engagement
+- Added Mock Mode for external dependencies
+- Added acceptance report
+
 ## App v0.9
 
 - Added Engagement Strategy and Task workflow
