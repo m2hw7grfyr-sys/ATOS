@@ -12,6 +12,8 @@ from app.models import (
     AccountLimit,
     AccountWorkingWindow,
     DataSource,
+    EngagementStrategy,
+    EngagementTask,
     LLMProvider,
     Platform,
     PlatformWeight,
@@ -26,7 +28,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v0.8-acceptance"
+SEED_VERSION = "v0.9-acceptance"
 
 
 def main() -> None:
@@ -458,6 +460,11 @@ def main() -> None:
             ("active_accounts", "SYSTEM", 3),
             ("reply_success_rate", "REDDIT", 92),
             ("average_risk_score", "SYSTEM", 15.3),
+            ("browse_count", "REDDIT", 12),
+            ("like_count", "REDDIT", 4),
+            ("visit_profile_count", "REDDIT", 3),
+            ("engagement_success_rate", "REDDIT", 100),
+            ("warmup_before_reply_count", "REDDIT", 2),
         ]:
             item = db.scalar(
                 select(StatisticSnapshot).where(
@@ -475,6 +482,68 @@ def main() -> None:
                         period="TODAY",
                         metadata_json={"seed": True},
                 )
+                )
+
+        strategy_specs = [
+            {
+                "name": "Reddit Silent Browse",
+                "platform": "reddit",
+                "strategy_type": "SILENT_BROWSE",
+                "browse_count_min": 3,
+                "browse_count_max": 5,
+                "like_count_min": 0,
+                "like_count_max": 0,
+                "visit_profile_count_min": 0,
+                "visit_profile_count_max": 1,
+                "before_reply_enabled": False,
+                "remark": "Seed independent browse strategy.",
+            },
+            {
+                "name": "Reddit Reply Warm-up",
+                "platform": "reddit",
+                "strategy_type": "REPLY_WARMUP",
+                "browse_count_min": 2,
+                "browse_count_max": 4,
+                "like_count_min": 1,
+                "like_count_max": 2,
+                "visit_profile_count_min": 0,
+                "visit_profile_count_max": 1,
+                "before_reply_enabled": True,
+                "remark": "Seed warm-up strategy inserted before reply tasks.",
+            },
+        ]
+        strategies = []
+        for spec in strategy_specs:
+            strategy = db.scalar(select(EngagementStrategy).where(EngagementStrategy.name == spec["name"]))
+            if not strategy:
+                strategy = EngagementStrategy(**spec)
+                db.add(strategy)
+                db.flush()
+            strategies.append(strategy)
+
+        for index, strategy in enumerate(strategies, start=1):
+            account = accounts[0]
+            task = db.scalar(
+                select(EngagementTask).where(
+                    EngagementTask.strategy_id == strategy.id,
+                    EngagementTask.account_id == account.id,
+                )
+            )
+            if not task:
+                db.add(
+                    EngagementTask(
+                        strategy_id=strategy.id,
+                        account_id=account.id,
+                        platform=strategy.platform,
+                        source_type="POST_POOL",
+                        source_value="seed",
+                        status="QUEUED",
+                        browse_target_count=strategy.browse_count_min,
+                        like_target_count=strategy.like_count_min,
+                        visit_profile_target_count=strategy.visit_profile_count_min,
+                        priority="MEDIUM",
+                        scheduled_at=now + timedelta(minutes=10 * index),
+                    )
                 )
 
         platform_weight_specs = {
@@ -617,8 +686,8 @@ Community: {{community}}
         print(
             "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
             "10 posts, 3 AI tasks, 3 scheduler tasks, 4 accounts, "
-            "4 TGE profiles, 6 statistics, 2 LLM providers, 2 prompt templates, "
-            "5 platform weights."
+            "4 TGE profiles, 11 statistics, 2 LLM providers, 2 prompt templates, "
+            "5 platform weights, 2 engagement strategies."
         )
     finally:
         db.close()

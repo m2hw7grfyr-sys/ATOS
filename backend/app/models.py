@@ -409,6 +409,55 @@ class PlatformSelector(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
+class EngagementStrategy(Base, TimestampMixin):
+    __tablename__ = "engagement_strategies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    strategy_type: Mapped[str] = mapped_column(String(80), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    browse_count_min: Mapped[int] = mapped_column(Integer, default=0)
+    browse_count_max: Mapped[int] = mapped_column(Integer, default=0)
+    like_count_min: Mapped[int] = mapped_column(Integer, default=0)
+    like_count_max: Mapped[int] = mapped_column(Integer, default=0)
+    visit_profile_count_min: Mapped[int] = mapped_column(Integer, default=0)
+    visit_profile_count_max: Mapped[int] = mapped_column(Integer, default=0)
+    pause_min_seconds: Mapped[int] = mapped_column(Integer, default=5)
+    pause_max_seconds: Mapped[int] = mapped_column(Integer, default=30)
+    before_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    weight: Mapped[int] = mapped_column(Integer, default=10)
+    remark: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class EngagementTask(Base, TimestampMixin):
+    __tablename__ = "engagement_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    strategy_id: Mapped[Optional[int]] = mapped_column(ForeignKey("engagement_strategies.id"), index=True)
+    scheduler_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scheduler_tasks.id"), index=True)
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    source_type: Mapped[str] = mapped_column(String(80), default="POST_POOL", index=True)
+    source_value: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(40), default="NEW", index=True)
+    browse_target_count: Mapped[int] = mapped_column(Integer, default=0)
+    like_target_count: Mapped[int] = mapped_column(Integer, default=0)
+    visit_profile_target_count: Mapped[int] = mapped_column(Integer, default=0)
+    browse_done_count: Mapped[int] = mapped_column(Integer, default=0)
+    like_done_count: Mapped[int] = mapped_column(Integer, default=0)
+    visit_profile_done_count: Mapped[int] = mapped_column(Integer, default=0)
+    priority: Mapped[str] = mapped_column(String(20), default="MEDIUM", index=True)
+    scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+
+
 class ReplayFile(Base):
     __tablename__ = "replay_files"
 

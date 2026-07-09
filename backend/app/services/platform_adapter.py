@@ -90,3 +90,50 @@ class PlatformAdapter:
         except Exception:
             return {"detected": False}
 
+    def browse_post(self, page: Any, url: str):
+        if self.mock_mode:
+            return {"browsed": True, "url": url, "mock": True}
+        page.goto(url)
+        return {"browsed": True, "url": url}
+
+    def like_post(self, page: Any):
+        if self.mock_mode:
+            return {"liked": True, "mock": True}
+        selector = self.selector("like_button")
+        if not selector:
+            return {"liked": False, "reason": "like_button selector missing"}
+        self._locator(page, selector).first.click()
+        return {"liked": True}
+
+    def bookmark_post(self, page: Any):
+        if self.mock_mode:
+            return {"bookmarked": True, "mock": True}
+        selector = self.selector("bookmark_button")
+        if not selector:
+            return {"bookmarked": False, "reason": "bookmark_button selector missing"}
+        self._locator(page, selector).first.click()
+        return {"bookmarked": True}
+
+    def visit_profile(self, page: Any, profile_url: str):
+        if self.mock_mode:
+            return {"visited": True, "profile_url": profile_url, "mock": True}
+        page.goto(profile_url)
+        return {"visited": True, "profile_url": profile_url}
+
+    def scroll_randomly(self, page: Any):
+        if self.mock_mode:
+            return {"scrolled": True, "mock": True}
+        page.mouse.wheel(0, 600)
+        return {"scrolled": True}
+
+    def pause_randomly(self, min_seconds: int, max_seconds: int):
+        return {"paused": True, "min_seconds": min_seconds, "max_seconds": max_seconds, "mock": self.mock_mode}
+
+    def open_related_post(self, page: Any):
+        return {"opened": False, "reason": "related post navigation is adapter-specific"}
+
+    def detect_like_available(self, page: Any):
+        return self._detect_state(page, "like_button")
+
+    def detect_profile_available(self, page: Any):
+        return self._detect_state(page, "profile_link")

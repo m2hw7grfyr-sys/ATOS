@@ -371,6 +371,19 @@ def run_once(db: Session) -> dict[str, Any]:
         db.commit()
         return {"status": "WAITING_ACCOUNT", "processed": 1, "task_id": selected.id}
     selected.account_id = account.id
+    if (
+        selected.task_type == "REPLY"
+        and (selected.payload or {}).get("action_type") == "PREPARE_REPLY"
+        and not (selected.payload or {}).get("warmup_created")
+    ):
+        from app.services.engagement import create_reply_warmup_tasks
+
+        warmups = create_reply_warmup_tasks(db, selected)
+        selected.payload = {
+            **(selected.payload or {}),
+            "warmup_created": True,
+            "warmup_task_ids": [task.id for task in warmups],
+        }
     selected.earliest_execute_at = selected.earliest_execute_at or now
     set_status(db, selected, "READY", action="READY", reason="Account selected", selected_account_id=account.id)
     selected.payload = {

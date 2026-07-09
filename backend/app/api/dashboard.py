@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AITask, Account, DataSource, ExecutionTask, Platform, Post, SchedulerTask, TGEProfile
+from app.models import AITask, Account, DataSource, EngagementTask, ExecutionTask, Platform, Post, SchedulerTask, StatisticSnapshot, TGEProfile
 from app.response import ok
 
 
@@ -19,6 +19,14 @@ def summary(request: Request, db: Session = Depends(get_db)):
         return db.scalar(statement) or 0
 
     platforms = db.scalars(select(Platform).order_by(Platform.name)).all()
+    def metric_value(metric: str) -> float:
+        return db.scalar(
+            select(func.coalesce(func.sum(StatisticSnapshot.value), 0)).where(
+                StatisticSnapshot.metric == metric,
+                StatisticSnapshot.period == "TODAY",
+            )
+        ) or 0
+
     return ok(
         {
             "overview": {
@@ -66,6 +74,11 @@ def summary(request: Request, db: Session = Depends(get_db)):
                     ),
                 ),
                 "data_sources": count(DataSource, DataSource.enabled.is_(True)),
+                "today_browse": metric_value("browse_count"),
+                "today_like": metric_value("like_count"),
+                "today_profile_visit": metric_value("visit_profile_count"),
+                "warmup_tasks": count(EngagementTask, EngagementTask.status.in_(["NEW", "QUEUED", "RUNNING", "WAITING_EXECUTION"])),
+                "engagement_success_rate": metric_value("engagement_success_rate"),
             },
             "platform_health": [
                 {

@@ -1,10 +1,12 @@
 # ATOS
 
-ATOS（AI Traffic Operating System）v0.8 本地可运行 MVP。
+ATOS（AI Traffic Operating System）v0.9 本地可运行 MVP。
 
-当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环、Account Center / TGE Profile 绑定，以及 Execution Center 的 TGE / Playwright 半自动回复准备链路。
+当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环、Account Center / TGE Profile 绑定、Execution Center 的 TGE / Playwright 半自动回复准备链路，以及 Engagement Strategy / Warm-up 工作流。
 
 v0.8 仍然保持 human-in-the-loop：支持打开目标帖子、定位评论框、填入回复、等待人工提交、人工确认后关闭当前 Tab；系统绝不自动点击 Submit。
+
+v0.9 增加 Engagement Center：支持独立浏览、点赞、主页访问和 Reply Warm-up 的任务结构；Mock Mode 下可完整测试，不自动提交评论。
 
 ## 技术栈
 
@@ -48,6 +50,8 @@ v0.8 仍然保持 human-in-the-loop：支持打开目标帖子、定位评论框
 - Execution 支持 OPEN_PAGE 执行链：Precheck、Attach、Open URL、Wait Load、Screenshot、HTML Snapshot、Close Tab
 - Execution 支持 PREPARE_REPLY 半自动链：Find Reply Box、Fill Reply、WAITING_MANUAL、Mark Submitted
 - Platform Selector Registry 支持按平台配置 `reply_box / login_required / rate_limited / comment_disabled`
+- Engagement Center 支持 Strategy、Task Queue、Run Mock 和统计
+- Scheduler 支持 `ENGAGEMENT` 任务类型和 Reply Warm-up 插入
 - Replay 文件保存到 `storage/replay/{execution_task_uuid}/`
 - Account Center 初版
 - Execution、Engagement、Statistics 占位页面
@@ -396,6 +400,38 @@ reply_box = div[contenteditable="true"]
 
 当前版本不会自动点击 Submit，不会自动发帖，不会自动点赞或私信。
 
+## Engagement 使用流程
+
+### 创建 Engagement Strategy
+
+打开 Engagement 页面：
+
+1. 填写 Strategy 名称。
+2. 选择 `SILENT_BROWSE / LIKE_ONLY / PROFILE_VISIT / MIXED_ENGAGEMENT / REPLY_WARMUP`。
+3. 配置 browse / like / visit profile 数量。
+4. 如需回复前预热，勾选 `Reply Warm-up`。
+5. 点击保存。
+
+### 创建独立浏览/点赞任务
+
+1. 在 Engagement 页面选择 Strategy。
+2. 选择账号，或留空由 Scheduler 选择。
+3. 选择 Source Type，例如 `POST_POOL`。
+4. 配置 Browse / Like / Profile Visit 数量。
+5. 点击加入 Scheduler。
+
+### Mock Mode 测试 Engagement
+
+Engagement Queue 中点击 `Run Mock`：
+
+- 模拟浏览。
+- 模拟点赞。
+- 模拟主页访问。
+- 更新 Account Usage。
+- 写入 Statistics。
+
+当前版本的真实平台互动仍是 Adapter 结构预留；Mock Mode 是 v0.9 的默认可验证路径。
+
 ### 查看 Replay 文件
 
 Execution 详情页会显示 replay 占位信息。文件保存路径：
@@ -475,6 +511,15 @@ storage/replay/{execution_task_uuid}/page.html
 - `GET /platform-selectors`
 - `POST /platform-selectors`
 - `PUT /platform-selectors/{id}`
+- `GET /engagement/strategies`
+- `POST /engagement/strategies`
+- `PUT /engagement/strategies/{id}`
+- `GET /engagement/tasks`
+- `POST /engagement/tasks`
+- `POST /engagement/tasks/{id}/cancel`
+- `POST /engagement/tasks/{id}/retry`
+- `POST /engagement/tasks/{id}/run-mock`
+- `GET /engagement/statistics`
 - `GET /settings`
 - `GET /statistics`
 

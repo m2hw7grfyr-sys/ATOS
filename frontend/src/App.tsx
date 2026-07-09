@@ -113,6 +113,11 @@ type DashboardData = {
     tge_running?: number;
     tge_unknown?: number;
     data_sources: number;
+    today_browse?: number;
+    today_like?: number;
+    today_profile_visit?: number;
+    warmup_tasks?: number;
+    engagement_success_rate?: number;
   };
   platform_health: Array<{
     name: string;
@@ -387,6 +392,36 @@ function DashboardPage() {
           value: data.overview.data_sources,
           icon: Database,
           tone: "text-blue-700",
+        },
+        {
+          label: "Today's Browse",
+          value: data.overview.today_browse ?? 0,
+          icon: Activity,
+          tone: "text-cyan",
+        },
+        {
+          label: "Today's Like",
+          value: data.overview.today_like ?? 0,
+          icon: HeartPulse,
+          tone: "text-red-700",
+        },
+        {
+          label: "Profile Visit",
+          value: data.overview.today_profile_visit ?? 0,
+          icon: Users,
+          tone: "text-teal",
+        },
+        {
+          label: "Warm-up Tasks",
+          value: data.overview.warmup_tasks ?? 0,
+          icon: Workflow,
+          tone: "text-amber",
+        },
+        {
+          label: "Engage Success",
+          value: data.overview.engagement_success_rate ?? 0,
+          icon: CheckCircle2,
+          tone: "text-emerald-700",
         },
       ]
     : [];
@@ -2121,41 +2156,156 @@ function ExecutionPage() {
 }
 
 function EngagementPage() {
-  const settings = useApiData<RecordItem[]>("/settings");
-  const schedulerConfig = (settings.data ?? []).find(
-    (item) => item.key === "scheduler.defaults",
-  );
+  const strategies = useApiData<RecordItem[]>("/engagement/strategies");
+  const tasks = useApiData<RecordItem[]>("/engagement/tasks");
+  const accounts = useApiData<RecordItem[]>("/accounts");
+  const stats = useApiData<RecordItem[]>("/engagement/statistics");
+  const [feedback, setFeedback] = useState("");
+  const [strategyForm, setStrategyForm] = useState<Record<string, unknown>>({
+    name: "Reddit Mixed Engagement",
+    platform: "reddit",
+    strategy_type: "MIXED_ENGAGEMENT",
+    browse_count_min: 2,
+    browse_count_max: 4,
+    like_count_min: 1,
+    like_count_max: 2,
+    visit_profile_count_min: 0,
+    visit_profile_count_max: 1,
+    pause_min_seconds: 5,
+    pause_max_seconds: 30,
+    before_reply_enabled: false,
+    weight: 10,
+    remark: "",
+  });
+  const [taskForm, setTaskForm] = useState<Record<string, unknown>>({
+    strategy_id: "",
+    account_id: "",
+    platform: "reddit",
+    source_type: "POST_POOL",
+    source_value: "",
+    browse_target_count: 3,
+    like_target_count: 1,
+    visit_profile_target_count: 0,
+    priority: "MEDIUM",
+  });
+
+  function updateStrategy(key: string, value: unknown) {
+    setStrategyForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateTask(key: string, value: unknown) {
+    setTaskForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createStrategy() {
+    try {
+      await apiRequest("/engagement/strategies", {
+        method: "POST",
+        body: JSON.stringify(strategyForm),
+      });
+      setFeedback("Engagement Strategy 已创建。");
+      await strategies.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "创建 Strategy 失败");
+    }
+  }
+
+  async function createTask() {
+    try {
+      await apiRequest("/engagement/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          ...taskForm,
+          strategy_id: taskForm.strategy_id ? Number(taskForm.strategy_id) : null,
+          account_id: taskForm.account_id ? Number(taskForm.account_id) : null,
+          browse_target_count: Number(taskForm.browse_target_count ?? 0),
+          like_target_count: Number(taskForm.like_target_count ?? 0),
+          visit_profile_target_count: Number(taskForm.visit_profile_target_count ?? 0),
+        }),
+      });
+      setFeedback("Engagement Task 已加入 Scheduler。");
+      await tasks.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "创建 Task 失败");
+    }
+  }
+
+  async function taskAction(taskId: unknown, action: "run-mock" | "cancel" | "retry") {
+    try {
+      await apiRequest(`/engagement/tasks/${String(taskId)}/${action}`, { method: "POST" });
+      setFeedback(action === "run-mock" ? "Mock Engagement 已执行。" : action === "cancel" ? "任务已取消。" : "任务已重试。");
+      await tasks.reload();
+      await stats.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "操作失败");
+    }
+  }
+
   return (
-    <StateView loading={settings.loading} error={settings.error} reload={settings.reload}>
+    <StateView loading={strategies.loading || tasks.loading} error={strategies.error || tasks.error} reload={() => { void strategies.reload(); void tasks.reload(); }}>
       <div className="space-y-6">
-        <div className="panel flex items-start gap-4 p-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-gray-100">
-            <Activity className="h-5 w-5 text-gray-600" />
+        {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <Section title="Create Strategy" action={<button className="button" onClick={createStrategy}><Activity className="h-4 w-4" />保存 Strategy</button>}>
+          <div className="panel grid gap-3 p-4 md:grid-cols-3 xl:grid-cols-6">
+            <input className="field" value={String(strategyForm.name)} onChange={(e) => updateStrategy("name", e.target.value)} />
+            <input className="field" value={String(strategyForm.platform)} onChange={(e) => updateStrategy("platform", e.target.value)} />
+            <select className="field" value={String(strategyForm.strategy_type)} onChange={(e) => updateStrategy("strategy_type", e.target.value)}>
+              {["SILENT_BROWSE", "LIKE_ONLY", "PROFILE_VISIT", "MIXED_ENGAGEMENT", "REPLY_WARMUP", "CUSTOM"].map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <input className="field" type="number" value={String(strategyForm.browse_count_min)} onChange={(e) => updateStrategy("browse_count_min", Number(e.target.value))} />
+            <input className="field" type="number" value={String(strategyForm.like_count_min)} onChange={(e) => updateStrategy("like_count_min", Number(e.target.value))} />
+            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(strategyForm.before_reply_enabled)} onChange={(e) => updateStrategy("before_reply_enabled", e.target.checked)} />Reply Warm-up</label>
           </div>
-          <div>
-            <h2 className="font-bold">Engagement Configuration</h2>
-            <p className="mt-1 text-sm text-gray-500">仅展示任务配置占位，不创建或执行平台互动。</p>
+        </Section>
+        <Section title="Create Engagement Task" action={<button className="button" onClick={createTask}><CalendarClock className="h-4 w-4" />加入 Scheduler</button>}>
+          <div className="panel grid gap-3 p-4 md:grid-cols-3 xl:grid-cols-7">
+            <select className="field" value={String(taskForm.strategy_id)} onChange={(e) => updateTask("strategy_id", e.target.value)}>
+              <option value="">Custom</option>
+              {(strategies.data ?? []).map((strategy) => <option key={String(strategy.id)} value={String(strategy.id)}>{String(strategy.name)}</option>)}
+            </select>
+            <select className="field" value={String(taskForm.account_id)} onChange={(e) => updateTask("account_id", e.target.value)}>
+              <option value="">自动选择账号</option>
+              {(accounts.data ?? []).map((account) => <option key={String(account.id)} value={String(account.id)}>{String(account.platform)} · {String(account.username)}</option>)}
+            </select>
+            <select className="field" value={String(taskForm.source_type)} onChange={(e) => updateTask("source_type", e.target.value)}>
+              {["KEYWORD", "COMMUNITY", "URL_LIST", "POST_POOL", "AUTHOR_PROFILE", "MIXED"].map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <input className="field" value={String(taskForm.source_value ?? "")} onChange={(e) => updateTask("source_value", e.target.value)} placeholder="source value" />
+            <input className="field" type="number" value={String(taskForm.browse_target_count)} onChange={(e) => updateTask("browse_target_count", Number(e.target.value))} />
+            <input className="field" type="number" value={String(taskForm.like_target_count)} onChange={(e) => updateTask("like_target_count", Number(e.target.value))} />
+            <input className="field" type="number" value={String(taskForm.visit_profile_target_count)} onChange={(e) => updateTask("visit_profile_target_count", Number(e.target.value))} />
           </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-3">
-          {[
-            ["Browse", "Disabled"],
-            ["Like", "Disabled"],
-            ["Warm-up", "Disabled"],
-          ].map(([name, state]) => (
-            <div key={name} className="panel p-4">
-              <p className="text-xs font-semibold uppercase text-gray-500">{name}</p>
-              <p className="mt-4 font-bold">{state}</p>
-              <p className="mt-1 text-xs text-gray-400">Future configurable strategy</p>
-            </div>
-          ))}
-        </div>
-        <div className="panel p-4">
-          <p className="text-sm font-semibold">Scheduler defaults</p>
-          <pre className="mt-3 overflow-x-auto text-xs text-gray-600">
-            {JSON.stringify(schedulerConfig?.value ?? {}, null, 2)}
-          </pre>
-        </div>
+        </Section>
+        <Section title="Engagement Queue">
+          <div className="panel overflow-x-auto">
+            <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["id", "strategy", "account", "platform", "status", "browse", "like", "profile", "source", "actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(tasks.data ?? []).map((task) => (
+                <tr key={String(task.id)} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3 font-mono text-xs">{String(task.id)}</td>
+                  <td className="px-4 py-3">{String(task.strategy_name ?? task.strategy_type ?? "CUSTOM")}</td>
+                  <td className="px-4 py-3">{String(task.account ?? "—")}</td>
+                  <td className="px-4 py-3 uppercase text-teal">{String(task.platform)}</td>
+                  <td className="px-4 py-3"><StatusBadge value={task.status} /></td>
+                  <td className="px-4 py-3">{String(task.browse_done_count ?? 0)} / {String(task.browse_target_count ?? 0)}</td>
+                  <td className="px-4 py-3">{String(task.like_done_count ?? 0)} / {String(task.like_target_count ?? 0)}</td>
+                  <td className="px-4 py-3">{String(task.visit_profile_done_count ?? 0)} / {String(task.visit_profile_target_count ?? 0)}</td>
+                  <td className="px-4 py-3">{String(task.source_type)} · {String(task.source_value ?? "")}</td>
+                  <td className="px-4 py-3"><div className="flex flex-wrap gap-2">
+                    <button className="button-secondary" onClick={() => void taskAction(task.id, "run-mock")}>Run Mock</button>
+                    <button className="button-secondary" onClick={() => void taskAction(task.id, "retry")}>Retry</button>
+                    <button className="button-secondary" onClick={() => void taskAction(task.id, "cancel")}>Cancel</button>
+                  </div></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </Section>
+        <Section title="Engagement Statistics">
+          <pre className="panel overflow-x-auto p-4 text-xs text-gray-600">{JSON.stringify(stats.data ?? [], null, 2)}</pre>
+        </Section>
       </div>
     </StateView>
   );
@@ -2238,7 +2388,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v0.8</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v0.9</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">

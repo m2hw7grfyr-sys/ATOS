@@ -8,6 +8,7 @@ from app.api import (
     ai,
     dashboard,
     data_sources,
+    engagement,
     execution,
     health,
     platform_selectors,
@@ -30,7 +31,7 @@ settings_config = get_settings()
 app = FastAPI(
     title=settings_config.app_name,
     version=settings_config.app_version,
-    description="ATOS v0.8 local application API",
+    description="ATOS v0.9 local application API",
 )
 app.middleware("http")(trace_middleware)
 app.add_exception_handler(HTTPException, http_exception_handler)
@@ -52,6 +53,7 @@ app.include_router(posts.router)
 app.include_router(ai.router)
 app.include_router(scheduler.router)
 app.include_router(execution.router)
+app.include_router(engagement.router)
 app.include_router(accounts.router)
 app.include_router(tge_profiles.router)
 app.include_router(settings.router)

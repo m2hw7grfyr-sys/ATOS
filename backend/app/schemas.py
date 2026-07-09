@@ -201,6 +201,55 @@ class PlatformSelectorUpdate(BaseModel):
     remark: Optional[str] = None
 
 
+class EngagementStrategyCreate(BaseModel):
+    name: str
+    platform: str = "reddit"
+    strategy_type: str = "MIXED_ENGAGEMENT"
+    enabled: bool = True
+    browse_count_min: int = 1
+    browse_count_max: int = 3
+    like_count_min: int = 0
+    like_count_max: int = 1
+    visit_profile_count_min: int = 0
+    visit_profile_count_max: int = 1
+    pause_min_seconds: int = 5
+    pause_max_seconds: int = 30
+    before_reply_enabled: bool = False
+    weight: int = 10
+    remark: Optional[str] = None
+
+
+class EngagementStrategyUpdate(BaseModel):
+    name: Optional[str] = None
+    platform: Optional[str] = None
+    strategy_type: Optional[str] = None
+    enabled: Optional[bool] = None
+    browse_count_min: Optional[int] = None
+    browse_count_max: Optional[int] = None
+    like_count_min: Optional[int] = None
+    like_count_max: Optional[int] = None
+    visit_profile_count_min: Optional[int] = None
+    visit_profile_count_max: Optional[int] = None
+    pause_min_seconds: Optional[int] = None
+    pause_max_seconds: Optional[int] = None
+    before_reply_enabled: Optional[bool] = None
+    weight: Optional[int] = None
+    remark: Optional[str] = None
+
+
+class EngagementTaskCreate(BaseModel):
+    strategy_id: Optional[int] = None
+    account_id: Optional[int] = None
+    platform: str = "reddit"
+    source_type: str = "POST_POOL"
+    source_value: Optional[str] = None
+    browse_target_count: int = 3
+    like_target_count: int = 1
+    visit_profile_target_count: int = 0
+    priority: str = "MEDIUM"
+    scheduled_at: Optional[datetime] = None
+
+
 class LLMProviderCreate(BaseModel):
     provider_name: str
     provider_type: str = "mock"
