@@ -9,6 +9,13 @@
 - [x] Execution
 - [x] Engagement
 - [x] Account Center
+- [x] Statistics
+
+- [ ] Final Architecture
+- [ ] Deployment
+- [ ] Coding Standard
+- [ ] Security
+- [ ] Release v1.0
 
 ## Specification
 

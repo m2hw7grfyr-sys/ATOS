@@ -4,7 +4,7 @@
 
 **Short Name:** ATOS
 
-**Version:** 0.8
+**Version:** 0.9
 
 **Status:** Draft
 
@@ -4846,3 +4846,515 @@ Cookie。
 统一：
 
 Account Service。
+
+==============================================================
+
+# PART IX Statistics & Event Architecture
+
+---
+
+# Chapter 8 Statistics
+
+## 8.1 模块定位
+
+Statistics 是整个 ATOS 的统一数据分析中心（Unified Analytics Center）。
+
+Statistics 不产生业务数据。
+
+Statistics 只消费业务事件（Business Events）。
+
+所有统计数据均来自 Event Bus。
+
+禁止 Statistics 直接修改业务状态。
+
+---
+
+# 8.2 数据来源
+
+Statistics 统一消费以下事件：
+
+- POST_IMPORTED
+- AI_ANALYSIS_COMPLETED
+- REPLY_GENERATED
+- REPLY_APPROVED
+- TASK_DISPATCHED
+- EXECUTION_STARTED
+- EXECUTION_COMPLETED
+- EXECUTION_FAILED
+- ENGAGEMENT_COMPLETED
+- ACCOUNT_COOLDOWN
+- ACCOUNT_RECOVERED
+- CONFIG_UPDATED
+
+所有统计：
+
+来自事件。
+
+而不是数据库轮询。
+
+---
+
+# 8.3 Dashboard Metrics
+
+默认展示：
+
+- Today's Imported Posts
+- Today's AI Generated
+- Today's Approved
+- Today's Executed
+- Today's Browse
+- Today's Like
+- Today's Reply
+- Today's Conversion
+- Today's CTR
+- Today's CVR
+- Today's Token Cost
+- Today's API Cost
+- Today's Revenue（预留）
+- Today's ROI（预留）
+
+---
+
+# 8.4 Platform Metrics
+
+每个平台统计：
+
+- Imported
+- Executed
+- Browse
+- Reply
+- Like
+- CTR
+- CVR
+- Average Delay
+- Average Success
+- Average Health
+- Average Cost
+
+支持：
+
+- Reddit
+- Facebook
+- X
+- Instagram
+- TikTok
+- YouTube
+- Quora
+
+支持未来新增平台。
+
+---
+
+# 8.5 Account Metrics
+
+每个账号：
+
+- Health Score
+- Execution Success
+- Reply Success
+- Browse Success
+- Like Success
+- Cooldown Count
+- Average Working Time
+- Average Reply Time
+- Daily Trend
+- Weekly Trend
+- Monthly Trend
+
+---
+
+# 8.6 AI Metrics
+
+每个模型：
+
+- Token
+- Latency
+- Cost
+- Average Response Time
+- Fallback Rate
+- Approval Rate
+- Rewrite Rate
+- Similarity Rate
+- Prompt Version
+- Provider
+
+---
+
+# 8.7 Scheduler Metrics
+
+Scheduler：
+
+- Queue Length
+- Average Delay
+- Average Dispatch Time
+- Retry Count
+- Failure Rate
+- Cooling Count
+- Platform Distribution
+- Account Distribution
+
+---
+
+# 8.8 Execution Metrics
+
+Execution：
+
+- Execution Time
+- Average Tab Lifetime
+- Average Environment Lifetime
+- Replay Count
+- Retry Count
+- Failure Reason
+- 429 Count
+- 403 Count
+- Captcha Count
+
+---
+
+# 8.9 Funnel
+
+默认漏斗：
+
+Imported
+
+↓
+
+AI Generated
+
+↓
+
+Approved
+
+↓
+
+Queued
+
+↓
+
+Executed
+
+↓
+
+Clicked（预留）
+
+↓
+
+Registered（预留）
+
+↓
+
+Ordered（预留）
+
+↓
+
+Repeated Purchase（预留）
+
+所有阶段：
+
+支持：
+
+自定义。
+
+---
+
+# 8.10 Event Catalog
+
+ATOS 所有事件必须统一登记。
+
+事件格式：
+
+- Event Name
+- Description
+- Producer
+- Consumer
+- Payload
+- Retry Policy
+- Dead Letter Policy
+- Version
+
+禁止：
+
+匿名事件。
+
+---
+
+# 8.11 Event Payload Standard
+
+所有事件统一格式：
+
+- event_id
+- event_name
+- version
+- producer
+- timestamp
+- trace_id
+- correlation_id
+- payload
+- metadata
+
+支持未来跨服务。
+
+---
+
+# 8.12 Event Bus Rules
+
+所有模块：
+
+只能：
+
+- Publish
+- Subscribe
+
+禁止：
+
+直接：
+
+调用：
+
+其它模块。
+
+例如：
+
+Execution
+
+不得：
+
+直接：
+
+调用：
+
+Statistics。
+
+只能：
+
+发布：
+
+EXECUTION_COMPLETED。
+
+---
+
+# 8.13 OpenAPI Rules
+
+所有 API：
+
+必须：
+
+RESTful。
+
+统一：
+
+Response：
+
+```text
+{
+  success
+  code
+  message
+  trace_id
+  data
+}
+```
+
+错误：
+
+统一：
+
+Error Object。
+
+---
+
+# 8.14 Trace Rules
+
+所有请求：
+
+必须：
+
+Trace ID。
+
+所有事件：
+
+必须：
+
+Correlation ID。
+
+所有日志：
+
+必须：
+
+Request ID。
+
+支持：
+
+Replay。
+
+支持：
+
+Debug。
+
+---
+
+# 8.15 Error Code Convention
+
+AI
+
+AI-0001
+
+Scheduler
+
+SCH-0001
+
+Execution
+
+EXE-0001
+
+Account
+
+ACC-0001
+
+Statistics
+
+STA-0001
+
+Platform
+
+PLA-0001
+
+System
+
+SYS-0001
+
+禁止：
+
+重复。
+
+---
+
+# 8.16 Database Convention
+
+所有表：
+
+必须：
+
+- id
+- uuid
+- created_at
+- updated_at
+- created_by
+- updated_by
+- deleted_at（软删除）
+- status
+- version
+
+禁止：
+
+直接删除业务数据。
+
+---
+
+# 8.17 Index Convention
+
+所有外键：
+
+必须：
+
+Index。
+
+所有 UUID：
+
+Unique。
+
+所有：
+
+created_at
+
+Index。
+
+所有：
+
+status
+
+Index。
+
+所有：
+
+platform
+
+Index。
+
+---
+
+# 8.18 Audit Rules
+
+所有：
+
+修改：
+
+必须：
+
+Audit。
+
+包括：
+
+- Scheduler
+- Prompt
+- Strategy
+- Config
+- Account
+- Proxy
+- Health
+- Role
+- Permission
+
+禁止：
+
+静默修改。
+
+---
+
+# 8.19 Performance Targets
+
+Dashboard：
+
+<2s
+
+API：
+
+P95 <300ms
+
+Execution：
+
+Dispatch <1s
+
+Statistics：
+
+Aggregation <5s
+
+Scheduler：
+
+Queue Delay <500ms
+
+---
+
+# 8.20 Developer Rules
+
+Statistics：
+
+永远：
+
+Read Only。
+
+所有统计：
+
+事件驱动。
+
+所有聚合：
+
+异步。
+
+所有 BI：
+
+禁止：
+
+查询：
+
+业务数据库。

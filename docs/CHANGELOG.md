@@ -4,6 +4,18 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v0.9
+
+- Added Statistics Architecture
+- Added Event Catalog
+- Added Event Payload Standard
+- Added Event Bus Rules
+- Added Trace Rules
+- Added Error Code Convention
+- Added Database Convention
+- Added OpenAPI Convention
+- Added Performance Targets
+
 ## v0.8
 
 - Expanded Account Center
