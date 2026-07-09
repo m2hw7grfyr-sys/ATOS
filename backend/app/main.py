@@ -5,6 +5,7 @@ from starlette.exceptions import HTTPException
 
 from app.api import (
     accounts,
+    actor_mappings,
     ai,
     dashboard,
     data_sources,
@@ -31,7 +32,7 @@ settings_config = get_settings()
 app = FastAPI(
     title=settings_config.app_name,
     version=settings_config.app_version,
-    description="ATOS v1.0 local application API",
+    description="ATOS v1.1 local application API",
 )
 app.middleware("http")(trace_middleware)
 app.add_exception_handler(HTTPException, http_exception_handler)
@@ -46,6 +47,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(actor_mappings.router)
 app.include_router(platform_selectors.router)
 app.include_router(dashboard.router)
 app.include_router(data_sources.router)

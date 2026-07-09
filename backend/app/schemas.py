@@ -24,6 +24,53 @@ class DataSourceUpdate(BaseModel):
     enabled: Optional[bool] = None
 
 
+class ActorMappingCreate(BaseModel):
+    data_source_id: Optional[int] = None
+    actor_id: str
+    platform: str
+    mapping_name: str
+    title_path: Optional[str] = None
+    content_path: Optional[str] = None
+    url_path: Optional[str] = None
+    author_path: Optional[str] = None
+    author_id_path: Optional[str] = None
+    community_path: Optional[str] = None
+    source_post_id_path: Optional[str] = None
+    published_at_path: Optional[str] = None
+    score_path: Optional[str] = None
+    comment_count_path: Optional[str] = None
+    media_path: Optional[str] = None
+    language_path: Optional[str] = None
+    enabled: bool = True
+    remark: Optional[str] = None
+
+
+class ActorMappingUpdate(BaseModel):
+    data_source_id: Optional[int] = None
+    actor_id: Optional[str] = None
+    platform: Optional[str] = None
+    mapping_name: Optional[str] = None
+    title_path: Optional[str] = None
+    content_path: Optional[str] = None
+    url_path: Optional[str] = None
+    author_path: Optional[str] = None
+    author_id_path: Optional[str] = None
+    community_path: Optional[str] = None
+    source_post_id_path: Optional[str] = None
+    published_at_path: Optional[str] = None
+    score_path: Optional[str] = None
+    comment_count_path: Optional[str] = None
+    media_path: Optional[str] = None
+    language_path: Optional[str] = None
+    enabled: Optional[bool] = None
+    remark: Optional[str] = None
+
+
+class ActorMappingTestRequest(BaseModel):
+    mapping: dict[str, Any]
+    raw_item_json: dict[str, Any]
+
+
 class SchedulerTaskCreate(BaseModel):
     task_type: str
     platform_id: int

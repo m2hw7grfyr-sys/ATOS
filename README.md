@@ -1,12 +1,14 @@
 # ATOS
 
-ATOS（AI Traffic Operating System）v1.0 本地可运行 MVP。
+ATOS（AI Traffic Operating System）v1.1 本地可运行 MVP。
 
 当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环、Account Center / TGE Profile 绑定、Execution Center 的 TGE / Playwright 半自动回复准备链路，以及 Engagement Strategy / Warm-up 工作流。
 
 v0.8 仍然保持 human-in-the-loop：支持打开目标帖子、定位评论框、填入回复、等待人工提交、人工确认后关闭当前 Tab；系统绝不自动点击 Submit。
 
 v0.9 增加 Engagement Center：支持独立浏览、点赞、主页访问和 Reply Warm-up 的任务结构；Mock Mode 下可完整测试，不自动提交评论。
+
+v1.1 增加 Apify Actor Mapping：不同 Actor 的 raw item 可以通过 dot notation 映射为统一 Post Object。
 
 ## 技术栈
 
@@ -52,6 +54,8 @@ v0.9 增加 Engagement Center：支持独立浏览、点赞、主页访问和 Re
 - Platform Selector Registry 支持按平台配置 `reply_box / login_required / rate_limited / comment_disabled`
 - Engagement Center 支持 Strategy、Task Queue、Run Mock 和统计
 - Scheduler 支持 `ENGAGEMENT` 任务类型和 Reply Warm-up 插入
+- Data Center 支持 Actor Mapping 和 Mapping Preview
+- Post Pool 支持 status、actor、mapping、score、comment_count、Raw JSON Viewer
 - Replay 文件保存到 `storage/replay/{execution_task_uuid}/`
 - Account Center 初版
 - Execution、Engagement、Statistics 占位页面
@@ -431,6 +435,32 @@ Engagement Queue 中点击 `Run Mock`：
 - 写入 Statistics。
 
 当前版本的真实平台互动仍是 Adapter 结构预留；Mock Mode 是 v0.9 的默认可验证路径。
+
+## Actor Mapping 使用流程
+
+Actor Mapping 用来把不同 Apify Actor 返回的 raw item 解析成统一 Post Object。
+
+路径格式支持 dot notation：
+
+```text
+title
+data.title
+post.title
+author.username
+subreddit.name
+```
+
+Data Center 页面中：
+
+1. 打开 `Actor Mapping`。
+2. 选择 Data Source。
+3. 填写 Actor ID、Platform、Mapping Name。
+4. 填写字段路径，例如 `title_path=title`、`url_path=url`。
+5. 粘贴一条 raw item JSON。
+6. 点击测试 Mapping 查看 Preview。
+7. 保存 Mapping。
+
+如果没有 Mapping，系统会使用 fallback generic normalizer，并在 `crawl_logs.mapping_missing=true` 中记录。
 
 ### 查看 Replay 文件
 

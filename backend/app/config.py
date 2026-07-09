@@ -9,7 +9,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ATOS API"
-    app_version: str = "1.0.0"
+    app_version: str = "1.1.0"
     app_env: str = "development"
     database_url: str = f"sqlite:///{BACKEND_DIR / 'atos.db'}"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

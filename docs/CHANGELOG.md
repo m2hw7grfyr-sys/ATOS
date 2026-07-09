@@ -4,6 +4,14 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## v1.1
+
+- Added Apify Actor Mapping
+- Added Post normalization fields
+- Added Mapping Test API
+- Added fallback normalizer warning logs
+- Added Post Pool Raw JSON Viewer
+
 ## v1.0
 
 - Released ATOS runnable MVP

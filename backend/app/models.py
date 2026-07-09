@@ -83,6 +83,11 @@ class Post(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, default="")
     url: Mapped[str] = mapped_column(String(1000))
     language: Mapped[str] = mapped_column(String(20), default="en")
+    author_id: Mapped[Optional[str]] = mapped_column(String(160))
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    comment_count: Mapped[int] = mapped_column(Integer, default=0)
+    media: Mapped[list] = mapped_column(JSON, default=list)
+    mapping_id: Mapped[Optional[int]] = mapped_column(ForeignKey("actor_mappings.id"), index=True)
     tags: Mapped[list] = mapped_column(JSON, default=list)
     raw_json: Mapped[dict] = mapped_column(JSON, default=dict)
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -110,6 +115,37 @@ class CrawlLog(Base):
     error_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[Optional[str]] = mapped_column(Text)
     raw_response_excerpt: Mapped[Optional[str]] = mapped_column(Text)
+    mapping_id: Mapped[Optional[int]] = mapped_column(ForeignKey("actor_mappings.id"), index=True)
+    mapping_missing: Mapped[bool] = mapped_column(Boolean, default=False)
+    incomplete_count: Mapped[int] = mapped_column(Integer, default=0)
+    validation_failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    normalization_warning_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ActorMapping(Base, TimestampMixin):
+    __tablename__ = "actor_mappings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    data_source_id: Mapped[Optional[int]] = mapped_column(ForeignKey("data_sources.id"), index=True)
+    actor_id: Mapped[str] = mapped_column(String(200), index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    mapping_name: Mapped[str] = mapped_column(String(160))
+    title_path: Mapped[Optional[str]] = mapped_column(String(300))
+    content_path: Mapped[Optional[str]] = mapped_column(String(300))
+    url_path: Mapped[Optional[str]] = mapped_column(String(300))
+    author_path: Mapped[Optional[str]] = mapped_column(String(300))
+    author_id_path: Mapped[Optional[str]] = mapped_column(String(300))
+    community_path: Mapped[Optional[str]] = mapped_column(String(300))
+    source_post_id_path: Mapped[Optional[str]] = mapped_column(String(300))
+    published_at_path: Mapped[Optional[str]] = mapped_column(String(300))
+    score_path: Mapped[Optional[str]] = mapped_column(String(300))
+    comment_count_path: Mapped[Optional[str]] = mapped_column(String(300))
+    media_path: Mapped[Optional[str]] = mapped_column(String(300))
+    language_path: Mapped[Optional[str]] = mapped_column(String(300))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    remark: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
 class AITask(Base, TimestampMixin):

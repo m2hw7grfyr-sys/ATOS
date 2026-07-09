@@ -490,6 +490,7 @@ function DashboardPage() {
 function DataCenterPage() {
   const { data, error, loading, reload } = useApiData<DataSourceItem[]>("/data-sources");
   const platforms = useApiData<PlatformOption[]>("/data-sources/platforms");
+  const mappings = useApiData<RecordItem[]>("/actor-mappings");
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("Apify Source");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -505,6 +506,28 @@ function DataCenterPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [logs, setLogs] = useState<RecordItem[]>([]);
   const [logSource, setLogSource] = useState("");
+  const [mappingForm, setMappingForm] = useState<Record<string, unknown>>({
+    data_source_id: "",
+    actor_id: "demo/reddit-discovery",
+    platform: "reddit",
+    mapping_name: "Default Reddit Mapping",
+    title_path: "title",
+    content_path: "selftext",
+    url_path: "url",
+    author_path: "author",
+    author_id_path: "author_id",
+    community_path: "subreddit",
+    source_post_id_path: "id",
+    published_at_path: "created_utc",
+    score_path: "score",
+    comment_count_path: "num_comments",
+    media_path: "media",
+    language_path: "language",
+    enabled: true,
+    remark: "",
+  });
+  const [mappingRawJson, setMappingRawJson] = useState("{\n  \"id\": \"abc123\",\n  \"title\": \"Example post\",\n  \"selftext\": \"Post body\",\n  \"url\": \"https://example.com/post\",\n  \"author\": \"demo_user\",\n  \"subreddit\": \"SaaS\"\n}");
+  const [mappingPreview, setMappingPreview] = useState<RecordItem | null>(null);
 
   function resetForm() {
     setEditingId(null);
@@ -625,6 +648,40 @@ function DataCenterPage() {
     }
   }
 
+  function updateMappingField(key: string, value: unknown) {
+    setMappingForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createMapping() {
+    try {
+      await apiRequest("/actor-mappings", {
+        method: "POST",
+        body: JSON.stringify({
+          ...mappingForm,
+          data_source_id: mappingForm.data_source_id ? Number(mappingForm.data_source_id) : null,
+        }),
+      });
+      setFeedback("Actor Mapping 已创建。");
+      await mappings.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "创建 Mapping 失败");
+    }
+  }
+
+  async function testMapping() {
+    try {
+      const raw = JSON.parse(mappingRawJson) as Record<string, unknown>;
+      const result = await apiRequest<RecordItem>("/actor-mappings/test", {
+        method: "POST",
+        body: JSON.stringify({ mapping: mappingForm, raw_item_json: raw }),
+      });
+      setMappingPreview(result);
+      setFeedback("Mapping Preview 已生成。");
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "测试 Mapping 失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
@@ -732,6 +789,45 @@ function DataCenterPage() {
             ]} rows={logs} />
           </Section>
         )}
+        <Section title="Actor Mapping" action={<div className="flex gap-2"><button className="button-secondary" onClick={testMapping}>测试 Mapping</button><button className="button" onClick={createMapping}>保存 Mapping</button></div>}>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="panel grid gap-3 p-4 md:grid-cols-2">
+              <select className="field" value={String(mappingForm.data_source_id ?? "")} onChange={(e) => updateMappingField("data_source_id", e.target.value)}>
+                <option value="">不绑定数据源</option>
+                {(data ?? []).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+              </select>
+              <input className="field" value={String(mappingForm.actor_id ?? "")} onChange={(e) => updateMappingField("actor_id", e.target.value)} placeholder="actor_id" />
+              <input className="field" value={String(mappingForm.platform ?? "")} onChange={(e) => updateMappingField("platform", e.target.value)} placeholder="platform" />
+              <input className="field" value={String(mappingForm.mapping_name ?? "")} onChange={(e) => updateMappingField("mapping_name", e.target.value)} placeholder="mapping name" />
+              {["title_path", "content_path", "url_path", "author_path", "community_path", "source_post_id_path", "published_at_path", "score_path", "comment_count_path"].map((key) => (
+                <input key={key} className="field" value={String(mappingForm[key] ?? "")} onChange={(e) => updateMappingField(key, e.target.value)} placeholder={key} />
+              ))}
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(mappingForm.enabled)} onChange={(e) => updateMappingField("enabled", e.target.checked)} />Enabled</label>
+            </div>
+            <div className="panel p-4">
+              <p className="text-xs font-semibold uppercase text-gray-500">Raw Item JSON</p>
+              <textarea className="field mt-2 min-h-40 font-mono text-xs" value={mappingRawJson} onChange={(e) => setMappingRawJson(e.target.value)} />
+              <pre className="mt-3 max-h-56 overflow-auto rounded bg-gray-50 p-3 text-xs text-gray-600">{JSON.stringify(mappingPreview ?? {}, null, 2)}</pre>
+            </div>
+          </div>
+          <div className="panel mt-4 overflow-x-auto">
+            <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["name", "platform", "actor", "title", "url", "enabled"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(mappings.data ?? []).map((mapping) => (
+                <tr key={String(mapping.id)} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3">{String(mapping.mapping_name)}</td>
+                  <td className="px-4 py-3 uppercase text-teal">{String(mapping.platform)}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{String(mapping.actor_id)}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{String(mapping.title_path ?? "")}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{String(mapping.url_path ?? "")}</td>
+                  <td className="px-4 py-3">{String(mapping.enabled)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </Section>
       </div>
     </StateView>
   );
@@ -743,6 +839,7 @@ function PostPoolPage() {
   const [sourceId, setSourceId] = useState("");
   const [feedback, setFeedback] = useState("");
   const [busyPostId, setBusyPostId] = useState<number | null>(null);
+  const [rawPost, setRawPost] = useState<RecordItem | null>(null);
   const sources = useApiData<DataSourceItem[]>("/data-sources");
   const query = new URLSearchParams();
   if (platform) query.set("platform", platform);
@@ -808,7 +905,7 @@ function PostPoolPage() {
           <SlidersHorizontal className="mb-2 h-5 w-5 text-gray-500" />
           <label className="text-xs font-semibold text-gray-600">Platform<select className="field mt-2 min-w-36" value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="">All</option>{Array.from(new Set((sources.data ?? []).map((item) => item.platform).filter(Boolean))).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label className="text-xs font-semibold text-gray-600">Source<select className="field mt-2 min-w-48" value={sourceId} onChange={(e) => setSourceId(e.target.value)}><option value="">All</option>{(sources.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label className="text-xs font-semibold text-gray-600">Status<select className="field mt-2 min-w-36" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option><option value="NEW">NEW</option><option value="ANALYZED">ANALYZED</option><option value="ARCHIVED">ARCHIVED</option></select></label>
+	          <label className="text-xs font-semibold text-gray-600">Status<select className="field mt-2 min-w-36" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option><option value="NEW">NEW</option><option value="NORMALIZED">NORMALIZED</option><option value="INCOMPLETE">INCOMPLETE</option><option value="ANALYZED">ANALYZED</option><option value="ARCHIVED">ARCHIVED</option></select></label>
           <button className="icon-button mb-0.5" title="刷新" onClick={reload}><RefreshCw className="h-4 w-4" /></button>
           <button className="button mb-0.5" onClick={bulkAddToScheduler}><CalendarClock className="h-4 w-4" />批量加入 Scheduler</button>
         </div>
@@ -817,31 +914,40 @@ function PostPoolPage() {
           <div className="panel overflow-x-auto">
             <table className="w-full min-w-[1380px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                {["Platform", "Title", "Author", "Community", "Published", "Imported", "Source", "URL", "AI Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+	                {["Platform", "Status", "Title", "Author", "Community", "Score", "Comments", "Source", "Actor", "Mapping", "URL", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
               </tr></thead>
               <tbody>{(data ?? []).map((post, index) => (
                 <tr key={String(post.uuid ?? index)} className="border-b border-line last:border-0">
-                  <td className="px-4 py-3 font-semibold uppercase text-teal">{String(post.platform ?? "—")}</td>
-                  <td className="max-w-sm px-4 py-3"><p className="line-clamp-2 font-medium">{String(post.title || "(Untitled)")}</p></td>
-                  <td className="px-4 py-3 text-gray-600">{String(post.author ?? "—")}</td>
-                  <td className="px-4 py-3 text-gray-600">{String(post.community ?? "—")}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{post.published_at ? new Date(String(post.published_at)).toLocaleString() : "—"}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{post.created_at ? new Date(String(post.created_at)).toLocaleString() : "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{String(post.source ?? "Seed / Manual")}</td>
-                  <td className="px-4 py-3">{post.url ? <a className="inline-flex items-center gap-1 text-cyan hover:underline" href={String(post.url)} target="_blank" rel="noreferrer">Open<ExternalLink className="h-3.5 w-3.5" /></a> : "—"}</td>
+	                  <td className="px-4 py-3 font-semibold uppercase text-teal">{String(post.platform ?? "—")}</td>
+	                  <td className="px-4 py-3"><StatusBadge value={post.status ?? "—"} /></td>
+	                  <td className="max-w-sm px-4 py-3"><p className="line-clamp-2 font-medium">{String(post.title || "(Untitled)")}</p></td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.author ?? "—")}</td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.community ?? "—")}</td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.score ?? 0)}</td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.comment_count ?? 0)}</td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.source_name ?? post.source ?? "Seed / Manual")}</td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.actor_name ?? "—")}</td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.mapping_name ?? "fallback")}</td>
+	                  <td className="px-4 py-3">{post.url ? <a className="inline-flex items-center gap-1 text-cyan hover:underline" href={String(post.url)} target="_blank" rel="noreferrer">Open<ExternalLink className="h-3.5 w-3.5" /></a> : "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
                       <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "analyze")}>Analyze</button>
-                      <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "reply")}>Generate Reply</button>
-                      <button className="button" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "workspace")}><BrainCircuit className="h-4 w-4" />Send</button>
-                    </div>
-                  </td>
+	                      <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "reply")}>Generate Reply</button>
+	                      <button className="button" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "workspace")}><BrainCircuit className="h-4 w-4" />Send</button>
+	                      <button className="button-secondary" onClick={() => setRawPost(post)}>Raw JSON</button>
+	                    </div>
+	                  </td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
-        </Section>
-      </div>
+	        </Section>
+	        {rawPost && (
+	          <Section title="Raw JSON Viewer" action={<button className="button-secondary" onClick={() => setRawPost(null)}>关闭</button>}>
+	            <pre className="panel max-h-[520px] overflow-auto p-4 text-xs text-gray-600">{JSON.stringify(rawPost.raw_json ?? {}, null, 2)}</pre>
+	          </Section>
+	        )}
+	      </div>
     </StateView>
   );
 }
@@ -2388,7 +2494,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v1.0</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v1.1</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">

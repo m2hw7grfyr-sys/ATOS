@@ -11,6 +11,7 @@ from app.models import (
     Account,
     AccountLimit,
     AccountWorkingWindow,
+    ActorMapping,
     DataSource,
     EngagementStrategy,
     EngagementTask,
@@ -30,7 +31,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v1.0-acceptance"
+SEED_VERSION = "v1.1-acceptance"
 
 
 def main() -> None:
@@ -97,6 +98,36 @@ def main() -> None:
                 db.add(item)
                 db.flush()
             sources.append(item)
+
+        reddit_mapping = db.scalar(
+            select(ActorMapping).where(
+                ActorMapping.actor_id == "demo/reddit-discovery",
+                ActorMapping.platform == "reddit",
+            )
+        )
+        if not reddit_mapping:
+            db.add(
+                ActorMapping(
+                    data_source_id=sources[0].id,
+                    actor_id="demo/reddit-discovery",
+                    platform="reddit",
+                    mapping_name="Default Reddit Mapping",
+                    title_path="title",
+                    content_path="selftext",
+                    url_path="url",
+                    author_path="author",
+                    author_id_path="author_id",
+                    community_path="subreddit",
+                    source_post_id_path="id",
+                    published_at_path="created_utc",
+                    score_path="score",
+                    comment_count_path="num_comments",
+                    media_path="media",
+                    language_path="language",
+                    enabled=True,
+                    remark="Default Reddit actor mapping seed.",
+                )
+            )
 
         now = datetime.now(timezone.utc)
         post_specs = [
@@ -743,7 +774,7 @@ Community: {{community}}
             "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
             "10 posts, 5 AI tasks, 5 scheduler tasks, 4 accounts, "
             "4 TGE profiles, 11 statistics, 2 LLM providers, 2 prompt templates, "
-            "5 platform weights, 2 engagement strategies, 5 execution tasks, 5 engagement tasks."
+            "5 platform weights, 2 engagement strategies, 5 execution tasks, 5 engagement tasks, 1 actor mapping."
         )
     finally:
         db.close()

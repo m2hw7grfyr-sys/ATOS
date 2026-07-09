@@ -13,7 +13,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import CrawlLog, DataSource, Platform, Post, utc_now
+from app.models import ActorMapping, CrawlLog, DataSource, Platform, Post, utc_now
 
 
 class ApifyServiceError(RuntimeError):
@@ -26,9 +26,14 @@ class NormalizedPost:
     content: str
     url: str
     author: Optional[str]
+    author_id: Optional[str]
     community: Optional[str]
     source_post_id: Optional[str]
     published_at: Optional[datetime]
+    score: int
+    comment_count: int
+    media: list[Any]
+    language: str
     raw_json: dict[str, Any]
 
     @property
@@ -100,6 +105,7 @@ def normalize_post(item: dict[str, Any]) -> NormalizedPost:
             )
         )
         or None,
+        author_id=_text(_value(item, "author_id", "authorId", "user.id", "author.id")) or None,
         community=_text(
             _value(
                 item,
@@ -134,8 +140,95 @@ def normalize_post(item: dict[str, Any]) -> NormalizedPost:
                 "date",
             )
         ),
+        score=int(_value(item, "score", "upvotes", "likes", "points") or 0),
+        comment_count=int(_value(item, "comment_count", "commentCount", "commentsCount", "numComments") or 0),
+        media=_value(item, "media", "images", "attachments") or [],
+        language=_text(_value(item, "language", "lang")) or "en",
         raw_json=item,
     )
+
+
+def normalize_post_with_mapping(item: dict[str, Any], mapping: ActorMapping) -> tuple[NormalizedPost, list[str]]:
+    warnings = []
+
+    def get(path: str | None) -> Any:
+        return _value(item, path) if path else None
+
+    title = _text(get(mapping.title_path))
+    content = _text(get(mapping.content_path))
+    url = _text(get(mapping.url_path))
+    source_post_id = _text(get(mapping.source_post_id_path)) or None
+    if not title:
+        warnings.append("title missing")
+    if not url:
+        warnings.append("url missing")
+    if not source_post_id:
+        warnings.append("source_post_id missing")
+    media_value = get(mapping.media_path) or []
+    if not isinstance(media_value, list):
+        media_value = [media_value]
+    return (
+        NormalizedPost(
+            title=title,
+            content=content,
+            url=url,
+            author=_text(get(mapping.author_path)) or None,
+            author_id=_text(get(mapping.author_id_path)) or None,
+            community=_text(get(mapping.community_path)) or None,
+            source_post_id=source_post_id,
+            published_at=_datetime(get(mapping.published_at_path)),
+            score=int(get(mapping.score_path) or 0),
+            comment_count=int(get(mapping.comment_count_path) or 0),
+            media=media_value,
+            language=_text(get(mapping.language_path)) or "en",
+            raw_json=item,
+        ),
+        warnings,
+    )
+
+
+def mapping_preview(mapping_values: dict[str, Any], raw_item: dict[str, Any]) -> dict[str, Any]:
+    mapping = ActorMapping(
+        actor_id=str(mapping_values.get("actor_id") or "preview"),
+        platform=str(mapping_values.get("platform") or "preview"),
+        mapping_name=str(mapping_values.get("mapping_name") or "Preview"),
+        **{
+            key: mapping_values.get(key)
+            for key in [
+                "title_path",
+                "content_path",
+                "url_path",
+                "author_path",
+                "author_id_path",
+                "community_path",
+                "source_post_id_path",
+                "published_at_path",
+                "score_path",
+                "comment_count_path",
+                "media_path",
+                "language_path",
+            ]
+        },
+    )
+    normalized, warnings = normalize_post_with_mapping(raw_item, mapping)
+    return {
+        "normalized_post_preview": {
+            "title": normalized.title,
+            "content": normalized.content,
+            "url": normalized.url,
+            "author": normalized.author,
+            "author_id": normalized.author_id,
+            "community": normalized.community,
+            "source_post_id": normalized.source_post_id,
+            "published_at": normalized.published_at.isoformat() if normalized.published_at else None,
+            "score": normalized.score,
+            "comment_count": normalized.comment_count,
+            "media": normalized.media,
+            "language": normalized.language,
+        },
+        "missing_fields": [item.replace(" missing", "") for item in warnings],
+        "warnings": warnings,
+    }
 
 
 class ApifyService:
@@ -289,19 +382,42 @@ class ApifyService:
     ) -> None:
         if platform is None:
             raise ApifyServiceError("Data source platform does not exist")
+        config = self._config(source)
+        actor_id = str(config.get("actor_id") or "")
+        mapping = self.db.scalar(
+            select(ActorMapping)
+            .where(
+                ActorMapping.enabled.is_(True),
+                ActorMapping.platform == platform.slug,
+                or_(ActorMapping.data_source_id == source.id, ActorMapping.actor_id == actor_id),
+            )
+            .order_by(ActorMapping.data_source_id.desc(), ActorMapping.id.asc())
+        )
+        if mapping:
+            log.mapping_id = mapping.id
+        else:
+            log.mapping_missing = True
         log.total_items = len(items)
         for item in items:
             if not isinstance(item, dict):
                 log.error_count += 1
                 continue
-            normalized = normalize_post(item)
+            if mapping:
+                normalized, warnings = normalize_post_with_mapping(item, mapping)
+            else:
+                normalized = normalize_post(item)
+                warnings = ["mapping missing"]
+            log.normalization_warning_count += len(warnings)
+            raw_json_hash = hashlib.sha256(
+                json.dumps(item, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+            ).hexdigest()
+            final_url_hash = normalized.url_hash or raw_json_hash
             duplicate_filters = []
             if normalized.source_post_id:
                 duplicate_filters.append(
                     Post.source_post_id == normalized.source_post_id
                 )
-            elif normalized.url_hash:
-                duplicate_filters.append(Post.url_hash == normalized.url_hash)
+            duplicate_filters.append(Post.url_hash == final_url_hash)
             if duplicate_filters:
                 duplicate = self.db.scalar(
                     select(Post.id).where(
@@ -316,16 +432,24 @@ class ApifyService:
                 Post(
                     platform_id=platform.id,
                     data_source_id=source.id,
+                    mapping_id=mapping.id if mapping else None,
                     source_post_id=normalized.source_post_id,
-                    url_hash=normalized.url_hash,
+                    url_hash=final_url_hash,
                     community=normalized.community,
                     author=normalized.author,
-                    title=normalized.title,
+                    author_id=normalized.author_id,
+                    title=normalized.title or "(untitled)",
                     content=normalized.content,
                     url=normalized.url,
+                    language=normalized.language,
+                    score=normalized.score,
+                    comment_count=normalized.comment_count,
+                    media=normalized.media,
                     published_at=normalized.published_at,
                     raw_json=normalized.raw_json,
-                    status="NEW",
+                    status="INCOMPLETE" if (not normalized.url or not normalized.title) else "NORMALIZED",
                 )
             )
+            if not normalized.url or not normalized.title:
+                log.incomplete_count += 1
             log.inserted_count += 1

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import DataSource, Platform, Post
+from app.models import ActorMapping, DataSource, Platform, Post
 from app.response import ok
 from app.serializers import serialize_model
 
@@ -44,5 +44,9 @@ def list_posts(
         serialized = serialize_model(post)
         serialized["platform"] = post_platform.slug
         serialized["source"] = source.name if source else None
+        serialized["source_name"] = source.name if source else None
+        serialized["actor_name"] = (source.config or {}).get("actor_name") if source else None
+        mapping = db.get(ActorMapping, post.mapping_id) if post.mapping_id else None
+        serialized["mapping_name"] = mapping.mapping_name if mapping else None
         items.append(serialized)
     return ok(items, request.state.trace_id)
