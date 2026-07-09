@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AITask, Account, DataSource, Platform, Post, SchedulerTask, TGEProfile
+from app.models import AITask, Account, DataSource, ExecutionTask, Platform, Post, SchedulerTask, TGEProfile
 from app.response import ok
 
 
@@ -52,6 +52,12 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "cooling_accounts": count(Account, Account.risk_status == "COOLING_DOWN"),
                 "high_risk_accounts": count(Account, Account.risk_status.in_(["HIGH", "CRITICAL"])),
                 "tge_profiles_active": count(TGEProfile, TGEProfile.status == "ACTIVE"),
+                "execution_received": count(ExecutionTask, ExecutionTask.status == "RECEIVED"),
+                "execution_environment_ready": count(ExecutionTask, ExecutionTask.status == "ENVIRONMENT_READY"),
+                "execution_failed": count(ExecutionTask, ExecutionTask.status == "FAILED"),
+                "tge_connection_failed": count(TGEProfile, TGEProfile.connection_status == "FAILED"),
+                "tge_running": count(TGEProfile, TGEProfile.runtime_status == "RUNNING"),
+                "tge_unknown": count(TGEProfile, TGEProfile.runtime_status == "UNKNOWN"),
                 "accounts_without_tge": count(
                     Account,
                     Account.status == "ACTIVE",

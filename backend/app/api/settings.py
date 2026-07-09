@@ -11,6 +11,7 @@ from app.schemas import (
     PlatformWeightUpdate,
     SchedulerSettingsUpdate,
     SettingUpdate,
+    TgeSettingsUpdate,
 )
 from app.serializers import serialize_model
 from app.services.ai import mask_secret
@@ -19,6 +20,7 @@ from app.services.scheduler import (
     get_scheduler_settings,
     save_scheduler_settings,
 )
+from app.services.tge import get_tge_settings, safe_tge_settings, save_tge_settings
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -105,6 +107,20 @@ def update_platform_weights(
     weights = ensure_platform_weights(db)
     db.commit()
     return ok([serialize_platform_weight(item, db) for item in weights], request.state.trace_id, "platform weights updated")
+
+
+@router.get("/tge")
+def get_tge_config(request: Request, db: Session = Depends(get_db)):
+    return ok(safe_tge_settings(get_tge_settings(db)), request.state.trace_id)
+
+
+@router.put("/tge")
+def update_tge_config(
+    payload: TgeSettingsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return ok(save_tge_settings(db, payload.model_dump()), request.state.trace_id, "TGE settings updated")
 
 
 @router.get("/llm-providers")

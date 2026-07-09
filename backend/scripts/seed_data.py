@@ -25,7 +25,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v0.5-acceptance"
+SEED_VERSION = "v0.6-acceptance"
 
 
 def main() -> None:
@@ -304,6 +304,8 @@ def main() -> None:
                         proxy_region="US",
                         proxy_type="residential",
                         status="ACTIVE",
+                        connection_status="SUCCESS",
+                        runtime_status="UNKNOWN",
                         remark=f"Seed TGE profile {index}.",
                     )
                 )
@@ -316,6 +318,8 @@ def main() -> None:
                 profile.profile_name = profile.profile_name or profile.name or f"{account.display_name} Environment"
                 profile.name = profile.name or profile.profile_name
                 profile.status = "ACTIVE"
+                profile.connection_status = profile.connection_status or "SUCCESS"
+                profile.runtime_status = profile.runtime_status or "UNKNOWN"
 
         scheduler_specs = [
             ("REPLY", accounts[0], posts[1], ai_tasks[1][1], "HIGH"),
@@ -370,7 +374,21 @@ def main() -> None:
                 },
                 False,
             ),
-            ("execution.tge", "EXECUTION", {"base_url": "http://127.0.0.1:50326", "enabled": False}, False),
+            (
+                "execution.tge",
+                "EXECUTION",
+                {
+                    "tge_api_base_url": "http://127.0.0.1:50326",
+                    "tge_api_key": "",
+                    "default_timeout_seconds": 10,
+                    "enable_tge_connection_test": False,
+                    "enable_auto_start_environment": False,
+                    "enable_auto_attach_environment": False,
+                    "enable_auto_close_tab": True,
+                    "remark": "Seed TGE adapter config. v0.6 does not execute browser actions.",
+                },
+                True,
+            ),
             ("data.apify", "DATA_CENTER", {"enabled": False}, True),
         ]
         for key, category, value, is_secret in setting_specs:

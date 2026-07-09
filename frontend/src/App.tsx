@@ -106,6 +106,12 @@ type DashboardData = {
     high_risk_accounts?: number;
     tge_profiles_active?: number;
     accounts_without_tge?: number;
+    execution_received?: number;
+    execution_environment_ready?: number;
+    execution_failed?: number;
+    tge_connection_failed?: number;
+    tge_running?: number;
+    tge_unknown?: number;
     data_sources: number;
   };
   platform_health: Array<{
@@ -357,6 +363,24 @@ function DashboardPage() {
           value: data.overview.accounts_without_tge ?? 0,
           icon: CircleAlert,
           tone: "text-red-700",
+        },
+        {
+          label: "Execution Received",
+          value: data.overview.execution_received ?? 0,
+          icon: Play,
+          tone: "text-cyan",
+        },
+        {
+          label: "Env Ready",
+          value: data.overview.execution_environment_ready ?? 0,
+          icon: CheckCircle2,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "TGE Running",
+          value: data.overview.tge_running ?? 0,
+          icon: Workflow,
+          tone: "text-blue-700",
         },
         {
           label: "Data Sources",
@@ -1282,6 +1306,25 @@ function AccountCenterPage() {
     }
   }
 
+  async function tgeProfileAction(profileId: unknown, action: "test-connection" | "sync-status" | "status") {
+    if (!profileId) return;
+    try {
+      const method = action === "status" ? "GET" : "POST";
+      await apiRequest(`/tge-profiles/${String(profileId)}/${action}`, { method });
+      setFeedback(
+        action === "test-connection"
+          ? "TGE Profile 测试连接完成。"
+          : action === "sync-status"
+            ? "TGE Profile 状态已同步。"
+            : "TGE Profile 状态已读取。",
+      );
+      await reload();
+      await profiles.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "TGE 操作失败");
+    }
+  }
+
   const rows = (data ?? []).map((item) => {
     const limits = (item.limits ?? {}) as RecordItem;
     return {
@@ -1371,6 +1414,13 @@ function AccountCenterPage() {
                   <button className="button-secondary" onClick={bindProfile}>绑定</button>
                   <button className="button-secondary" onClick={() => void unbindProfile(selectedAccount)}>解绑</button>
                 </div>
+                {selectedAccount.tge_profile && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "test-connection")}>Test Connection</button>
+                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "status")}>Check Status</button>
+                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "sync-status")}>Sync Status</button>
+                  </div>
+                )}
               </div>
               <div className="panel p-4">
                 <p className="font-semibold">Daily Limits / Usage Today</p>
@@ -1393,6 +1443,7 @@ function SettingsPage() {
   const providers = useApiData<LLMProviderItem[]>("/settings/llm-providers");
   const schedulerSettings = useApiData<RecordItem>("/settings/scheduler");
   const platformWeights = useApiData<RecordItem[]>("/settings/platform-weights");
+  const tgeSettings = useApiData<RecordItem>("/settings/tge");
   const [showProviderForm, setShowProviderForm] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
   const [providerName, setProviderName] = useState("Mock Provider");
@@ -1410,6 +1461,7 @@ function SettingsPage() {
   const [maxRetries, setMaxRetries] = useState("1");
   const [remark, setRemark] = useState("");
   const [schedulerForm, setSchedulerForm] = useState<Record<string, unknown>>({});
+  const [tgeForm, setTgeForm] = useState<Record<string, unknown>>({});
   const [weightEdits, setWeightEdits] = useState<Record<string, Record<string, unknown>>>({});
   const [feedback, setFeedback] = useState("");
 
@@ -1418,6 +1470,12 @@ function SettingsPage() {
       setSchedulerForm(schedulerSettings.data);
     }
   }, [schedulerSettings.data, schedulerForm]);
+
+  useEffect(() => {
+    if (tgeSettings.data && Object.keys(tgeForm).length === 0) {
+      setTgeForm(tgeSettings.data);
+    }
+  }, [tgeSettings.data, tgeForm]);
 
   useEffect(() => {
     if ((platformWeights.data ?? []).length && Object.keys(weightEdits).length === 0) {
@@ -1573,6 +1631,32 @@ function SettingsPage() {
     }
   }
 
+  function updateTgeField(key: string, value: unknown) {
+    setTgeForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function saveTgeSettings() {
+    try {
+      await apiRequest("/settings/tge", {
+        method: "PUT",
+        body: JSON.stringify({
+          tge_api_base_url: String(tgeForm.tge_api_base_url ?? ""),
+          tge_api_key: String(tgeForm.tge_api_key ?? ""),
+          default_timeout_seconds: Number(tgeForm.default_timeout_seconds ?? 10),
+          enable_tge_connection_test: Boolean(tgeForm.enable_tge_connection_test),
+          enable_auto_start_environment: Boolean(tgeForm.enable_auto_start_environment),
+          enable_auto_attach_environment: Boolean(tgeForm.enable_auto_attach_environment),
+          enable_auto_close_tab: Boolean(tgeForm.enable_auto_close_tab),
+          remark: String(tgeForm.remark ?? ""),
+        }),
+      });
+      setFeedback("TGE 配置已保存。");
+      await tgeSettings.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存 TGE 配置失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
@@ -1633,6 +1717,40 @@ function SettingsPage() {
           </form>
         )}
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <Section
+          title="TGE Configuration"
+          action={<button className="button" onClick={saveTgeSettings}><Settings className="h-4 w-4" />保存 TGE</button>}
+        >
+          <div className="panel grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4">
+            <label className="text-xs font-semibold text-gray-600">
+              TGE API Base URL
+              <input className="field mt-2" value={String(tgeForm.tge_api_base_url ?? "")} onChange={(e) => updateTgeField("tge_api_base_url", e.target.value)} placeholder="http://127.0.0.1:50326" />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              TGE API Key
+              <input className="field mt-2" type="password" value={String(tgeForm.tge_api_key ?? "")} onChange={(e) => updateTgeField("tge_api_key", e.target.value)} placeholder={String(tgeForm.tge_api_key_masked ?? "留空则保持现有 Key")} autoComplete="new-password" />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Timeout Seconds
+              <input className="field mt-2" type="number" value={String(tgeForm.default_timeout_seconds ?? 10)} onChange={(e) => updateTgeField("default_timeout_seconds", Number(e.target.value))} />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Remark
+              <input className="field mt-2" value={String(tgeForm.remark ?? "")} onChange={(e) => updateTgeField("remark", e.target.value)} />
+            </label>
+            {[
+              ["enable_tge_connection_test", "Connection Test"],
+              ["enable_auto_start_environment", "Auto Start Environment"],
+              ["enable_auto_attach_environment", "Auto Attach Environment"],
+              ["enable_auto_close_tab", "Auto Close Tab"],
+            ].map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" checked={Boolean(tgeForm[key])} onChange={(e) => updateTgeField(key, e.target.checked)} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </Section>
         <Section
           title="Scheduler Defaults"
           action={<button className="button" onClick={saveSchedulerSettings}><Settings className="h-4 w-4" />保存 Scheduler</button>}
@@ -1759,12 +1877,32 @@ function SettingsPage() {
 
 function ExecutionPage() {
   const { data, error, loading, reload } =
-    useApiData<RecordItem[]>("/scheduler/tasks");
+    useApiData<RecordItem[]>("/execution/tasks");
   const counts = (data ?? []).reduce<Record<string, number>>((result, task) => {
     const status = String(task.status);
     result[status] = (result[status] ?? 0) + 1;
     return result;
   }, {});
+  const [feedback, setFeedback] = useState("");
+
+  async function executionAction(taskId: unknown, action: "precheck" | "mark-success" | "mark-failed") {
+    try {
+      await apiRequest(`/execution/tasks/${String(taskId)}/${action}`, { method: "POST" });
+      setFeedback(action === "precheck" ? "Precheck 已完成。" : action === "mark-success" ? "已标记成功。" : "已标记失败。");
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Execution 操作失败");
+    }
+  }
+
+  const groups = [
+    ["待执行任务", ["NEW", "RECEIVED"]],
+    ["环境检测中", ["PRECHECKING"]],
+    ["已接收任务", ["ENVIRONMENT_READY"]],
+    ["等待人工", ["WAITING_MANUAL"]],
+    ["成功", ["SUCCESS"]],
+    ["失败", ["FAILED", "CANCELLED"]],
+  ] as const;
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-6">
@@ -1777,8 +1915,9 @@ function ExecutionPage() {
             <p className="mt-1 text-sm text-gray-500">已接收 Scheduler DISPATCHED 任务，等待未来执行引擎。本版本不连接 TGE、不执行浏览器动作。</p>
           </div>
         </div>
+        {feedback && <p className="text-sm text-teal">{feedback}</p>}
         <div className="grid gap-3 md:grid-cols-3">
-          {["QUEUED", "DISPATCHED", "FAILED"].map((state) => (
+          {["RECEIVED", "ENVIRONMENT_READY", "FAILED"].map((state) => (
             <div key={state} className="panel p-4">
               <p className="text-xs font-semibold uppercase text-gray-500">{state}</p>
               <p className="mt-4 text-2xl font-bold">{counts[state] ?? 0}</p>
@@ -1786,16 +1925,43 @@ function ExecutionPage() {
             </div>
           ))}
         </div>
-        <DataTable
-          columns={[
-            { key: "task_type", label: "Task" },
-            { key: "priority", label: "Priority" },
-            { key: "account_id", label: "Account" },
-            { key: "error_message", label: "Message" },
-            { key: "status", label: "Status" },
-          ]}
-          rows={data ?? []}
-        />
+        {groups.map(([title, statuses]) => {
+          const rows = (data ?? []).filter((task) => statuses.includes(String(task.status)));
+          return (
+            <Section key={title} title={`${title} · ${rows.length}`}>
+              <div className="panel overflow-x-auto">
+                <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+                  <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                    {["task_id", "platform", "account", "tge_environment_id", "execution_status", "scheduler_status", "action_type", "created_at", "started_at", "finished_at", "error_message", "actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+                  </tr></thead>
+                  <tbody>{rows.map((task) => (
+                    <tr key={String(task.uuid)} className="border-b border-line last:border-0">
+                      <td className="px-4 py-3 font-mono text-xs">{String(task.task_id ?? task.id)}</td>
+                      <td className="px-4 py-3 uppercase text-teal">{String(task.platform ?? "—")}</td>
+                      <td className="px-4 py-3">{String(task.account ?? "—")}</td>
+                      <td className="px-4 py-3 font-mono text-xs">{String(task.tge_environment_id ?? "—")}</td>
+                      <td className="px-4 py-3"><StatusBadge value={task.execution_status ?? task.status} /></td>
+                      <td className="px-4 py-3"><StatusBadge value={task.scheduler_status ?? "—"} /></td>
+                      <td className="px-4 py-3">{String(task.action_type ?? "—")}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{task.created_at ? new Date(String(task.created_at)).toLocaleString() : "—"}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{task.started_at ? new Date(String(task.started_at)).toLocaleString() : "—"}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{task.finished_at ? new Date(String(task.finished_at)).toLocaleString() : "—"}</td>
+                      <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.error_message ?? "—")}</td>
+                      <td className="px-4 py-3"><div className="flex flex-wrap gap-2">
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "precheck")}>Precheck</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-success")}>Success</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-failed")}>Failed</button>
+                      </div></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </Section>
+          );
+        })}
+        <Section title="Replay 占位">
+          <div className="panel p-5 text-sm text-gray-600">Replay files table is ready. v0.6 does not generate real screenshots, HTML, console logs, or network logs.</div>
+        </Section>
       </div>
     </StateView>
   );
@@ -1919,7 +2085,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-sm font-black">ATOS</p>
-            <p className="text-[10px] uppercase text-gray-500">Local Console v0.5</p>
+            <p className="text-[10px] uppercase text-gray-500">Local Console v0.6</p>
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4">

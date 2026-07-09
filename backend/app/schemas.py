@@ -57,6 +57,17 @@ class PlatformWeightUpdate(BaseModel):
     weights: list[dict[str, Any]]
 
 
+class TgeSettingsUpdate(BaseModel):
+    tge_api_base_url: str = ""
+    tge_api_key: Optional[str] = None
+    default_timeout_seconds: int = 10
+    enable_tge_connection_test: bool = False
+    enable_auto_start_environment: bool = False
+    enable_auto_attach_environment: bool = False
+    enable_auto_close_tab: bool = True
+    remark: Optional[str] = None
+
+
 class AccountCreate(BaseModel):
     platform_id: int
     username: str

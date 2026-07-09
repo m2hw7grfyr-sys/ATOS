@@ -21,6 +21,7 @@ from app.models import (
     SystemSetting,
     TGEProfile,
 )
+from app.services.execution import create_execution_task_from_scheduler
 
 
 DEFAULT_SCHEDULER_SETTINGS = {
@@ -370,10 +371,17 @@ def run_once(db: Session) -> dict[str, Any]:
         "dispatched_by": "scheduler.run_once",
     }
     set_status(db, selected, "DISPATCHED", action="MOCK_DISPATCH", reason="Execution placeholder only", selected_account_id=account.id)
+    execution_task = create_execution_task_from_scheduler(db, selected)
     settings["last_dispatched_platform_id"] = selected.platform_id
     save_scheduler_settings(db, settings)
     db.commit()
-    return {"status": "DISPATCHED", "processed": 1, "task_id": selected.id, "account_id": account.id}
+    return {
+        "status": "DISPATCHED",
+        "processed": 1,
+        "task_id": selected.id,
+        "account_id": account.id,
+        "execution_task_id": execution_task.id,
+    }
 
 
 def ensure_platform_weights(db: Session) -> list[PlatformWeight]:

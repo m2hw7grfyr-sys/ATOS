@@ -265,6 +265,13 @@ class TGEProfile(Base, TimestampMixin):
     last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     remark: Mapped[Optional[str]] = mapped_column(Text)
+    connection_status: Mapped[str] = mapped_column(String(40), default="UNKNOWN", index=True)
+    last_connection_test_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_connection_error: Mapped[Optional[str]] = mapped_column(Text)
+    runtime_status: Mapped[str] = mapped_column(String(40), default="UNKNOWN", index=True)
+    websocket_url: Mapped[Optional[str]] = mapped_column(String(1000))
+    debug_port: Mapped[Optional[int]] = mapped_column(Integer)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
 
 class AccountLimit(Base, TimestampMixin):
@@ -345,6 +352,54 @@ class PlatformWeight(Base, TimestampMixin):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     remark: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class ExecutionTask(Base, TimestampMixin):
+    __tablename__ = "execution_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    scheduler_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scheduler_tasks.id"), unique=True, index=True)
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
+    tge_profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tge_profiles.id"), index=True)
+    platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    action_type: Mapped[str] = mapped_column(String(60), default="OPEN_PAGE", index=True)
+    strategy: Mapped[Optional[str]] = mapped_column(String(120))
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(40), default="NEW", index=True)
+    precheck_status: Mapped[str] = mapped_column(String(40), default="PENDING", index=True)
+    environment_status: Mapped[str] = mapped_column(String(40), default="UNKNOWN", index=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class ExecutionLog(Base):
+    __tablename__ = "execution_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    execution_task_id: Mapped[int] = mapped_column(ForeignKey("execution_tasks.id"), index=True)
+    action: Mapped[str] = mapped_column(String(100), index=True)
+    old_status: Mapped[Optional[str]] = mapped_column(String(40))
+    new_status: Mapped[Optional[str]] = mapped_column(String(40))
+    message: Mapped[Optional[str]] = mapped_column(Text)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class ReplayFile(Base):
+    __tablename__ = "replay_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    execution_task_id: Mapped[int] = mapped_column(ForeignKey("execution_tasks.id"), index=True)
+    screenshot_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    html_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    console_log_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    network_log_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class SystemSetting(Base, TimestampMixin):

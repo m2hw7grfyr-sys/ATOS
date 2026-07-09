@@ -1,10 +1,10 @@
 # ATOS
 
-ATOS（AI Traffic Operating System）v0.5 本地可运行 MVP。
+ATOS（AI Traffic Operating System）v0.6 本地可运行 MVP。
 
-当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环，以及可配置 Account Center / TGE Profile 绑定。
+当前版本包含 FastAPI 后端、React/TypeScript 前端、SQLite 本地数据库、Apify 数据源接入、Post Pool、可配置 AI Provider、AI Approved 到 Scheduler Queue 的调度闭环、Account Center / TGE Profile 绑定，以及 Execution Center 的 TGE 连接架构与状态管理。
 
-v0.5 仍然保持 human-in-the-loop：不连接 TGE，不运行 Playwright，不自动粘贴，不自动评论。
+v0.6 仍然保持 human-in-the-loop：只做 TGE 连接 scaffold 和状态管理，不运行 Playwright，不自动粘贴，不自动评论。
 
 ## 技术栈
 
@@ -40,6 +40,10 @@ v0.5 仍然保持 human-in-the-loop：不连接 TGE，不运行 Playwright，不
 - Account Center 支持账号编辑、暂停/恢复、Health 计算、每日限额、工作时间
 - TGE Profile 支持配置和一对一绑定
 - Scheduler 账号选择读取 Account Center 正式数据
+- Execution Center 支持接收 Scheduler 派发任务
+- Execution Precheck 检查账号、TGE Profile、环境 ID、连接状态和风险状态
+- TGE Profile 支持测试连接、状态检查、状态同步
+- System Settings 支持 TGE API 配置，API Key masked 显示
 - Account Center 初版
 - Execution、Engagement、Statistics 占位页面
 
@@ -269,6 +273,45 @@ Scheduler 选择账号时必须满足：
 
 不满足时不会选择该账号，并写入 `scheduler_logs`。
 
+## Execution / TGE 使用流程
+
+### 配置 TGE API
+
+打开 System Settings 的 `TGE Configuration`：
+
+1. 填写 `TGE API Base URL`。
+2. 填写 `TGE API Key`，前端不会回显明文。
+3. 设置 `Timeout Seconds`。
+4. 按需开启 `Connection Test / Auto Start / Auto Attach / Auto Close Tab`。
+
+### 测试 TGE Profile
+
+打开 Account Center，进入账号详情：
+
+- `Test Connection`：调用 TGE Service 测试连接。
+- `Check Status`：查询环境状态。
+- `Sync Status`：同步状态到 `tge_profiles`。
+
+结果状态包括：
+
+- `SUCCESS`
+- `FAILED`
+- `TIMEOUT`
+- `UNAUTHORIZED`
+- `NOT_FOUND`
+- `UNKNOWN_ERROR`
+
+### 从 Scheduler 派发到 Execution
+
+Scheduler `Run Once` 后，如果任务进入 `DISPATCHED`：
+
+1. 自动创建 `execution_tasks`。
+2. 状态为 `RECEIVED`。
+3. Execution 页面可看到任务。
+4. 点击 `Precheck` 可执行初版环境检查。
+
+v0.6 不会打开浏览器，不会连接 Playwright，不会粘贴或提交任何内容。
+
 ## 常用 API
 
 - `GET /health`
@@ -316,6 +359,18 @@ Scheduler 选择账号时必须满足：
 - `GET /tge-profiles`
 - `POST /tge-profiles`
 - `PUT /tge-profiles/{id}`
+- `GET /tge-profiles/{id}/status`
+- `POST /tge-profiles/{id}/test-connection`
+- `POST /tge-profiles/{id}/sync-status`
+- `GET /execution/tasks`
+- `GET /execution/tasks/{id}`
+- `POST /execution/tasks/{id}/precheck`
+- `POST /execution/tasks/{id}/mark-success`
+- `POST /execution/tasks/{id}/mark-failed`
+- `GET /execution/tasks/{id}/replay`
+- `GET /execution/tasks/{id}/logs`
+- `GET /settings/tge`
+- `PUT /settings/tge`
 - `GET /settings`
 - `GET /statistics`
 
@@ -348,7 +403,7 @@ Scheduler 选择账号时必须满足：
 - 28 个工作时间窗口
 - 6 条统计快照
 
-## v0.5 边界
+## v0.6 边界
 
 - 不做 TGE 连接。
 - 不做 Playwright 执行。
