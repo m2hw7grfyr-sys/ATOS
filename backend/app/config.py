@@ -23,7 +23,14 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     log_level: str = "INFO"
     log_format: str = "json"
+    log_dir: str = "storage/logs"
+    log_max_bytes: int = 10_485_760
+    log_backup_count: int = 7
     playwright_mock_mode: bool = True
+    public_api_base_url: str = ""
+    worker_api_token: str = ""
+    worker_token_version: str = "v1"
+    worker_heartbeat_timeout_seconds: int = 90
 
     model_config = SettingsConfigDict(
         env_file=(

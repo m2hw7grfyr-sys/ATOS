@@ -38,11 +38,12 @@ from app.models import (
     StatisticSnapshot,
     SystemSetting,
     TGEProfile,
+    WorkerLog,
     WorkerNode,
 )
 
 
-SEED_VERSION = "sprint-05-semi-auto-reply-pipeline"
+SEED_VERSION = "sprint-06-remote-access-foundation"
 
 
 def main() -> None:
@@ -737,8 +738,14 @@ def main() -> None:
                 name="local-worker",
                 status="ONLINE",
                 host="localhost",
+                hostname="localhost",
+                os="macOS",
+                ip="127.0.0.1",
                 version="sprint-02",
                 capability={"mode": "local", "browser_automation": False},
+                capabilities={"Execution": True, "Browser": False, "AI": False},
+                runtime_status="READY",
+                last_seen=now,
                 last_heartbeat=now,
             )
             db.add(worker)
@@ -747,6 +754,9 @@ def main() -> None:
             worker.status = "ONLINE"
             worker.version = "sprint-02"
             worker.capability = {"mode": "local", "browser_automation": False}
+            worker.capabilities = {"Execution": True, "Browser": False, "AI": False}
+            worker.runtime_status = "READY"
+            worker.last_seen = now
             worker.last_heartbeat = now
 
         remote_worker = db.scalar(select(WorkerNode).where(WorkerNode.name == "remote-worker-demo"))
@@ -755,8 +765,18 @@ def main() -> None:
                 name="remote-worker-demo",
                 status="ONLINE",
                 host="remote-demo",
+                hostname="remote-demo",
+                os="Linux",
+                ip="10.0.0.20",
                 version="sprint-03",
                 capability={"mode": "remote", "browser_automation": False},
+                capabilities={"Execution": True, "Browser": True, "TGE": False, "Playwright": False},
+                cpu=18.5,
+                memory=42.0,
+                gpu=0.0,
+                runtime_status="READY",
+                token_version="v1",
+                last_seen=now,
                 last_heartbeat=now,
             )
             db.add(remote_worker)
@@ -764,7 +784,59 @@ def main() -> None:
         else:
             remote_worker.status = "ONLINE"
             remote_worker.version = "sprint-03"
+            remote_worker.capabilities = {"Execution": True, "Browser": True, "TGE": False, "Playwright": False}
+            remote_worker.cpu = 18.5
+            remote_worker.memory = 42.0
+            remote_worker.gpu = 0.0
+            remote_worker.runtime_status = "READY"
+            remote_worker.last_seen = now
             remote_worker.last_heartbeat = now
+
+        windows_worker = db.scalar(select(WorkerNode).where(WorkerNode.name == "windows-ai-workstation"))
+        if not windows_worker:
+            windows_worker = WorkerNode(
+                name="windows-ai-workstation",
+                status="ONLINE",
+                host="windows-ai-workstation",
+                hostname="WIN-AI-01",
+                os="Windows",
+                ip="10.0.0.50",
+                version="sprint-06",
+                capability={"mode": "remote", "browser_automation": True},
+                capabilities={"AI": True, "Browser": True, "TGE": True, "Playwright": True, "Embedding": True},
+                cpu=22.0,
+                memory=58.0,
+                gpu=12.0,
+                runtime_status="READY",
+                token_version="v1",
+                last_seen=now,
+                last_heartbeat=now,
+            )
+            db.add(windows_worker)
+            db.flush()
+        else:
+            windows_worker.status = "ONLINE"
+            windows_worker.version = "sprint-06"
+            windows_worker.capabilities = {"AI": True, "Browser": True, "TGE": True, "Playwright": True, "Embedding": True}
+            windows_worker.cpu = 22.0
+            windows_worker.memory = 58.0
+            windows_worker.gpu = 12.0
+            windows_worker.runtime_status = "READY"
+            windows_worker.last_seen = now
+            windows_worker.last_heartbeat = now
+
+        for seed_worker in [worker, remote_worker, windows_worker]:
+            if not db.scalar(select(WorkerLog).where(WorkerLog.worker_node_id == seed_worker.id)):
+                db.add(
+                    WorkerLog(
+                        worker_node_id=seed_worker.id,
+                        worker_id=seed_worker.name,
+                        log_type="application",
+                        level="INFO",
+                        message="Seed worker online",
+                        metadata_json={"seed": True, "runtime_status": seed_worker.runtime_status},
+                    )
+                )
 
         demo_statuses = ["RUNNING"] * 10 + ["WAITING_MANUAL"] * 10 + ["SUCCESS"] * 10
         for index, status in enumerate(demo_statuses, start=1):
@@ -1187,7 +1259,7 @@ Community: {{community}}
             "20 posts, 20 AI tasks, 8 scheduler tasks, 4 accounts, "
             "4 TGE profiles, pipeline statistics, 3 LLM providers, 2 prompt templates, "
             "2 prompt versions, 4 provider routes, 5 platform weights, 2 engagement strategies, "
-            "30 execution runtime demo tasks, 2 workers, 4 browser sessions, 15 browser tabs, "
+            "30 execution runtime demo tasks, 3 workers, 4 browser sessions, 15 browser tabs, "
             "5 engagement tasks, 8 reply tasks, 1 actor mapping."
         )
     finally:

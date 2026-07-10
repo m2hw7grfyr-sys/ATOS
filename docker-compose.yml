@@ -31,6 +31,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-atos}:${POSTGRES_PASSWORD:-atos}@postgres:5432/${POSTGRES_DB:-atos}
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-https://atos.example.com}
+      WORKER_API_TOKEN: ${WORKER_API_TOKEN:-}
+      LOG_DIR: /app/storage/logs
     ports:
       - "8000:8000"
     depends_on:

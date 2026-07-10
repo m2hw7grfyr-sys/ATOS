@@ -557,9 +557,33 @@ class WorkerNode(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     status: Mapped[str] = mapped_column(String(40), default="ONLINE", index=True)
     host: Mapped[Optional[str]] = mapped_column(String(200))
+    hostname: Mapped[Optional[str]] = mapped_column(String(200), index=True)
+    os: Mapped[Optional[str]] = mapped_column(String(120))
+    ip: Mapped[Optional[str]] = mapped_column(String(80), index=True)
     version: Mapped[str] = mapped_column(String(60), default="local")
     capability: Mapped[dict] = mapped_column(JSON, default=dict)
+    capabilities: Mapped[dict] = mapped_column(JSON, default=dict)
+    cpu: Mapped[Optional[float]] = mapped_column(Float)
+    memory: Mapped[Optional[float]] = mapped_column(Float)
+    gpu: Mapped[Optional[float]] = mapped_column(Float)
+    runtime_status: Mapped[str] = mapped_column(String(60), default="UNKNOWN", index=True)
+    token_version: Mapped[Optional[str]] = mapped_column(String(40))
+    last_seen: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
     last_heartbeat: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class WorkerLog(Base):
+    __tablename__ = "worker_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    worker_node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("worker_nodes.id"), index=True)
+    worker_id: Mapped[Optional[str]] = mapped_column(String(120), index=True)
+    log_type: Mapped[str] = mapped_column(String(60), default="application", index=True)
+    level: Mapped[str] = mapped_column(String(30), default="INFO", index=True)
+    message: Mapped[str] = mapped_column(Text)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
 
 class ExecutionQueue(Base):

@@ -24,6 +24,7 @@ from app.api import (
     settings,
     statistics,
     tge_profiles,
+    workers,
 )
 from app.config import get_settings
 from app.exception_handlers import (
@@ -75,3 +76,4 @@ app.include_router(accounts.router)
 app.include_router(tge_profiles.router)
 app.include_router(settings.router)
 app.include_router(statistics.router)
+app.include_router(workers.router)
