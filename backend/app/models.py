@@ -553,6 +553,36 @@ class ExecutionQueue(Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text)
 
 
+class BrowserSession(Base, TimestampMixin):
+    __tablename__ = "browser_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    browser_type: Mapped[str] = mapped_column(String(60), default="mock", index=True)
+    worker_id: Mapped[Optional[int]] = mapped_column(ForeignKey("worker_nodes.id"), index=True)
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
+    profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tge_profiles.id"), index=True)
+    status: Mapped[str] = mapped_column(String(40), default="RUNNING", index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    last_heartbeat: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class BrowserTab(Base):
+    __tablename__ = "browser_tabs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("browser_sessions.id"), index=True)
+    url: Mapped[str] = mapped_column(String(1000))
+    title: Mapped[Optional[str]] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(40), default="OPEN", index=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
 class PlatformSelector(Base, TimestampMixin):
     __tablename__ = "platform_selectors"
     __table_args__ = (

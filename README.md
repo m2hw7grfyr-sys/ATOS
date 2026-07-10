@@ -111,6 +111,43 @@ NEW → QUEUED → CLAIMED → RUNNING → WAITING_MANUAL
 
 Retry re-queues the same task and does not create a duplicate task.
 
+## Browser Runtime
+
+Sprint 03 introduces Browser Runtime as the only interface between Execution and browsers:
+
+```text
+Execution
+  ↓
+Browser Runtime
+  ↓
+Browser Adapter
+  ↓
+Playwright Adapter / TGE Adapter / Mock Adapter
+```
+
+Execution must not call Playwright, TGE, AdsPower, Chrome, or other browser implementations directly.
+
+Primary Browser Runtime APIs:
+
+```text
+GET  /browser/runtime
+GET  /browser/sessions
+GET  /browser/tabs
+POST /browser/open
+POST /browser/close
+POST /browser/recover
+```
+
+Browser Runtime manages:
+
+- Session lifecycle
+- Tab lifecycle
+- Session heartbeat
+- Session recovery
+- Replay index metadata
+
+Sprint 03 uses mock-safe adapters by default. It does not require real browser files, screenshots, or networked browser automation.
+
 ## Architecture
 
 ```text
@@ -311,4 +348,5 @@ See:
 docs/sprints/Sprint-00.md
 docs/sprints/Sprint-01.md
 docs/sprints/Sprint-02.md
+docs/sprints/Sprint-03.md
 ```

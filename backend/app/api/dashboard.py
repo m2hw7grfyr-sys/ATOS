@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AIGenerationLog, AITask, Account, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, Post, SchedulerTask, StatisticSnapshot, TGEProfile, WorkerNode
+from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, Post, SchedulerTask, StatisticSnapshot, TGEProfile, WorkerNode
 from app.response import ok
 
 
@@ -80,6 +80,9 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "execution_workers": count(WorkerNode, WorkerNode.status == "ONLINE"),
                 "execution_running": count(ExecutionTask, ExecutionTask.status == "RUNNING"),
                 "execution_success": count(ExecutionTask, ExecutionTask.status == "SUCCESS"),
+                "browser_running": count(BrowserSession, BrowserSession.status.in_(["RUNNING", "ATTACHED"])),
+                "browser_tabs_open": count(BrowserTab, BrowserTab.status == "OPEN"),
+                "browser_dead_sessions": count(BrowserSession, BrowserSession.status == "BROKEN"),
                 "tge_connection_failed": count(TGEProfile, TGEProfile.connection_status == "FAILED"),
                 "tge_running": count(TGEProfile, TGEProfile.runtime_status == "RUNNING"),
                 "tge_unknown": count(TGEProfile, TGEProfile.runtime_status == "UNKNOWN"),

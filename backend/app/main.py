@@ -8,6 +8,7 @@ from app.api import (
     accounts,
     actor_mappings,
     ai,
+    browser,
     dashboard,
     data_sources,
     engagement,
@@ -55,6 +56,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(actor_mappings.router)
+app.include_router(browser.router)
 app.include_router(platform_selectors.router)
 app.include_router(pipeline.router)
 app.include_router(dashboard.router)

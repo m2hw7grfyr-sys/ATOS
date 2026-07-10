@@ -6,8 +6,8 @@ from app.database import get_db
 from app.models import Account, ExecutionLog, ExecutionQueue, ExecutionTask, ReplayFile, ReplayIndex, SchedulerTask, TGEProfile, WorkerNode
 from app.response import ok
 from app.serializers import serialize_model
+from app.services.browser_runtime import BrowserRuntime
 from app.services.execution import ExecutionRuntime, run_precheck, set_execution_status
-from app.services.playwright_runner import close_execution_tab, mark_submitted, prepare_reply, run_open_page
 
 
 router = APIRouter(prefix="/execution", tags=["execution"])
@@ -154,7 +154,17 @@ def run_open_page_task(task_id: int, request: Request, db: Session = Depends(get
         if task.status == "FAILED":
             db.commit()
             return ok(serialize_execution_task(task, db), request.state.trace_id, "precheck failed")
-    run_open_page(db, task)
+    payload = task.payload_json or {}
+    tab = BrowserRuntime(db).open_url(
+        url=str(payload.get("url") or payload.get("post_url") or payload.get("target_url") or "about:blank"),
+        browser_type=str(payload.get("browser_type") or "mock"),
+        worker_id=task.worker_node_id,
+        account_id=task.account_id,
+        profile_id=task.tge_profile_id,
+        execution_task_id=task.id,
+    )
+    task.payload_json = {**payload, "browser_tab_id": tab.id, "browser_session_id": tab.session_id}
+    set_execution_status(db, task, "WAITING_MANUAL", "BROWSER_TAB_OPENED", message="URL opened through Browser Runtime")
     db.commit()
     db.refresh(task)
     return ok(serialize_execution_task(task, db), request.state.trace_id, "open page flow completed")
@@ -171,7 +181,23 @@ def prepare_reply_task(task_id: int, request: Request, db: Session = Depends(get
         if task.status == "FAILED":
             db.commit()
             return ok(serialize_execution_task(task, db), request.state.trace_id, "precheck failed")
-    prepare_reply(db, task)
+    payload = task.payload_json or {}
+    tab = BrowserRuntime(db).open_url(
+        url=str(payload.get("url") or payload.get("post_url") or payload.get("target_url") or "about:blank"),
+        browser_type=str(payload.get("browser_type") or "mock"),
+        worker_id=task.worker_node_id,
+        account_id=task.account_id,
+        profile_id=task.tge_profile_id,
+        execution_task_id=task.id,
+    )
+    task.payload_json = {
+        **payload,
+        "browser_tab_id": tab.id,
+        "browser_session_id": tab.session_id,
+        "fill_status": "BROWSER_RUNTIME_READY",
+        "reply_content_preview": str(payload.get("reply_content") or "")[:240],
+    }
+    set_execution_status(db, task, "WAITING_MANUAL", "PREPARE_REPLY_DELEGATED", message="Prepare reply delegated to Browser Runtime scaffold")
     db.commit()
     db.refresh(task)
     return ok(serialize_execution_task(task, db), request.state.trace_id, "reply prepared")
@@ -184,8 +210,10 @@ def retry_fill_task(task_id: int, request: Request, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="execution task not found")
     task.error_code = None
     task.error_message = None
-    task.status = "ENVIRONMENT_READY"
-    prepare_reply(db, task)
+    task.status = "QUEUED"
+    task.queue_status = "QUEUED"
+    task.payload_json = {**(task.payload_json or {}), "fill_status": "RETRY_QUEUED"}
+    set_execution_status(db, task, "WAITING_MANUAL", "RETRY_FILL_DELEGATED", message="Retry fill delegated to Browser Runtime scaffold")
     db.commit()
     db.refresh(task)
     return ok(serialize_execution_task(task, db), request.state.trace_id, "reply fill retried")
@@ -196,7 +224,9 @@ def mark_submitted_task(task_id: int, request: Request, db: Session = Depends(ge
     task = db.get(ExecutionTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="execution task not found")
-    mark_submitted(db, task)
+    payload = task.payload_json or {}
+    task.payload_json = {**payload, "manual_confirmed": True}
+    set_execution_status(db, task, "SUCCESS", "MANUAL_SUBMITTED", message="Manual submission confirmed")
     db.commit()
     db.refresh(task)
     return ok(serialize_execution_task(task, db), request.state.trace_id, "manual submission confirmed")
@@ -207,7 +237,10 @@ def close_tab_task(task_id: int, request: Request, db: Session = Depends(get_db)
     task = db.get(ExecutionTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="execution task not found")
-    close_execution_tab(db, task)
+    tab_id = (task.payload_json or {}).get("browser_tab_id")
+    if tab_id:
+        BrowserRuntime(db).close_tab(int(tab_id))
+    set_execution_status(db, task, "SUCCESS", "TAB_CLOSED", message="Current browser tab closed through Browser Runtime")
     db.commit()
     return ok(serialize_execution_task(task, db), request.state.trace_id, "tab closed")
 

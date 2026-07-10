@@ -2,7 +2,7 @@ import hashlib
 import os
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.database import Base, SessionLocal, engine
 from app.models import (
@@ -14,6 +14,8 @@ from app.models import (
     ActorMapping,
     AuditLog,
     BusinessEvent,
+    BrowserSession,
+    BrowserTab,
     DataSource,
     EngagementStrategy,
     EngagementTask,
@@ -39,7 +41,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "sprint-02-execution-runtime"
+SEED_VERSION = "sprint-03-browser-runtime"
 
 
 def main() -> None:
@@ -709,6 +711,23 @@ def main() -> None:
             worker.capability = {"mode": "local", "browser_automation": False}
             worker.last_heartbeat = now
 
+        remote_worker = db.scalar(select(WorkerNode).where(WorkerNode.name == "remote-worker-demo"))
+        if not remote_worker:
+            remote_worker = WorkerNode(
+                name="remote-worker-demo",
+                status="ONLINE",
+                host="remote-demo",
+                version="sprint-03",
+                capability={"mode": "remote", "browser_automation": False},
+                last_heartbeat=now,
+            )
+            db.add(remote_worker)
+            db.flush()
+        else:
+            remote_worker.status = "ONLINE"
+            remote_worker.version = "sprint-03"
+            remote_worker.last_heartbeat = now
+
         demo_statuses = ["RUNNING"] * 10 + ["WAITING_MANUAL"] * 10 + ["SUCCESS"] * 10
         for index, status in enumerate(demo_statuses, start=1):
             task_uuid_marker = f"sprint02-demo-{index:02d}"
@@ -781,6 +800,66 @@ def main() -> None:
                 queue.claimed_at = existing.claimed_at
                 queue.started_at = existing.started_at
                 queue.finished_at = existing.finished_at
+
+        browser_sessions = []
+        for index in range(1, 5):
+            browser_type = "tge" if index <= 2 else "mock"
+            worker_ref = worker if index % 2 else remote_worker
+            account = accounts[(index - 1) % len(accounts)]
+            profile = db.scalar(
+                select(TGEProfile).where(
+                    (TGEProfile.bound_account_id == account.id)
+                    | (TGEProfile.account_id == account.id)
+                )
+            )
+            session = db.scalar(
+                select(BrowserSession).where(
+                    BrowserSession.metadata_json["demo_key"].as_string() == f"browser-session-{index}"
+                )
+            )
+            if not session:
+                session = BrowserSession(
+                    browser_type=browser_type,
+                    worker_id=worker_ref.id,
+                    account_id=account.id,
+                    profile_id=profile.id if profile else None,
+                    status="RUNNING",
+                    started_at=now - timedelta(minutes=index * 5),
+                    last_heartbeat=now - timedelta(seconds=index * 10),
+                    metadata_json={"seed": True, "demo_key": f"browser-session-{index}"},
+                )
+                db.add(session)
+                db.flush()
+            else:
+                session.status = "RUNNING"
+                session.worker_id = worker_ref.id
+                session.last_heartbeat = now - timedelta(seconds=index * 10)
+            browser_sessions.append(session)
+
+        existing_tab_count = db.scalar(
+            select(func.count()).select_from(BrowserTab).where(BrowserTab.metadata_json["seed"].as_boolean().is_(True))
+        ) or 0
+        if existing_tab_count < 15:
+            for index in range(1, 16):
+                session = browser_sessions[(index - 1) % len(browser_sessions)]
+                tab = db.scalar(
+                    select(BrowserTab).where(
+                        BrowserTab.metadata_json["demo_key"].as_string() == f"browser-tab-{index}"
+                    )
+                )
+                if tab:
+                    continue
+                db.add(
+                    BrowserTab(
+                        session_id=session.id,
+                        url=f"https://example.com/browser-runtime/tab-{index}",
+                        title=f"Browser Runtime Demo Tab {index}",
+                        status="OPEN" if index <= 12 else "CLOSED",
+                        opened_at=now - timedelta(minutes=index),
+                        closed_at=now - timedelta(minutes=index - 1) if index > 12 else None,
+                        metadata_json={"seed": True, "demo_key": f"browser-tab-{index}"},
+                    )
+                )
 
         platform_weight_specs = {
             "reddit": (50, "Primary discovery platform"),
@@ -1053,7 +1132,8 @@ Community: {{community}}
             "20 posts, 20 AI tasks, 8 scheduler tasks, 4 accounts, "
             "4 TGE profiles, pipeline statistics, 2 LLM providers, 2 prompt templates, "
             "2 prompt versions, 3 provider routes, 5 platform weights, 2 engagement strategies, "
-            "30 execution runtime demo tasks, 1 local worker, 5 engagement tasks, 1 actor mapping."
+            "30 execution runtime demo tasks, 2 workers, 4 browser sessions, 15 browser tabs, "
+            "5 engagement tasks, 1 actor mapping."
         )
     finally:
         db.close()

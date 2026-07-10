@@ -114,6 +114,9 @@ type DashboardData = {
     execution_workers?: number;
     execution_running?: number;
     execution_success?: number;
+    browser_running?: number;
+    browser_tabs_open?: number;
+    browser_dead_sessions?: number;
     tge_connection_failed?: number;
     tge_running?: number;
     tge_unknown?: number;
@@ -444,6 +447,24 @@ function DashboardPage() {
           value: data.overview.execution_success ?? 0,
           icon: CheckCircle2,
           tone: "text-emerald-700",
+        },
+        {
+          label: "Running Browser",
+          value: data.overview.browser_running ?? 0,
+          icon: Workflow,
+          tone: "text-blue-700",
+        },
+        {
+          label: "Running Tabs",
+          value: data.overview.browser_tabs_open ?? 0,
+          icon: FileClock,
+          tone: "text-cyan",
+        },
+        {
+          label: "Dead Sessions",
+          value: data.overview.browser_dead_sessions ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
         },
         {
           label: "Env Ready",
