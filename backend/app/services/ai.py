@@ -326,9 +326,14 @@ def select_provider_route(
     risk_score: int = 0,
 ) -> tuple[LLMProvider | None, LLMProvider | None, ProviderRouting | None]:
     platform = get_platform_slug(db, post)
+    route_task_types = [task_type.upper()]
+    if task_type.upper() == "REPLY_GENERATION":
+        route_task_types.append("REPLY")
+    if task_type.upper() == "REPLY":
+        route_task_types.append("REPLY_GENERATION")
     routes = db.scalars(
         select(ProviderRouting)
-        .where(ProviderRouting.enabled.is_(True), ProviderRouting.task_type == task_type.upper())
+        .where(ProviderRouting.enabled.is_(True), ProviderRouting.task_type.in_(route_task_types))
         .order_by(ProviderRouting.priority.asc(), ProviderRouting.id.asc())
     ).all()
     for route in routes:
@@ -418,15 +423,18 @@ def call_provider(
     ai_task: AITask | None,
     prompt_version: str,
     prompt_version_id: int | None = None,
+    prompt_template_id: int | None = None,
+    final_prompt_hash: str | None = None,
     strategy: str | None = None,
+    task_type: str | None = None,
 ) -> ProviderResult:
-    task_type = "ANALYSIS" if purpose == "analysis" else "REPLY"
+    route_task_type = task_type or ("ANALYSIS" if purpose == "analysis" else "REPLY_GENERATION")
     commercial = ai_task.commercial_score if ai_task else 0
     risk = ai_task.risk_score if ai_task else 0
     provider, fallback_provider, _route = select_provider_route(
         db,
         post=post,
-        task_type=task_type,
+        task_type=route_task_type,
         strategy=strategy,
         commercial_score=commercial,
         risk_score=risk,
@@ -458,12 +466,19 @@ def call_provider(
                 AIGenerationLog(
                     post_id=post.id,
                     ai_task_id=ai_task.id if ai_task else None,
+                    provider_id=selected_provider.id if selected_provider else None,
                     provider=result.provider_used,
+                    provider_type=selected_provider.provider_type if selected_provider else "mock",
                     model=result.model_used,
+                    model_name=result.model_used,
+                    task_type=route_task_type,
+                    prompt_template_id=prompt_template_id,
                     prompt_version=prompt_version,
                     prompt_version_id=prompt_version_id,
+                    final_prompt_hash=final_prompt_hash,
                     purpose=purpose.upper(),
                     duration_ms=duration,
+                    latency_ms=duration,
                     token_estimate=total_tokens,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
@@ -495,12 +510,19 @@ def call_provider(
                 AIGenerationLog(
                     post_id=post.id,
                     ai_task_id=ai_task.id if ai_task else None,
+                    provider_id=selected_provider.id if selected_provider else None,
                     provider=selected_name,
+                    provider_type=selected_provider.provider_type if selected_provider else "mock",
                     model=selected_provider.model_name if selected_provider else "mock-v0.3",
+                    model_name=selected_provider.model_name if selected_provider else "mock-v0.3",
+                    task_type=route_task_type,
+                    prompt_template_id=prompt_template_id,
                     prompt_version=prompt_version,
                     prompt_version_id=prompt_version_id,
+                    final_prompt_hash=final_prompt_hash,
                     purpose=purpose.upper(),
                     duration_ms=failed_duration,
+                    latency_ms=failed_duration,
                     token_estimate=token_estimate(prompt),
                     input_tokens=token_estimate(prompt),
                     output_tokens=0,
@@ -513,6 +535,7 @@ def call_provider(
                     fallback_from_provider=selected_name,
                     fallback_to_provider=None,
                     status="FAILED",
+                    error_code="PROVIDER_FAILED",
                     error_message=error_message,
                 )
             )
@@ -525,12 +548,19 @@ def call_provider(
         AIGenerationLog(
             post_id=post.id,
             ai_task_id=ai_task.id if ai_task else None,
+            provider_id=None,
             provider=result.provider_used,
+            provider_type="mock",
             model=result.model_used,
+            model_name=result.model_used,
+            task_type=route_task_type,
+            prompt_template_id=prompt_template_id,
             prompt_version=prompt_version,
             prompt_version_id=prompt_version_id,
+            final_prompt_hash=final_prompt_hash,
             purpose=purpose.upper(),
             duration_ms=int((time.perf_counter() - fallback_started) * 1000),
+            latency_ms=int((time.perf_counter() - fallback_started) * 1000),
             token_estimate=token_estimate(prompt, result.text),
             input_tokens=token_estimate(prompt),
             output_tokens=token_estimate(result.text),
@@ -543,6 +573,7 @@ def call_provider(
             fallback_from_provider=first_provider_name,
             fallback_to_provider=result.provider_used,
             status="SUCCESS",
+            error_code="FALLBACK_USED",
             error_message="; ".join(errors),
         )
     )
@@ -611,6 +642,8 @@ def test_provider_config(db: Session, provider: LLMProvider) -> dict[str, Any]:
 
 class AIAnalysisService:
     def analyze(self, db: Session, post_id: int) -> dict[str, Any]:
+        from app.services.ai_runtime import AIRequest, AIRuntime, PromptContext, TASK_TYPE_ANALYSIS
+
         post = db.get(Post, post_id)
         if not post:
             raise AIProviderError("post not found")
@@ -626,30 +659,22 @@ class AIAnalysisService:
             db.add(task)
             db.flush()
         task.status = "ANALYZING"
-        platform = get_platform_slug(db, post)
-        template = get_prompt_template(
-            db,
-            template_type="analysis_prompt",
-            platform=platform,
-            strategy=None,
-            tone=None,
+        response = AIRuntime(db).generate_analysis(
+            AIRequest(
+                request_id=f"analysis-{post.id}-{int(time.time())}",
+                task_type=TASK_TYPE_ANALYSIS,
+                post_id=post.id,
+                platform=get_platform_slug(db, post),
+                prompt_context=PromptContext(),
+                ai_task_id=task.id,
+            )
         )
-        version = get_prompt_version(db, template=template, platform=platform, strategy=None, tone=None)
-        prompt_version = version.version if version else (template.version if template else "v0.3")
-        prompt = render_prompt(
-            version.content if version else (template.content if template else DEFAULT_ANALYSIS_PROMPT),
-            post,
-        )
-        result = call_provider(
-            db,
-            post=post,
-            purpose="analysis",
-            prompt=prompt,
-            ai_task=task,
-            prompt_version=prompt_version,
-            prompt_version_id=version.id if version else None,
-        )
-        parsed = safe_json_parse(result.text) or {}
+        if not response.success:
+            task.status = "FAILED"
+            task.fallback_reason = response.error_message
+            db.commit()
+            raise AIProviderError(response.error_message or "AI Runtime analysis failed")
+        parsed = response.json_content or safe_json_parse(response.content) or {}
         analysis = AIAnalysisResult(
             post_id=post.id,
             ai_task_id=task.id,
@@ -658,23 +683,23 @@ class AIAnalysisService:
             commercial_score=int(parsed.get("commercial_score", 50) or 0),
             risk_score=int(parsed.get("risk_score", 10) or 0),
             recommended_strategy=str(parsed.get("recommended_strategy", "PURE_HELP")),
-            summary=str(parsed.get("summary", result.text[:500])),
-            provider_used=result.provider_used,
-            model_used=result.model_used,
-            generation_source=result.generation_source,
-            raw_result=parsed or {"text": result.text},
+            summary=str(parsed.get("summary", response.content[:500])),
+            provider_used=response.provider_used or "Mock Provider",
+            model_used=response.model_used or "mock-v0.3",
+            generation_source=response.generation_source or ("FALLBACK" if response.fallback_used else "LLM"),
+            raw_result=parsed or {"text": response.content},
         )
         db.add(analysis)
-        task.provider = result.provider_used
-        task.model = result.model_used
-        task.prompt_version_id = version.id if version else None
+        task.provider = response.provider_used or "Mock Provider"
+        task.model = response.model_used or "mock-v0.3"
+        task.prompt_version_id = response.prompt_version_id
         task.strategy = analysis.recommended_strategy or "PURE_HELP"
         task.commercial_score = analysis.commercial_score
         task.risk_score = analysis.risk_score
         task.result = analysis.raw_result
-        task.generation_source = result.generation_source
-        task.fallback_used = result.fallback_used
-        task.status = "FALLBACK_USED" if result.fallback_used else "ANALYZED"
+        task.generation_source = response.generation_source or ("FALLBACK" if response.fallback_used else "LLM")
+        task.fallback_used = response.fallback_used
+        task.status = "FALLBACK_USED" if response.fallback_used else "ANALYZED"
         post.status = "ANALYZED"
         db.commit()
         db.refresh(task)
@@ -693,6 +718,8 @@ class ReplyGenerationService:
         variables: dict[str, Any] | None = None,
         task_id: int | None = None,
     ) -> dict[str, Any]:
+        from app.services.ai_runtime import AIRequest, AIRuntime, PromptContext, TASK_TYPE_REPLY
+
         post = db.get(Post, post_id)
         if not post:
             raise AIProviderError("post not found")
@@ -710,54 +737,43 @@ class ReplyGenerationService:
             db.add(task)
             db.flush()
         task.status = "GENERATING"
-        platform = get_platform_slug(db, post)
-        template = get_prompt_template(
-            db,
-            template_type="reply_prompt",
-            platform=platform,
-            strategy=strategy,
-            tone=tone,
+        response = AIRuntime(db).generate_reply(
+            AIRequest(
+                request_id=f"reply-{post.id}-{int(time.time())}",
+                task_type=TASK_TYPE_REPLY,
+                post_id=post.id,
+                platform=get_platform_slug(db, post),
+                strategy=strategy,
+                prompt_context=PromptContext(strategy=strategy, tone=tone, variables=variables or {}),
+                ai_task_id=task.id,
+            )
         )
-        version = get_prompt_version(db, template=template, platform=platform, strategy=strategy, tone=tone)
-        prompt_version = version.version if version else (template.version if template else "v0.3")
-        prompt = render_prompt(
-            version.content if version else (template.content if template else DEFAULT_REPLY_PROMPT),
-            post,
-            strategy=strategy,
-            tone=tone,
-            variables=json.dumps(variables or {}, ensure_ascii=False),
-        )
-        result = call_provider(
-            db,
-            post=post,
-            purpose="reply",
-            prompt=prompt,
-            ai_task=task,
-            prompt_version=prompt_version,
-            prompt_version_id=version.id if version else None,
-            strategy=strategy,
-        )
+        if not response.success:
+            task.status = "FAILED"
+            task.fallback_reason = response.error_message
+            db.commit()
+            raise AIProviderError(response.error_message or "AI Runtime reply generation failed")
         existing_versions = db.scalars(select(Reply).where(Reply.ai_task_id == task.id)).all()
         reply = Reply(
             post_id=post.id,
             ai_task_id=task.id,
-            content=result.text,
-            source=result.generation_source,
+            content=response.content,
+            source=response.generation_source or ("FALLBACK" if response.fallback_used else "LLM"),
             version=len(existing_versions) + 1,
             status="GENERATED",
         )
         db.add(reply)
-        task.provider = result.provider_used
-        task.model = result.model_used
-        task.prompt_version_id = version.id if version else None
+        task.provider = response.provider_used or "Mock Provider"
+        task.model = response.model_used or "mock-v0.3"
+        task.prompt_version_id = response.prompt_version_id
         task.strategy = strategy.upper()
-        task.generation_source = result.generation_source
-        task.fallback_used = result.fallback_used
-        task.status = "FALLBACK_USED" if result.fallback_used else "GENERATED"
+        task.generation_source = response.generation_source or ("FALLBACK" if response.fallback_used else "LLM")
+        task.fallback_used = response.fallback_used
+        task.status = "FALLBACK_USED" if response.fallback_used else "GENERATED"
         db.commit()
         db.refresh(task)
         db.refresh(reply)
-        return {"task": task, "reply": reply, "fallback_used": result.fallback_used}
+        return {"task": task, "reply": reply, "fallback_used": response.fallback_used}
 
 
 DEFAULT_ANALYSIS_PROMPT = """Analyze this post and return JSON only:

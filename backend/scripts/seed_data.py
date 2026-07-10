@@ -41,7 +41,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "sprint-03-browser-runtime"
+SEED_VERSION = "sprint-04-ai-runtime"
 
 
 def main() -> None:
@@ -918,6 +918,22 @@ def main() -> None:
                 "max_retries": 1,
                 "remark": "Optional real provider. Enable after adding an API key.",
             },
+            {
+                "provider_name": "Ollama Provider",
+                "provider_type": "ollama",
+                "api_base_url": "http://127.0.0.1:11434",
+                "api_key": None,
+                "model_name": "llama3.1:8b",
+                "enabled": False,
+                "priority": 50,
+                "use_for_analysis": True,
+                "use_for_reply": True,
+                "use_for_embedding": True,
+                "is_mock": False,
+                "timeout_seconds": 60,
+                "max_retries": 0,
+                "remark": "Local LLM provider scaffold. Enable when Ollama is available.",
+            },
         ]
         for spec in provider_specs:
             provider = db.scalar(
@@ -1023,6 +1039,7 @@ Community: {{community}}
         route_specs = [
             ("Default Analysis Route", "ANALYSIS", None),
             ("Default Reply Route", "REPLY", None),
+            ("Default Reply Generation Route", "REPLY_GENERATION", None),
             ("Default Embedding Route", "EMBEDDING", None),
         ]
         for name, task_type, strategy in route_specs:
@@ -1130,8 +1147,8 @@ Community: {{community}}
         print(
             "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
             "20 posts, 20 AI tasks, 8 scheduler tasks, 4 accounts, "
-            "4 TGE profiles, pipeline statistics, 2 LLM providers, 2 prompt templates, "
-            "2 prompt versions, 3 provider routes, 5 platform weights, 2 engagement strategies, "
+            "4 TGE profiles, pipeline statistics, 3 LLM providers, 2 prompt templates, "
+            "2 prompt versions, 4 provider routes, 5 platform weights, 2 engagement strategies, "
             "30 execution runtime demo tasks, 2 workers, 4 browser sessions, 15 browser tabs, "
             "5 engagement tasks, 1 actor mapping."
         )

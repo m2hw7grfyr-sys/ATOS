@@ -148,6 +148,64 @@ Browser Runtime manages:
 
 Sprint 03 uses mock-safe adapters by default. It does not require real browser files, screenshots, or networked browser automation.
 
+## AI Runtime
+
+Sprint 04 introduces AI Runtime as the only interface between AI Workspace and model providers:
+
+```text
+AI Workspace
+  ↓
+AI Runtime
+  ↓
+Provider Router
+  ↓
+Prompt Engine
+  ↓
+Provider Adapter
+  ↓
+Mock / OpenAI / Ollama / Custom HTTP
+```
+
+AI Workspace must not call OpenAI, Ollama, or any other LLM SDK directly.
+
+Primary AI Runtime APIs:
+
+```text
+GET  /ai-runtime/providers
+POST /ai-runtime/providers
+PUT  /ai-runtime/providers/{id}
+POST /ai-runtime/providers/{id}/test
+GET  /ai-runtime/health
+GET  /ai-runtime/logs
+POST /ai-runtime/generate
+POST /ai-runtime/embed
+```
+
+AI Runtime manages:
+
+- Provider routing
+- Prompt building
+- Prompt version binding
+- Mock mode
+- Fallback
+- Cost and latency logging
+- Provider health checks
+- Generation logs
+
+Provider types currently supported by the configuration layer:
+
+```text
+mock
+openai
+anthropic
+gemini
+ollama
+custom
+custom_http
+```
+
+When no real API key is configured, ATOS automatically falls back to `Mock Provider`, so the full AI flow remains runnable offline.
+
 ## Architecture
 
 ```text

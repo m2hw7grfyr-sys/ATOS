@@ -31,7 +31,15 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 ALLOWED_PROVIDER_TYPES = {"openai", "anthropic", "gemini", "ollama", "custom", "custom_http", "mock"}
-ALLOWED_TASK_TYPES = {"ANALYSIS", "REPLY", "EMBEDDING"}
+ALLOWED_TASK_TYPES = {
+    "ANALYSIS",
+    "REPLY",
+    "REPLY_GENERATION",
+    "REWRITE",
+    "EMBEDDING",
+    "CLASSIFICATION",
+    "SUMMARY",
+}
 
 
 def serialize_llm_provider(provider: LLMProvider) -> dict:

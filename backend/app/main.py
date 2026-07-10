@@ -8,6 +8,7 @@ from app.api import (
     accounts,
     actor_mappings,
     ai,
+    ai_runtime,
     browser,
     dashboard,
     data_sources,
@@ -64,6 +65,7 @@ app.include_router(data_sources.router)
 app.include_router(posts.router)
 app.include_router(prompts.router)
 app.include_router(ai.router)
+app.include_router(ai_runtime.router)
 app.include_router(scheduler.router)
 app.include_router(execution.router)
 app.include_router(engagement.router)
