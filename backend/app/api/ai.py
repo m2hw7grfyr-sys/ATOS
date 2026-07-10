@@ -5,10 +5,13 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import AIAnalysisResult, AITask, Post, Reply
 from app.response import ok
-from app.schemas import MockAIGenerateRequest, PromptPreviewRequest, ReplyGenerateRequest, ReplyUpdate
+from app.schemas import AIBatchRequest, MockAIGenerateRequest, PromptPreviewRequest, ReplyGenerateRequest, ReplyUpdate
 from app.serializers import serialize_model
 from app.services.ai import AIAnalysisService, AIProviderError, ReplyGenerationService, preview_prompt
+from app.services.audit import write_audit
+from app.services.pipeline import BusinessPipelineService
 from app.services.scheduler import get_scheduler_settings, queue_approved_ai_task
+from app.services.timeline import set_post_status
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -140,6 +143,25 @@ def approve_task(task_id: int, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="AI task has no reply")
     task.status = "APPROVED"
     reply.status = "APPROVED"
+    post = db.get(Post, task.post_id)
+    if post:
+        set_post_status(
+            db,
+            post,
+            "APPROVED",
+            event_name="ReplyApproved",
+            actor="operator",
+            detail={"ai_task_id": task.id, "reply_id": reply.id},
+        )
+        write_audit(
+            db,
+            action="Approve",
+            entity_type="Post",
+            entity_uuid=post.uuid,
+            actor="operator",
+            trace_id=request.state.trace_id,
+            detail={"post_id": post.id, "ai_task_id": task.id, "reply_id": reply.id},
+        )
     scheduler_task = None
     if get_scheduler_settings(db).get("auto_queue_on_approval"):
         scheduler_task = queue_approved_ai_task(db, ai_task_id=task.id)
@@ -163,6 +185,17 @@ def reject_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     task.status = "REJECTED"
     if reply:
         reply.status = "REJECTED"
+    post = db.get(Post, task.post_id)
+    if post:
+        write_audit(
+            db,
+            action="Reject",
+            entity_type="Post",
+            entity_uuid=post.uuid,
+            actor="operator",
+            trace_id=request.state.trace_id,
+            detail={"post_id": post.id, "ai_task_id": task.id},
+        )
     db.commit()
     db.refresh(task)
     return ok(serialize_task(task, db), request.state.trace_id, "AI task rejected")
@@ -184,3 +217,29 @@ def update_reply(
     db.commit()
     db.refresh(reply)
     return ok(serialize_model(reply), request.state.trace_id, "reply updated")
+
+
+@router.post("/tasks/batch", status_code=status.HTTP_202_ACCEPTED)
+def batch_ai_tasks(
+    payload: AIBatchRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    post_ids = list(payload.post_ids)
+    if payload.task_ids:
+        tasks = db.scalars(select(AITask).where(AITask.id.in_(payload.task_ids))).all()
+        post_ids.extend([task.post_id for task in tasks])
+    post_ids = list(dict.fromkeys(post_ids))
+    if not post_ids:
+        raise HTTPException(status_code=400, detail="No tasks or posts selected")
+    service = BusinessPipelineService(db, actor="operator", trace_id=request.state.trace_id)
+    action = payload.action.upper()
+    if action in {"GENERATE", "ANALYZE"}:
+        result = service.batch(post_ids, "ANALYZE")
+    elif action == "APPROVE":
+        result = service.batch(post_ids, "APPROVE")
+    elif action == "REJECT":
+        result = service.batch(post_ids, "REJECT")
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported AI batch action: {payload.action}")
+    return ok(result, request.state.trace_id, "AI batch action completed")

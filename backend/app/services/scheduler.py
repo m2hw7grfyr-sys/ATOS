@@ -117,6 +117,7 @@ def queue_approved_ai_task(
     ai_task_id: int,
     account_id: int | None = None,
     priority: str = "MEDIUM",
+    source: str = "AI_WORKSPACE",
 ) -> SchedulerTask:
     ai_task = db.get(AITask, ai_task_id)
     if not ai_task or ai_task.status != "APPROVED":
@@ -136,13 +137,17 @@ def queue_approved_ai_task(
         )
     )
     if existing:
+        existing.ai_task_id = existing.ai_task_id or ai_task.id
+        existing.source = existing.source or source
         return existing
     task = SchedulerTask(
         task_type="REPLY",
         platform_id=post.platform_id,
         account_id=account_id,
         post_id=post.id,
+        ai_task_id=ai_task.id,
         reply_id=reply.id,
+        source=source,
         priority=priority.upper(),
         payload={
             "ai_task_id": ai_task.id,

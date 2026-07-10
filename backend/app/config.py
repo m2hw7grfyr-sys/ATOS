@@ -2,9 +2,11 @@ from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = BACKEND_DIR.parent
 
 
 class Settings(BaseSettings):
@@ -31,6 +33,21 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def normalize_database_url(self) -> "Settings":
+        prefix = "sqlite:///"
+        if self.database_url.startswith("sqlite:////"):
+            return self
+        if not self.database_url.startswith(prefix):
+            return self
+        raw_path = self.database_url[len(prefix) :]
+        if raw_path in {":memory:", ""}:
+            return self
+        path = Path(raw_path)
+        if not path.is_absolute():
+            self.database_url = f"sqlite:///{ROOT_DIR / path}"
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:

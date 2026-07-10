@@ -33,6 +33,12 @@ def summary(request: Request, db: Session = Depends(get_db)):
     ai_cost = db.scalar(select(func.coalesce(func.sum(AIGenerationLog.estimated_cost), 0))) or 0
     healthy_providers = count(LLMProvider, LLMProvider.health_status.in_(["HEALTHY", "UNKNOWN"]))
     unhealthy_providers = count(LLMProvider, LLMProvider.health_status.in_(["WARNING", "ERROR", "DISABLED"]))
+    today_imported = metric_value("pipeline_import")
+    today_ai = metric_value("pipeline_ai")
+    pipeline_approved = count(Post, Post.status.in_(["APPROVED", "SCHEDULED"]))
+    pipeline_scheduled = count(Post, Post.status == "SCHEDULED")
+    pipeline_total = count(Post)
+    pipeline_success_rate = round((pipeline_scheduled / max(pipeline_total, 1)) * 100, 2)
 
     return ok(
         {
@@ -90,6 +96,11 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "fallback_rate": round((fallback_logs / total_ai_logs) * 100, 2) if total_ai_logs else 0,
                 "average_latency_ms": round(float(avg_latency), 2),
                 "ai_cost_today": round(float(ai_cost), 6),
+                "pipeline_today_imported": today_imported or count(Post),
+                "pipeline_today_ai": today_ai or count(Post, Post.status.in_(["AI_COMPLETED", "WAITING_REVIEW", "APPROVED", "SCHEDULED"])),
+                "pipeline_approved": pipeline_approved,
+                "pipeline_scheduled": pipeline_scheduled,
+                "pipeline_success_rate": pipeline_success_rate,
             },
             "platform_health": [
                 {

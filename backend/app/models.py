@@ -91,7 +91,41 @@ class Post(Base, TimestampMixin):
     tags: Mapped[list] = mapped_column(JSON, default=list)
     raw_json: Mapped[dict] = mapped_column(JSON, default=dict)
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    pipeline_stage: Mapped[str] = mapped_column(String(40), default="NEW", index=True)
+    ready_for_ai_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    ai_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(30), default="NEW", index=True)
+
+
+class PostTimeline(Base):
+    __tablename__ = "post_timelines"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
+    event_name: Mapped[str] = mapped_column(String(120), index=True)
+    old_status: Mapped[Optional[str]] = mapped_column(String(40))
+    new_status: Mapped[str] = mapped_column(String(40), index=True)
+    actor: Mapped[str] = mapped_column(String(120), default="system")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class BusinessEvent(Base):
+    __tablename__ = "business_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    event_name: Mapped[str] = mapped_column(String(120), index=True)
+    entity_type: Mapped[str] = mapped_column(String(80), index=True)
+    entity_id: Mapped[Optional[int]] = mapped_column(Integer, index=True)
+    post_id: Mapped[Optional[int]] = mapped_column(ForeignKey("posts.id"), index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(30), default="PUBLISHED", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
 
 class CrawlLog(Base):
@@ -410,7 +444,9 @@ class SchedulerTask(Base, TimestampMixin):
     platform_id: Mapped[int] = mapped_column(ForeignKey("platforms.id"), index=True)
     account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
     post_id: Mapped[Optional[int]] = mapped_column(ForeignKey("posts.id"))
+    ai_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ai_tasks.id"), index=True)
     reply_id: Mapped[Optional[int]] = mapped_column(ForeignKey("replies.id"))
+    source: Mapped[str] = mapped_column(String(60), default="MANUAL", index=True)
     priority: Mapped[str] = mapped_column(String(20), default="MEDIUM", index=True)
     scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     earliest_execute_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
@@ -604,3 +640,15 @@ class AuditLog(Base):
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
     duration_ms: Mapped[Optional[float]] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class FilterPreset(Base, TimestampMixin):
+    __tablename__ = "filter_presets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    scope: Mapped[str] = mapped_column(String(60), index=True)
+    filters: Mapped[dict] = mapped_column(JSON, default=dict)
+    actor: Mapped[str] = mapped_column(String(120), default="system")
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)

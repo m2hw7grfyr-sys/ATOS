@@ -14,6 +14,7 @@ from app.api import (
     execution,
     health,
     platform_selectors,
+    pipeline,
     posts,
     prompts,
     scheduler,
@@ -55,6 +56,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(actor_mappings.router)
 app.include_router(platform_selectors.router)
+app.include_router(pipeline.router)
 app.include_router(dashboard.router)
 app.include_router(data_sources.router)
 app.include_router(posts.router)

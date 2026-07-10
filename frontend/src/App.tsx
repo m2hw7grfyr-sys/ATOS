@@ -123,6 +123,11 @@ type DashboardData = {
     fallback_rate?: number;
     average_latency_ms?: number;
     ai_cost_today?: number;
+    pipeline_today_imported?: number;
+    pipeline_today_ai?: number;
+    pipeline_approved?: number;
+    pipeline_scheduled?: number;
+    pipeline_success_rate?: number;
   };
   platform_health: Array<{
     name: string;
@@ -132,6 +137,21 @@ type DashboardData = {
   }>;
   system_health: Array<{ service: string; status: string }>;
 };
+
+type PagedRecords = {
+  items: RecordItem[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    pages: number;
+  };
+};
+
+function listFromResponse(value: RecordItem[] | PagedRecords | null): RecordItem[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : value.items ?? [];
+}
 
 const navigation = [
   { key: "dashboard", label: "Dashboard", icon: Gauge },
@@ -467,6 +487,36 @@ function DashboardPage() {
           label: "AI Cost",
           value: `$${data.overview.ai_cost_today ?? 0}`,
           icon: Database,
+          tone: "text-blue-700",
+        },
+        {
+          label: "Pipeline Imported",
+          value: data.overview.pipeline_today_imported ?? 0,
+          icon: Database,
+          tone: "text-cyan",
+        },
+        {
+          label: "Pipeline AI",
+          value: data.overview.pipeline_today_ai ?? 0,
+          icon: BrainCircuit,
+          tone: "text-teal",
+        },
+        {
+          label: "Pipeline Approved",
+          value: data.overview.pipeline_approved ?? 0,
+          icon: CheckCircle2,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Pipeline Scheduled",
+          value: data.overview.pipeline_scheduled ?? 0,
+          icon: CalendarClock,
+          tone: "text-amber",
+        },
+        {
+          label: "Pipeline Success",
+          value: `${data.overview.pipeline_success_rate ?? 0}%`,
+          icon: Activity,
           tone: "text-blue-700",
         },
       ]
@@ -883,40 +933,50 @@ function PostPoolPage() {
   const [platform, setPlatform] = useState("");
   const [status, setStatus] = useState("");
   const [sourceId, setSourceId] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [community, setCommunity] = useState("");
+  const [page, setPage] = useState(1);
+  const [selectedPostIds, setSelectedPostIds] = useState<number[]>([]);
   const [feedback, setFeedback] = useState("");
   const [busyPostId, setBusyPostId] = useState<number | null>(null);
   const [rawPost, setRawPost] = useState<RecordItem | null>(null);
+  const [timeline, setTimeline] = useState<RecordItem[] | null>(null);
   const sources = useApiData<DataSourceItem[]>("/data-sources");
   const query = new URLSearchParams();
   if (platform) query.set("platform", platform);
   if (status) query.set("status", status);
   if (sourceId) query.set("source_id", sourceId);
-  const { data, error, loading, reload } = useApiData<RecordItem[]>(
+  if (keyword) query.set("keyword", keyword);
+  if (community) query.set("community", community);
+  query.set("page", String(page));
+  query.set("page_size", "20");
+  const { data, error, loading, reload } = useApiData<PagedRecords>(
     `/posts${query.size ? `?${query.toString()}` : ""}`,
   );
+  const posts = listFromResponse(data);
+  const pagination = data?.pagination;
 
   async function runPostAction(post: RecordItem, action: "analyze" | "reply" | "workspace") {
     const postId = Number(post.id);
     setBusyPostId(postId);
     setFeedback("");
     try {
-      if (action === "reply") {
-        await apiRequest(`/ai/tasks/${postId}/generate-reply`, {
+      if (action === "reply" || action === "workspace") {
+        await apiRequest(`/pipeline/post/${postId}`, {
           method: "POST",
           body: JSON.stringify({
-            strategy: "PURE_HELP",
-            tone: "supportive",
-            variables: {},
+            action: "RUN",
+            auto_approve: false,
+            send_to_scheduler: false,
           }),
         });
         setFeedback("回复草稿已生成，可到 AI Workspace 审核。");
       } else {
-        await apiRequest(`/ai/tasks/${postId}/analyze`, { method: "POST" });
-        setFeedback(
-          action === "workspace"
-            ? "帖子已送入 AI Workspace 并完成初步分析。"
-            : "帖子已完成 AI 分析。",
-        );
+        await apiRequest(`/pipeline/post/${postId}`, {
+          method: "POST",
+          body: JSON.stringify({ action: "ANALYZE" }),
+        });
+        setFeedback("帖子已完成 AI 分析。");
       }
       await reload();
     } catch (reason) {
@@ -929,18 +989,41 @@ function PostPoolPage() {
   async function bulkAddToScheduler() {
     setFeedback("");
     try {
-      const result = await apiRequest<RecordItem>("/scheduler/tasks/bulk-from-approved", {
-        method: "POST",
-        body: JSON.stringify({
-          post_ids: (data ?? []).map((post) => Number(post.id)).filter(Boolean),
-          priority: "MEDIUM",
-        }),
-      });
-      setFeedback(
-        `批量加入 Scheduler 完成：${String(result.queued_count ?? 0)} 条，跳过 ${String(result.skipped_count ?? 0)} 条。`,
-      );
+      const result = await runBatch("SEND_TO_SCHEDULER");
+      setFeedback(`批量加入 Scheduler 完成：${String(result.scheduled ?? 0)} 条。`);
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "批量加入失败");
+    }
+  }
+
+  async function runBatch(action: string) {
+    const postIds = selectedPostIds.length ? selectedPostIds : posts.map((post) => Number(post.id)).filter(Boolean);
+    const result = await apiRequest<RecordItem>("/pipeline/batch", {
+      method: "POST",
+      body: JSON.stringify({ post_ids: postIds, action, priority: "MEDIUM" }),
+    });
+    await reload();
+    setSelectedPostIds([]);
+    return result;
+  }
+
+  async function handleBatch(action: string) {
+    setFeedback("");
+    try {
+      const result = await runBatch(action);
+      setFeedback(`${action} 完成：处理 ${String(result.processed ?? 0)} 条，错误 ${String((result.errors as unknown[])?.length ?? 0)} 条。`);
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "批量操作失败");
+    }
+  }
+
+  async function showTimeline(post: RecordItem) {
+    try {
+      const rows = await apiRequest<RecordItem[]>(`/posts/${String(post.id)}/timeline`);
+      setTimeline(rows);
+      setFeedback(`已加载 Timeline：${String(post.title ?? "")}`);
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Timeline 加载失败");
     }
   }
 
@@ -951,19 +1034,26 @@ function PostPoolPage() {
           <SlidersHorizontal className="mb-2 h-5 w-5 text-gray-500" />
           <label className="text-xs font-semibold text-gray-600">Platform<select className="field mt-2 min-w-36" value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="">All</option>{Array.from(new Set((sources.data ?? []).map((item) => item.platform).filter(Boolean))).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label className="text-xs font-semibold text-gray-600">Source<select className="field mt-2 min-w-48" value={sourceId} onChange={(e) => setSourceId(e.target.value)}><option value="">All</option>{(sources.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-	          <label className="text-xs font-semibold text-gray-600">Status<select className="field mt-2 min-w-36" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option><option value="NEW">NEW</option><option value="NORMALIZED">NORMALIZED</option><option value="INCOMPLETE">INCOMPLETE</option><option value="ANALYZED">ANALYZED</option><option value="ARCHIVED">ARCHIVED</option></select></label>
+          <label className="text-xs font-semibold text-gray-600">Keyword<input className="field mt-2 min-w-44" value={keyword} onChange={(e) => { setKeyword(e.target.value); setPage(1); }} placeholder="title / author" /></label>
+          <label className="text-xs font-semibold text-gray-600">Community<input className="field mt-2 min-w-40" value={community} onChange={(e) => { setCommunity(e.target.value); setPage(1); }} placeholder="ADHD" /></label>
+	          <label className="text-xs font-semibold text-gray-600">Status<select className="field mt-2 min-w-44" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}><option value="">All</option><option value="NEW">NEW</option><option value="NORMALIZED">NORMALIZED</option><option value="READY_FOR_AI">READY_FOR_AI</option><option value="ANALYZING">ANALYZING</option><option value="AI_COMPLETED">AI_COMPLETED</option><option value="WAITING_REVIEW">WAITING_REVIEW</option><option value="APPROVED">APPROVED</option><option value="SCHEDULED">SCHEDULED</option><option value="ARCHIVED">ARCHIVED</option><option value="INCOMPLETE">INCOMPLETE</option></select></label>
           <button className="icon-button mb-0.5" title="刷新" onClick={reload}><RefreshCw className="h-4 w-4" /></button>
+          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("ANALYZE")}><BrainCircuit className="h-4 w-4" />Analyze</button>
+          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("APPROVE")}><CheckCircle2 className="h-4 w-4" />Approve</button>
+          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("REJECT")}>Reject</button>
+          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("ARCHIVE")}>Archive</button>
           <button className="button mb-0.5" onClick={bulkAddToScheduler}><CalendarClock className="h-4 w-4" />批量加入 Scheduler</button>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
-        <Section title={`Unified Post Pool · ${data?.length ?? 0}`}>
+        <Section title={`Unified Post Pool · ${pagination?.total ?? posts.length}`}>
           <div className="panel overflow-x-auto">
-            <table className="w-full min-w-[1380px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1480px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-	                {["Platform", "Status", "Title", "Author", "Community", "Score", "Comments", "Source", "Actor", "Mapping", "URL", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+	                {["Select", "Platform", "Status", "Title", "Author", "Community", "Score", "Comments", "Source", "Actor", "Mapping", "URL", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
               </tr></thead>
-              <tbody>{(data ?? []).map((post, index) => (
+              <tbody>{posts.map((post, index) => (
                 <tr key={String(post.uuid ?? index)} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3"><input type="checkbox" checked={selectedPostIds.includes(Number(post.id))} onChange={(event) => setSelectedPostIds((current) => event.target.checked ? [...current, Number(post.id)] : current.filter((id) => id !== Number(post.id)))} /></td>
 	                  <td className="px-4 py-3 font-semibold uppercase text-teal">{String(post.platform ?? "—")}</td>
 	                  <td className="px-4 py-3"><StatusBadge value={post.status ?? "—"} /></td>
 	                  <td className="max-w-sm px-4 py-3"><p className="line-clamp-2 font-medium">{String(post.title || "(Untitled)")}</p></td>
@@ -980,6 +1070,7 @@ function PostPoolPage() {
                       <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "analyze")}>Analyze</button>
 	                      <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "reply")}>Generate Reply</button>
 	                      <button className="button" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "workspace")}><BrainCircuit className="h-4 w-4" />Send</button>
+                        <button className="button-secondary" onClick={() => void showTimeline(post)}>Timeline</button>
 	                      <button className="button-secondary" onClick={() => setRawPost(post)}>Raw JSON</button>
 	                    </div>
 	                  </td>
@@ -988,11 +1079,38 @@ function PostPoolPage() {
             </table>
           </div>
 	        </Section>
+        {pagination && (
+          <div className="panel flex items-center justify-between p-3 text-sm text-gray-600">
+            <span>Page {pagination.page} / {pagination.pages || 1} · {pagination.total} records</span>
+            <div className="flex gap-2">
+              <button className="button-secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
+              <button className="button-secondary" disabled={page >= (pagination.pages || 1)} onClick={() => setPage((current) => current + 1)}>Next</button>
+            </div>
+          </div>
+        )}
 	        {rawPost && (
 	          <Section title="Raw JSON Viewer" action={<button className="button-secondary" onClick={() => setRawPost(null)}>关闭</button>}>
 	            <pre className="panel max-h-[520px] overflow-auto p-4 text-xs text-gray-600">{JSON.stringify(rawPost.raw_json ?? {}, null, 2)}</pre>
 	          </Section>
 	        )}
+        {timeline && (
+          <Section title="Post Timeline" action={<button className="button-secondary" onClick={() => setTimeline(null)}>关闭</button>}>
+            <div className="panel overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">{["Time", "Event", "Old", "New", "Actor"].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead>
+                <tbody>{timeline.map((item) => (
+                  <tr key={String(item.uuid)} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3">{String(item.created_at ?? "—")}</td>
+                    <td className="px-4 py-3 font-semibold">{String(item.event_name ?? "—")}</td>
+                    <td className="px-4 py-3">{String(item.old_status ?? "—")}</td>
+                    <td className="px-4 py-3"><StatusBadge value={item.new_status} /></td>
+                    <td className="px-4 py-3">{String(item.actor ?? "—")}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </Section>
+        )}
 	      </div>
     </StateView>
   );
@@ -1000,13 +1118,15 @@ function PostPoolPage() {
 
 function AIWorkspacePage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/ai/tasks");
-  const posts = useApiData<RecordItem[]>("/posts");
+  const posts = useApiData<PagedRecords>("/posts?page_size=100");
   const [postId, setPostId] = useState("1");
   const [strategy, setStrategy] = useState("PURE_HELP");
   const [tone, setTone] = useState("supportive");
   const [feedback, setFeedback] = useState("");
   const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
   const [promptPreview, setPromptPreview] = useState<RecordItem | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
+  const postOptions = listFromResponse(posts.data);
 
   async function analyzeSelected() {
     try {
@@ -1104,6 +1224,26 @@ function AIWorkspacePage() {
     }
   }
 
+  async function batchAI(action: string) {
+    setFeedback("");
+    try {
+      const result = await apiRequest<RecordItem>("/ai/tasks/batch", {
+        method: "POST",
+        body: JSON.stringify({
+          task_ids: selectedTaskIds,
+          action,
+          strategy,
+          tone,
+        }),
+      });
+      setFeedback(`${action} 批量完成：处理 ${String(result.processed ?? 0)} 条。`);
+      setSelectedTaskIds([]);
+      await reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "AI 批量操作失败");
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
@@ -1111,7 +1251,7 @@ function AIWorkspacePage() {
           <label className="min-w-64 flex-1 text-xs font-semibold text-gray-600">
             选择帖子
             <select className="field mt-2" value={postId} onChange={(e) => setPostId(e.target.value)}>
-              {(posts.data ?? []).map((post) => (
+              {postOptions.map((post) => (
                 <option key={String(post.id)} value={String(post.id)}>{String(post.title)}</option>
               ))}
             </select>
@@ -1137,16 +1277,26 @@ function AIWorkspacePage() {
           <button className="button self-end" onClick={generateSelected}><Sparkles className="h-4 w-4" />Generate</button>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <div className="panel flex flex-wrap items-center gap-2 p-3">
+          <span className="text-xs font-semibold uppercase text-gray-500">Batch Review</span>
+          <button className="button-secondary" onClick={() => void batchAI("GENERATE")}><Sparkles className="h-4 w-4" />批量生成</button>
+          <button className="button-secondary" onClick={() => void batchAI("APPROVE")}><CheckCircle2 className="h-4 w-4" />批量批准</button>
+          <button className="button-secondary" onClick={() => void batchAI("REJECT")}>批量拒绝</button>
+          <span className="text-xs text-gray-500">已选 {selectedTaskIds.length} 条</span>
+        </div>
         <Section title="Review Queue">
           <div className="space-y-3">
             {(data ?? []).map((task) => (
               <div key={String(task.uuid)} className="panel p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
+                  <div className="flex items-start gap-3">
+                    <input className="mt-1" type="checkbox" checked={selectedTaskIds.includes(Number(task.id))} onChange={(event) => setSelectedTaskIds((current) => event.target.checked ? [...current, Number(task.id)] : current.filter((id) => id !== Number(task.id)))} />
+                    <div>
                     <p className="font-semibold">{String(task.strategy)} · {String(task.model)}</p>
                     <p className="mt-1 text-xs text-gray-500">
                       {String(task.provider)} · Commercial {String(task.commercial_score)} · Risk {String(task.risk_score)}
                     </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <StatusBadge value={task.status} />

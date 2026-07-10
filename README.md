@@ -17,6 +17,57 @@ The current repository focuses on a stable development foundation:
 
 ATOS does not automatically submit comments in the current MVP.
 
+## Business Flow
+
+Sprint 01 connects the first real business pipeline:
+
+```text
+Data Source
+  ↓ normalize
+Post Pool
+  ↓ analyze / generate
+AI Workspace
+  ↓ approve
+Scheduler
+```
+
+Execution still stays non-executing in this sprint. Scheduler can receive tasks, but browser automation is not triggered by the business pipeline.
+
+Primary Pipeline APIs:
+
+```text
+POST /pipeline/run
+POST /pipeline/post/{id}
+POST /pipeline/batch
+GET  /pipeline/status
+```
+
+Typical local flow:
+
+```bash
+# Analyze one post and create a draft for human review
+curl -X POST http://127.0.0.1:8000/pipeline/post/1 \
+  -H "Content-Type: application/json" \
+  -d '{"action":"ANALYZE"}'
+
+# Approve selected posts
+curl -X POST http://127.0.0.1:8000/pipeline/batch \
+  -H "Content-Type: application/json" \
+  -d '{"post_ids":[1,2],"action":"APPROVE"}'
+
+# Send approved posts to Scheduler
+curl -X POST http://127.0.0.1:8000/pipeline/batch \
+  -H "Content-Type: application/json" \
+  -d '{"post_ids":[1,2],"action":"SEND_TO_SCHEDULER"}'
+```
+
+Post lifecycle:
+
+```text
+NEW → NORMALIZED → READY_FOR_AI → ANALYZING → AI_COMPLETED
+→ WAITING_REVIEW → APPROVED → SCHEDULED → ARCHIVED
+```
+
 ## Architecture
 
 ```text
@@ -215,4 +266,5 @@ See:
 
 ```text
 docs/sprints/Sprint-00.md
+docs/sprints/Sprint-01.md
 ```

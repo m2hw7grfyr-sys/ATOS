@@ -76,7 +76,9 @@ class SchedulerTaskCreate(BaseModel):
     platform_id: int
     account_id: Optional[int] = None
     post_id: Optional[int] = None
+    ai_task_id: Optional[int] = None
     reply_id: Optional[int] = None
+    source: str = "MANUAL"
     priority: str = "MEDIUM"
     scheduled_at: Optional[datetime] = None
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -392,6 +394,48 @@ class SchedulerApprovedTaskCreate(BaseModel):
     ai_task_id: int
     account_id: Optional[int] = None
     priority: str = "MEDIUM"
+
+
+class PipelineRunRequest(BaseModel):
+    data_source_id: Optional[int] = None
+    post_ids: list[int] = Field(default_factory=list)
+    auto_analyze: bool = True
+    auto_approve: bool = False
+    send_to_scheduler: bool = False
+    priority: str = "MEDIUM"
+
+
+class PipelinePostRequest(BaseModel):
+    action: str = "RUN"
+    auto_approve: bool = False
+    send_to_scheduler: bool = False
+    priority: str = "MEDIUM"
+
+
+class PipelineBatchRequest(BaseModel):
+    post_ids: list[int]
+    action: str
+    priority: str = "MEDIUM"
+
+
+class AIBatchRequest(BaseModel):
+    task_ids: list[int] = Field(default_factory=list)
+    post_ids: list[int] = Field(default_factory=list)
+    action: str
+    strategy: str = "EDUCATION"
+    tone: str = "supportive"
+
+
+class PostBatchRequest(BaseModel):
+    post_ids: list[int]
+    action: str
+    priority: str = "MEDIUM"
+
+
+class FilterPresetCreate(BaseModel):
+    name: str
+    scope: str
+    filters: dict[str, Any] = Field(default_factory=dict)
 
 
 class SettingUpdate(BaseModel):

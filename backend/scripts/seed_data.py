@@ -12,6 +12,8 @@ from app.models import (
     AccountLimit,
     AccountWorkingWindow,
     ActorMapping,
+    AuditLog,
+    BusinessEvent,
     DataSource,
     EngagementStrategy,
     EngagementTask,
@@ -21,6 +23,7 @@ from app.models import (
     PlatformWeight,
     PlatformSelector,
     Post,
+    PostTimeline,
     ProviderRouting,
     PromptTemplate,
     PromptVersion,
@@ -33,7 +36,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "v1.2-acceptance"
+SEED_VERSION = "sprint-01-business-pipeline"
 
 
 def main() -> None:
@@ -133,17 +136,33 @@ def main() -> None:
 
         now = datetime.now(timezone.utc)
         post_specs = [
-            ("reddit", 0, "ADHD", "focus_builder", "How do you keep a routine when every day feels different?", "I have tried several planners but stop using them after a week.", ["routine", "question"], "ANALYZED"),
-            ("reddit", 0, "productivity", "workflow_notes", "Looking for a calmer way to manage recurring tasks", "Most tools feel too complicated for my small team.", ["workflow", "purchase_intent"], "NEW"),
-            ("reddit", 0, "SaaS", "founder_weekly", "What did you automate first in your SaaS operations?", "Curious which repetitive process gave you the fastest return.", ["saas", "discussion"], "QUALIFIED"),
-            ("reddit", 0, "ADHD", "day_by_day", "A lightweight weekly review that finally worked", "Sharing a small routine that has been sustainable for me.", ["experience", "routine"], "ANALYZED"),
-            ("x", 1, "builders", "ship_small", "What is your smallest useful automation?", "Collecting examples of practical local-first workflows.", ["automation", "question"], "NEW"),
-            ("x", 1, "founders", "quiet_ops", "Operational dashboards should reduce decisions", "A good dashboard makes the next action obvious.", ["dashboard", "operations"], "QUALIFIED"),
-            ("x", 1, "ai-tools", "model_router", "Local models for classification tasks", "Small models can be effective when the output schema is constrained.", ["local_llm", "ai"], "ANALYZED"),
-            ("facebook", 1, "Small Business Systems", "ops_owner", "How do small teams track recurring work?", "We need something simple enough to maintain every day.", ["small_business", "workflow"], "NEW"),
-            ("facebook", 1, "Productivity Community", "weekly_reset", "A simple planning ritual for Monday mornings", "This checklist helped our team start the week with less noise.", ["planning", "experience"], "QUALIFIED"),
-            ("facebook", 1, "SaaS Operators", "metric_maker", "Which metric belongs on the first dashboard?", "I am deciding between queue health and conversion metrics.", ["metrics", "dashboard"], "ANALYZED"),
+            ("reddit", 0, "ADHD", "focus_builder", "How do you keep a routine when every day feels different?", "I have tried several planners but stop using them after a week.", ["routine", "question"], "WAITING_REVIEW"),
+            ("reddit", 0, "productivity", "workflow_notes", "Looking for a calmer way to manage recurring tasks", "Most tools feel too complicated for my small team.", ["workflow", "purchase_intent"], "SCHEDULED"),
+            ("reddit", 0, "SaaS", "founder_weekly", "What did you automate first in your SaaS operations?", "Curious which repetitive process gave you the fastest return.", ["saas", "discussion"], "SCHEDULED"),
+            ("reddit", 0, "ADHD", "day_by_day", "A lightweight weekly review that finally worked", "Sharing a small routine that has been sustainable for me.", ["experience", "routine"], "SCHEDULED"),
+            ("x", 1, "builders", "ship_small", "What is your smallest useful automation?", "Collecting examples of practical local-first workflows.", ["automation", "question"], "WAITING_REVIEW"),
+            ("x", 1, "founders", "quiet_ops", "Operational dashboards should reduce decisions", "A good dashboard makes the next action obvious.", ["dashboard", "operations"], "SCHEDULED"),
+            ("x", 1, "ai-tools", "model_router", "Local models for classification tasks", "Small models can be effective when the output schema is constrained.", ["local_llm", "ai"], "SCHEDULED"),
+            ("facebook", 1, "Small Business Systems", "ops_owner", "How do small teams track recurring work?", "We need something simple enough to maintain every day.", ["small_business", "workflow"], "WAITING_REVIEW"),
+            ("facebook", 1, "Productivity Community", "weekly_reset", "A simple planning ritual for Monday mornings", "This checklist helped our team start the week with less noise.", ["planning", "experience"], "SCHEDULED"),
+            ("facebook", 1, "SaaS Operators", "metric_maker", "Which metric belongs on the first dashboard?", "I am deciding between queue health and conversion metrics.", ["metrics", "dashboard"], "SCHEDULED"),
         ]
+        for index in range(11, 21):
+            platform_slug = ["reddit", "x", "facebook"][index % 3]
+            source_index = 0 if platform_slug == "reddit" else 1
+            status = "SCHEDULED" if index <= 18 else "WAITING_REVIEW"
+            post_specs.append(
+                (
+                    platform_slug,
+                    source_index,
+                    "ADHD" if platform_slug == "reddit" else "operators",
+                    f"pipeline_author_{index}",
+                    f"Pipeline demo post {index}: practical workflow question",
+                    "Seed content for validating Data Source to Post Pool to AI Workspace to Scheduler.",
+                    ["pipeline", "sprint01"],
+                    status,
+                )
+            )
         posts = []
         for index, spec in enumerate(post_specs, start=1):
             platform_slug, source_index, community, author, title, content, tags, status = spec
@@ -167,19 +186,34 @@ def main() -> None:
                     raw_json={"seed": True, "source_post_id": source_post_id},
                     published_at=now - timedelta(hours=index * 2),
                     status=status,
+                    pipeline_stage=status,
                 )
                 db.add(item)
                 db.flush()
+            else:
+                item.status = status
+                item.pipeline_stage = status
             posts.append(item)
 
         ai_tasks = []
-        ai_specs = [
-            (posts[0], "EDUCATION", 74, 18, "REVIEWING"),
-            (posts[1], "PURE_HELP", 81, 12, "APPROVED"),
-            (posts[2], "EXPERIENCE", 69, 16, "APPROVED"),
-            (posts[3], "SUPPORTIVE", 63, 10, "APPROVED"),
-            (posts[6], "EDUCATION", 72, 14, "GENERATED"),
-        ]
+        strategies = ["EDUCATION", "PURE_HELP", "EXPERIENCE", "SUPPORTIVE", "DIRECT_REPLY"]
+        ai_specs = []
+        for index, post in enumerate(posts, start=1):
+            if index <= 10:
+                task_status = "APPROVED"
+            elif index <= 20:
+                task_status = "GENERATED"
+            else:
+                task_status = "REVIEWING"
+            ai_specs.append(
+                (
+                    post,
+                    strategies[index % len(strategies)],
+                    60 + (index % 35),
+                    8 + (index % 18),
+                    task_status,
+                )
+            )
         for index, (post, strategy, commercial, risk, task_status) in enumerate(
             ai_specs, start=1
         ):
@@ -209,6 +243,11 @@ def main() -> None:
                 )
                 db.add(task)
                 db.flush()
+            else:
+                task.strategy = strategy
+                task.commercial_score = commercial
+                task.risk_score = risk
+                task.status = task_status
             analysis = db.scalar(
                 select(AIAnalysisResult).where(AIAnalysisResult.ai_task_id == task.id)
             )
@@ -243,6 +282,8 @@ def main() -> None:
                 )
                 db.add(reply)
                 db.flush()
+            else:
+                reply.status = "APPROVED" if task_status == "APPROVED" else "GENERATED"
             ai_tasks.append((task, reply))
 
         account_specs = [
@@ -361,14 +402,12 @@ def main() -> None:
                 profile.connection_status = profile.connection_status or "SUCCESS"
                 profile.runtime_status = profile.runtime_status or "UNKNOWN"
 
-        scheduler_specs = [
-            ("REPLY", accounts[0], posts[1], ai_tasks[1][1], "HIGH"),
-            ("REPLY", accounts[1], posts[2], ai_tasks[2][1], "MEDIUM"),
-            ("BROWSE", accounts[2], posts[7], None, "LOW"),
-            ("REPLY", accounts[0], posts[3], ai_tasks[3][1], "MEDIUM"),
-            ("ENGAGEMENT", accounts[0], posts[0], None, "LOW"),
-        ]
-        for index, (task_type, account, post, reply, priority) in enumerate(
+        scheduler_specs = []
+        for index in range(8):
+            post = posts[index + 1] if index + 1 < len(posts) else posts[index]
+            ai_task, reply = ai_tasks[index + 1] if index + 1 < len(ai_tasks) else ai_tasks[index]
+            scheduler_specs.append(("REPLY", accounts[index % len(accounts)], post, ai_task, reply, "HIGH" if index < 2 else "MEDIUM"))
+        for index, (task_type, account, post, ai_task, reply, priority) in enumerate(
             scheduler_specs, start=1
         ):
             item = db.scalar(
@@ -385,7 +424,9 @@ def main() -> None:
                         platform_id=account.platform_id,
                         account_id=account.id,
                         post_id=post.id,
+                        ai_task_id=ai_task.id if ai_task else None,
                         reply_id=reply.id if reply else None,
+                        source="PIPELINE",
                         priority=priority,
                         scheduled_at=now + timedelta(minutes=index * 15),
                         payload={
@@ -399,6 +440,9 @@ def main() -> None:
                         status="QUEUED",
                     )
                 )
+            else:
+                item.ai_task_id = item.ai_task_id or (ai_task.id if ai_task else None)
+                item.source = item.source or "PIPELINE"
 
         selector_specs = [
             ("reddit", "reply_box", 'div[contenteditable="true"]', "css", "Primary Reddit contenteditable reply box"),
@@ -493,9 +537,14 @@ def main() -> None:
                 )
 
         for metric, dimension, value in [
-            ("imported_posts", "SYSTEM", 10),
-            ("ai_tasks", "SYSTEM", 3),
-            ("scheduler_queue", "SYSTEM", 3),
+            ("imported_posts", "SYSTEM", 20),
+            ("ai_tasks", "SYSTEM", 20),
+            ("scheduler_queue", "SYSTEM", 8),
+            ("pipeline_import", "SYSTEM", 20),
+            ("pipeline_ai", "SYSTEM", 20),
+            ("pipeline_approve", "SYSTEM", 10),
+            ("pipeline_reject", "SYSTEM", 0),
+            ("pipeline_schedule", "SYSTEM", 8),
             ("active_accounts", "SYSTEM", 3),
             ("reply_success_rate", "REDDIT", 92),
             ("average_risk_score", "SYSTEM", 15.3),
@@ -522,6 +571,9 @@ def main() -> None:
                         metadata_json={"seed": True},
                 )
                 )
+            else:
+                item.value = value
+                item.metadata_json = {"seed": True}
 
         strategy_specs = [
             {
@@ -818,6 +870,78 @@ Community: {{community}}
                     )
                 )
 
+        for post in posts:
+            existing_timeline = db.scalar(
+                select(PostTimeline).where(PostTimeline.post_id == post.id)
+            )
+            if not existing_timeline:
+                status_flow = ["NEW", "NORMALIZED", "READY_FOR_AI", "ANALYZING", "AI_COMPLETED", "WAITING_REVIEW"]
+                if post.status in {"APPROVED", "SCHEDULED"}:
+                    status_flow.append("APPROVED")
+                if post.status == "SCHEDULED":
+                    status_flow.append("SCHEDULED")
+                old_status = None
+                for step_index, step in enumerate(status_flow, start=1):
+                    db.add(
+                        PostTimeline(
+                            post_id=post.id,
+                            event_name={
+                                "NORMALIZED": "PostNormalized",
+                                "READY_FOR_AI": "PostReadyForAI",
+                                "AI_COMPLETED": "AICompleted",
+                                "APPROVED": "ReplyApproved",
+                                "SCHEDULED": "TaskScheduled",
+                            }.get(step, "PostStatusChanged"),
+                            old_status=old_status,
+                            new_status=step,
+                            actor="seed",
+                            detail={"seed": True, "step": step_index},
+                            created_at=now - timedelta(minutes=60 - step_index),
+                        )
+                    )
+                    old_status = step
+            if not db.scalar(
+                select(BusinessEvent).where(
+                    BusinessEvent.post_id == post.id,
+                    BusinessEvent.event_name == "PostImported",
+                )
+            ):
+                db.add(
+                    BusinessEvent(
+                        event_name="PostImported",
+                        entity_type="Post",
+                        entity_id=post.id,
+                        post_id=post.id,
+                        payload={"seed": True, "status": post.status},
+                    )
+                )
+            if post.status in {"APPROVED", "SCHEDULED"} and not db.scalar(
+                select(AuditLog).where(AuditLog.entity_uuid == post.uuid, AuditLog.action == "Approve")
+            ):
+                db.add(
+                    AuditLog(
+                        trace_id="seed",
+                        action="Approve",
+                        entity_type="Post",
+                        entity_uuid=post.uuid,
+                        actor="seed",
+                        detail={"post_id": post.id},
+                    )
+                )
+            if post.status == "SCHEDULED" and not db.scalar(
+                select(AuditLog).where(AuditLog.entity_uuid == post.uuid, AuditLog.action == "Schedule")
+            ):
+                db.add(
+                    AuditLog(
+                        trace_id="seed",
+                        action="Schedule",
+                        entity_type="Post",
+                        entity_uuid=post.uuid,
+                        actor="seed",
+                        detail={"post_id": post.id},
+                    )
+                )
+
         if marker:
             marker.value = {"version": SEED_VERSION}
         else:
@@ -831,8 +955,8 @@ Community: {{community}}
         db.commit()
         print(
             "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
-            "10 posts, 5 AI tasks, 5 scheduler tasks, 4 accounts, "
-            "4 TGE profiles, 11 statistics, 2 LLM providers, 2 prompt templates, "
+            "20 posts, 20 AI tasks, 8 scheduler tasks, 4 accounts, "
+            "4 TGE profiles, pipeline statistics, 2 LLM providers, 2 prompt templates, "
             "2 prompt versions, 3 provider routes, 5 platform weights, 2 engagement strategies, "
             "5 execution tasks, 5 engagement tasks, 1 actor mapping."
         )
