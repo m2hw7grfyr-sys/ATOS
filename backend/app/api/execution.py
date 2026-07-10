@@ -3,10 +3,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, ExecutionLog, ExecutionTask, ReplayFile, SchedulerTask, TGEProfile
+from app.models import Account, ExecutionLog, ExecutionQueue, ExecutionTask, ReplayFile, ReplayIndex, SchedulerTask, TGEProfile, WorkerNode
 from app.response import ok
 from app.serializers import serialize_model
-from app.services.execution import run_precheck, set_execution_status
+from app.services.execution import ExecutionRuntime, run_precheck, set_execution_status
 from app.services.playwright_runner import close_execution_tab, mark_submitted, prepare_reply, run_open_page
 
 
@@ -25,10 +25,29 @@ def serialize_execution_task(task: ExecutionTask, db: Session) -> dict:
     item["reply_content_preview"] = (task.payload_json or {}).get("reply_content_preview") or (task.payload_json or {}).get("reply_content")
     item["fill_status"] = (task.payload_json or {}).get("fill_status")
     item["manual_confirmed"] = (task.payload_json or {}).get("manual_confirmed")
+    item["queue_status"] = task.queue_status
+    item["retry_count"] = task.retry_count
+    item["claimed_at"] = task.claimed_at.isoformat() if task.claimed_at else None
+    item["last_heartbeat_at"] = task.last_heartbeat_at.isoformat() if task.last_heartbeat_at else None
     item["tge_environment_id"] = (
         profile.tge_environment_id or profile.environment_id if profile else None
     )
     return item
+
+
+@router.get("/runtime")
+def get_runtime(request: Request, db: Session = Depends(get_db)):
+    runtime = ExecutionRuntime(db)
+    worker = runtime.register_worker()
+    runtime.heartbeat(worker)
+    db.commit()
+    return ok(runtime.runtime_status(), request.state.trace_id)
+
+
+@router.get("/workers")
+def list_workers(request: Request, db: Session = Depends(get_db)):
+    workers = db.scalars(select(WorkerNode).order_by(WorkerNode.updated_at.desc())).all()
+    return ok([serialize_model(worker) for worker in workers], request.state.trace_id)
 
 
 @router.get("/tasks")
@@ -37,12 +56,70 @@ def list_execution_tasks(request: Request, db: Session = Depends(get_db)):
     return ok([serialize_execution_task(task, db) for task in tasks], request.state.trace_id)
 
 
+@router.get("/queue")
+def list_execution_queue(request: Request, db: Session = Depends(get_db)):
+    rows = db.scalars(select(ExecutionQueue).order_by(ExecutionQueue.queued_at.desc())).all()
+    return ok([serialize_model(row) for row in rows], request.state.trace_id)
+
+
 @router.get("/tasks/{task_id}")
 def get_execution_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     task = db.get(ExecutionTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="execution task not found")
     return ok(serialize_execution_task(task, db), request.state.trace_id)
+
+
+@router.post("/claim-next")
+def claim_next(request: Request, db: Session = Depends(get_db)):
+    runtime = ExecutionRuntime(db)
+    task = runtime.claim_next()
+    db.commit()
+    return ok(serialize_execution_task(task, db) if task else None, request.state.trace_id, "claim completed")
+
+
+@router.post("/tasks/{task_id}/run-runtime")
+def run_runtime_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    task = db.get(ExecutionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="execution task not found")
+    ExecutionRuntime(db).run_claimed(task)
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "runtime task running")
+
+
+@router.post("/tasks/{task_id}/resume")
+def resume_manual_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    try:
+        task = ExecutionRuntime(db).resume_manual(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "manual task resumed")
+
+
+@router.post("/retry")
+def retry_execution(payload: dict, request: Request, db: Session = Depends(get_db)):
+    try:
+        task = ExecutionRuntime(db).retry(int(payload.get("task_id")))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "execution task retried")
+
+
+@router.post("/cancel")
+def cancel_execution(payload: dict, request: Request, db: Session = Depends(get_db)):
+    try:
+        task = ExecutionRuntime(db).cancel(int(payload.get("task_id")))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_execution_task(task, db), request.state.trace_id, "execution task cancelled")
 
 
 @router.post("/tasks/{task_id}/precheck")
@@ -161,7 +238,14 @@ def get_replay(task_id: int, request: Request, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="execution task not found")
     replay = db.scalar(select(ReplayFile).where(ReplayFile.execution_task_id == task.id))
-    return ok(serialize_model(replay) if replay else None, request.state.trace_id)
+    index = db.scalar(select(ReplayIndex).where(ReplayIndex.execution_task_id == task.id))
+    return ok(
+        {
+            "files": serialize_model(replay) if replay else None,
+            "index": serialize_model(index) if index else None,
+        },
+        request.state.trace_id,
+    )
 
 
 @router.get("/tasks/{task_id}/logs")

@@ -110,6 +110,10 @@ type DashboardData = {
     execution_received?: number;
     execution_environment_ready?: number;
     execution_failed?: number;
+    execution_queue?: number;
+    execution_workers?: number;
+    execution_running?: number;
+    execution_success?: number;
     tge_connection_failed?: number;
     tge_running?: number;
     tge_unknown?: number;
@@ -416,6 +420,30 @@ function DashboardPage() {
           value: data.overview.execution_received ?? 0,
           icon: Play,
           tone: "text-cyan",
+        },
+        {
+          label: "Execution Queue",
+          value: data.overview.execution_queue ?? 0,
+          icon: FileClock,
+          tone: "text-amber",
+        },
+        {
+          label: "Workers Online",
+          value: data.overview.execution_workers ?? 0,
+          icon: Bot,
+          tone: "text-teal",
+        },
+        {
+          label: "Execution Running",
+          value: data.overview.execution_running ?? 0,
+          icon: Activity,
+          tone: "text-blue-700",
+        },
+        {
+          label: "Execution Success",
+          value: data.overview.execution_success ?? 0,
+          icon: CheckCircle2,
+          tone: "text-emerald-700",
         },
         {
           label: "Env Ready",
@@ -2604,6 +2632,8 @@ function SettingsPage() {
 function ExecutionPage() {
   const { data, error, loading, reload } =
     useApiData<RecordItem[]>("/execution/tasks");
+  const runtime = useApiData<RecordItem>("/execution/runtime");
+  const workers = useApiData<RecordItem[]>("/execution/workers");
   const counts = (data ?? []).reduce<Record<string, number>>((result, task) => {
     const status = String(task.status);
     result[status] = (result[status] ?? 0) + 1;
@@ -2611,7 +2641,7 @@ function ExecutionPage() {
   }, {});
   const [feedback, setFeedback] = useState("");
 
-  async function executionAction(taskId: unknown, action: "precheck" | "mark-success" | "mark-failed" | "run-open-page" | "attach" | "close-tab" | "prepare-reply" | "mark-submitted" | "retry-fill") {
+  async function executionAction(taskId: unknown, action: "precheck" | "mark-success" | "mark-failed" | "run-open-page" | "attach" | "close-tab" | "prepare-reply" | "mark-submitted" | "retry-fill" | "run-runtime" | "resume") {
     try {
       await apiRequest(`/execution/tasks/${String(taskId)}/${action}`, { method: "POST" });
       setFeedback(
@@ -2634,14 +2664,35 @@ function ExecutionPage() {
                         : "已标记失败。",
       );
       await reload();
+      await runtime.reload();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "Execution 操作失败");
     }
   }
 
+  async function runtimeAction(action: "claim-next" | "retry" | "cancel", taskId?: unknown) {
+    try {
+      if (action === "claim-next") {
+        await apiRequest("/execution/claim-next", { method: "POST" });
+        setFeedback("Local Worker 已 Claim 下一条队列任务。");
+      } else {
+        await apiRequest(`/execution/${action}`, {
+          method: "POST",
+          body: JSON.stringify({ task_id: Number(taskId) }),
+        });
+        setFeedback(action === "retry" ? "任务已重新入队。" : "任务已取消。");
+      }
+      await reload();
+      await runtime.reload();
+      await workers.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Runtime 操作失败");
+    }
+  }
+
   const groups = [
-    ["待执行任务", ["NEW", "RECEIVED"]],
-    ["环境检测中", ["PRECHECKING", "ATTACHING", "PAGE_OPENING", "FINDING_REPLY_BOX", "FILLING_REPLY"]],
+    ["队列", ["NEW", "QUEUED"]],
+    ["已领取/运行中", ["CLAIMED", "RUNNING", "RECEIVED", "PRECHECKING", "ATTACHING", "PAGE_OPENING", "FINDING_REPLY_BOX", "FILLING_REPLY"]],
     ["已填充", ["ENVIRONMENT_READY", "REPLY_BOX_FOUND", "REPLY_FILLED"]],
     ["等待人工", ["WAITING_MANUAL", "MANUAL_SUBMITTED", "SUBMISSION_CONFIRMED"]],
     ["成功", ["SUCCESS", "TAB_CLOSED"]],
@@ -2656,16 +2707,26 @@ function ExecutionPage() {
           </div>
           <div>
             <h2 className="font-bold">Execution Runtime Status</h2>
-            <p className="mt-1 text-sm text-gray-500">v0.8 支持 PREPARE_REPLY：打开帖子、定位评论框、填入回复，然后等待你在平台页面人工点击提交。</p>
+            <p className="mt-1 text-sm text-gray-500">Sprint 02 建立独立 Execution Runtime、Queue、Worker 和状态流。本 Sprint 不打开浏览器、不执行 Playwright/TGE 动作。</p>
           </div>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
-        <div className="grid gap-3 md:grid-cols-3">
-          {["RECEIVED", "ENVIRONMENT_READY", "FAILED"].map((state) => (
+        <div className="panel flex flex-wrap items-center gap-3 p-4">
+          <button className="button" onClick={() => void runtimeAction("claim-next")}><Bot className="h-4 w-4" />Claim Next</button>
+          <span className="text-sm text-gray-500">Local Worker heartbeat: {String((workers.data ?? [])[0]?.last_heartbeat ?? "—")}</span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-5">
+          {([
+            ["QUEUE", runtime.data?.queue ?? counts.QUEUED ?? 0],
+            ["WORKER", runtime.data?.workers ?? workers.data?.length ?? 0],
+            ["RUNNING", runtime.data?.running ?? counts.RUNNING ?? 0],
+            ["WAITING_MANUAL", runtime.data?.waiting_manual ?? counts.WAITING_MANUAL ?? 0],
+            ["SUCCESS", runtime.data?.success ?? counts.SUCCESS ?? 0],
+          ] as Array<[string, unknown]>).map(([state, value]) => (
             <div key={state} className="panel p-4">
               <p className="text-xs font-semibold uppercase text-gray-500">{state}</p>
-              <p className="mt-4 text-2xl font-bold">{counts[state] ?? 0}</p>
-              <p className="mt-1 text-xs text-gray-400">来自 Scheduler 数据库队列</p>
+              <p className="mt-4 text-2xl font-bold">{String(value)}</p>
+              <p className="mt-1 text-xs text-gray-400">Execution Runtime</p>
             </div>
           ))}
         </div>
@@ -2676,22 +2737,26 @@ function ExecutionPage() {
               <div className="panel overflow-x-auto">
                 <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
                   <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                    {["task_id", "platform", "account", "tge_environment_id", "execution_status", "scheduler_status", "action_type", "fill_status", "reply", "created_at", "error_message", "actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+                    {["task_id", "platform", "account", "queue_status", "execution_status", "worker", "scheduler_status", "action_type", "retry", "created_at", "error_message", "actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
                   </tr></thead>
                   <tbody>{rows.map((task) => (
                     <tr key={String(task.uuid)} className="border-b border-line last:border-0">
                       <td className="px-4 py-3 font-mono text-xs">{String(task.task_id ?? task.id)}</td>
                       <td className="px-4 py-3 uppercase text-teal">{String(task.platform ?? "—")}</td>
                       <td className="px-4 py-3">{String(task.account ?? "—")}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{String(task.tge_environment_id ?? "—")}</td>
+                      <td className="px-4 py-3"><StatusBadge value={task.queue_status ?? "—"} /></td>
                       <td className="px-4 py-3"><StatusBadge value={task.execution_status ?? task.status} /></td>
+                      <td className="px-4 py-3 font-mono text-xs">{String(task.worker_node_id ?? "—")}</td>
                       <td className="px-4 py-3"><StatusBadge value={task.scheduler_status ?? "—"} /></td>
                       <td className="px-4 py-3">{String(task.action_type ?? "—")}</td>
-                      <td className="px-4 py-3">{String(task.fill_status ?? "—")}</td>
-                      <td className="max-w-sm px-4 py-3 text-xs text-gray-600">{String(task.reply_content_preview ?? "—")}</td>
+                      <td className="px-4 py-3">{String(task.retry_count ?? 0)}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{task.created_at ? new Date(String(task.created_at)).toLocaleString() : "—"}</td>
                       <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.error_message ?? "—")}</td>
                       <td className="px-4 py-3"><div className="flex flex-wrap gap-2">
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "run-runtime")}>Run</button>
+                        <button className="button-secondary" onClick={() => void runtimeAction("retry", task.id)}>Retry</button>
+                        <button className="button-secondary" onClick={() => void runtimeAction("cancel", task.id)}>Cancel</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "resume")}>Resume</button>
                         <button className="button-secondary" onClick={() => void executionAction(task.id, "precheck")}>Precheck</button>
                         <button className="button" onClick={() => void executionAction(task.id, "prepare-reply")}>Prepare Reply</button>
                         <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-submitted")}>Mark Submitted</button>

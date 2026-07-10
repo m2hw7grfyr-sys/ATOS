@@ -17,6 +17,7 @@ from app.models import (
     DataSource,
     EngagementStrategy,
     EngagementTask,
+    ExecutionQueue,
     ExecutionTask,
     LLMProvider,
     Platform,
@@ -29,14 +30,16 @@ from app.models import (
     PromptVersion,
     Reply,
     ReplayFile,
+    ReplayIndex,
     SchedulerTask,
     StatisticSnapshot,
     SystemSetting,
     TGEProfile,
+    WorkerNode,
 )
 
 
-SEED_VERSION = "sprint-01-business-pipeline"
+SEED_VERSION = "sprint-02-execution-runtime"
 
 
 def main() -> None:
@@ -686,6 +689,98 @@ def main() -> None:
             db.add(execution)
             db.flush()
             db.add(ReplayFile(execution_task_id=execution.id))
+            db.add(ReplayIndex(execution_task_id=execution.id, status="INDEXED", artifact_count=0, manifest_json={"seed": True}))
+
+        worker = db.scalar(select(WorkerNode).where(WorkerNode.name == "local-worker"))
+        if not worker:
+            worker = WorkerNode(
+                name="local-worker",
+                status="ONLINE",
+                host="localhost",
+                version="sprint-02",
+                capability={"mode": "local", "browser_automation": False},
+                last_heartbeat=now,
+            )
+            db.add(worker)
+            db.flush()
+        else:
+            worker.status = "ONLINE"
+            worker.version = "sprint-02"
+            worker.capability = {"mode": "local", "browser_automation": False}
+            worker.last_heartbeat = now
+
+        demo_statuses = ["RUNNING"] * 10 + ["WAITING_MANUAL"] * 10 + ["SUCCESS"] * 10
+        for index, status in enumerate(demo_statuses, start=1):
+            task_uuid_marker = f"sprint02-demo-{index:02d}"
+            payload = {
+                "seed": True,
+                "demo_key": task_uuid_marker,
+                "action_type": "RUNTIME_PLACEHOLDER",
+                "browser_automation": False,
+                "message": "Execution Runtime demo task. No browser automation is performed.",
+            }
+            existing = db.scalar(
+                select(ExecutionTask).where(
+                    ExecutionTask.payload_json["demo_key"].as_string() == task_uuid_marker
+                )
+            )
+            if not existing:
+                account = accounts[index % len(accounts)]
+                profile = db.scalar(
+                    select(TGEProfile).where(
+                        (TGEProfile.bound_account_id == account.id)
+                        | (TGEProfile.account_id == account.id)
+                    )
+                )
+                existing = ExecutionTask(
+                    scheduler_task_id=None,
+                    account_id=account.id,
+                    tge_profile_id=profile.id if profile else None,
+                    platform=(db.get(Platform, account.platform_id).slug if account.platform_id else None),
+                    action_type="RUNTIME_PLACEHOLDER",
+                    strategy="EXECUTION_READY",
+                    payload_json=payload,
+                    status=status,
+                    queue_status=status,
+                    worker_node_id=worker.id if status in {"RUNNING", "WAITING_MANUAL"} else None,
+                    claimed_at=now - timedelta(minutes=index) if status in {"RUNNING", "WAITING_MANUAL", "SUCCESS"} else None,
+                    last_heartbeat_at=now if status in {"RUNNING", "WAITING_MANUAL"} else None,
+                    started_at=now - timedelta(minutes=index) if status in {"RUNNING", "WAITING_MANUAL", "SUCCESS"} else None,
+                    finished_at=now - timedelta(minutes=index - 1) if status == "SUCCESS" else None,
+                    precheck_status="SUCCESS",
+                    environment_status="UNKNOWN",
+                )
+                db.add(existing)
+                db.flush()
+                db.add(ReplayFile(execution_task_id=existing.id))
+                db.add(ReplayIndex(execution_task_id=existing.id, status="INDEXED", artifact_count=0, manifest_json=payload))
+            else:
+                existing.status = status
+                existing.queue_status = status
+                existing.worker_node_id = worker.id if status in {"RUNNING", "WAITING_MANUAL"} else None
+            queue = db.scalar(
+                select(ExecutionQueue).where(ExecutionQueue.execution_task_id == existing.id)
+            )
+            if not queue:
+                db.add(
+                    ExecutionQueue(
+                        scheduler_task_id=existing.scheduler_task_id,
+                        execution_task_id=existing.id,
+                        worker_node_id=worker.id if status in {"RUNNING", "WAITING_MANUAL"} else None,
+                        priority="MEDIUM",
+                        status=status,
+                        queued_at=now - timedelta(minutes=index + 30),
+                        claimed_at=existing.claimed_at,
+                        started_at=existing.started_at,
+                        finished_at=existing.finished_at,
+                    )
+                )
+            else:
+                queue.status = status
+                queue.worker_node_id = worker.id if status in {"RUNNING", "WAITING_MANUAL"} else None
+                queue.claimed_at = existing.claimed_at
+                queue.started_at = existing.started_at
+                queue.finished_at = existing.finished_at
 
         platform_weight_specs = {
             "reddit": (50, "Primary discovery platform"),
@@ -958,7 +1053,7 @@ Community: {{community}}
             "20 posts, 20 AI tasks, 8 scheduler tasks, 4 accounts, "
             "4 TGE profiles, pipeline statistics, 2 LLM providers, 2 prompt templates, "
             "2 prompt versions, 3 provider routes, 5 platform weights, 2 engagement strategies, "
-            "5 execution tasks, 5 engagement tasks, 1 actor mapping."
+            "30 execution runtime demo tasks, 1 local worker, 5 engagement tasks, 1 actor mapping."
         )
     finally:
         db.close()

@@ -21,7 +21,7 @@ from app.models import (
     SystemSetting,
     TGEProfile,
 )
-from app.services.execution import create_execution_task_from_scheduler
+from app.services.execution import ExecutionRuntime
 
 
 DEFAULT_SCHEDULER_SETTINGS = {
@@ -397,7 +397,7 @@ def run_once(db: Session) -> dict[str, Any]:
         "dispatched_by": "scheduler.run_once",
     }
     set_status(db, selected, "DISPATCHED", action="MOCK_DISPATCH", reason="Execution placeholder only", selected_account_id=account.id)
-    execution_task = create_execution_task_from_scheduler(db, selected)
+    execution_task = ExecutionRuntime(db).push_scheduler_task(selected)
     settings["last_dispatched_platform_id"] = selected.platform_id
     save_scheduler_settings(db, settings)
     db.commit()

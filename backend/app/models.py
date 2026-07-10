@@ -496,6 +496,11 @@ class ExecutionTask(Base, TimestampMixin):
     strategy: Mapped[Optional[str]] = mapped_column(String(120))
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(40), default="NEW", index=True)
+    queue_status: Mapped[str] = mapped_column(String(40), default="NEW", index=True)
+    worker_node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("worker_nodes.id"), index=True)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
     precheck_status: Mapped[str] = mapped_column(String(40), default="PENDING", index=True)
     environment_status: Mapped[str] = mapped_column(String(40), default="UNKNOWN", index=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -516,6 +521,36 @@ class ExecutionLog(Base):
     message: Mapped[Optional[str]] = mapped_column(Text)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class WorkerNode(Base, TimestampMixin):
+    __tablename__ = "worker_nodes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="ONLINE", index=True)
+    host: Mapped[Optional[str]] = mapped_column(String(200))
+    version: Mapped[str] = mapped_column(String(60), default="local")
+    capability: Mapped[dict] = mapped_column(JSON, default=dict)
+    last_heartbeat: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class ExecutionQueue(Base):
+    __tablename__ = "execution_queue"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    scheduler_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scheduler_tasks.id"), index=True)
+    execution_task_id: Mapped[int] = mapped_column(ForeignKey("execution_tasks.id"), unique=True, index=True)
+    worker_node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("worker_nodes.id"), index=True)
+    priority: Mapped[str] = mapped_column(String(20), default="MEDIUM", index=True)
+    status: Mapped[str] = mapped_column(String(40), default="QUEUED", index=True)
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class PlatformSelector(Base, TimestampMixin):
@@ -600,6 +635,18 @@ class ReplayFile(Base):
     network_log_path: Mapped[Optional[str]] = mapped_column(String(1000))
     timeline_path: Mapped[Optional[str]] = mapped_column(String(1000))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class ReplayIndex(Base):
+    __tablename__ = "replay_indexes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    execution_task_id: Mapped[int] = mapped_column(ForeignKey("execution_tasks.id"), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="INDEXED", index=True)
+    artifact_count: Mapped[int] = mapped_column(Integer, default=0)
+    manifest_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
 
 class SystemSetting(Base, TimestampMixin):

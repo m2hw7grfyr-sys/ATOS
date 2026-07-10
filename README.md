@@ -68,6 +68,49 @@ NEW → NORMALIZED → READY_FOR_AI → ANALYZING → AI_COMPLETED
 → WAITING_REVIEW → APPROVED → SCHEDULED → ARCHIVED
 ```
 
+## Execution Runtime
+
+Sprint 02 introduces the Execution Ready milestone:
+
+```text
+Scheduler
+  ↓ push only
+Execution Queue
+  ↓ claim
+Worker
+  ↓ state transition
+Execution Runtime
+  ↓ metrics
+Dashboard
+```
+
+This runtime does not open browsers and does not run Playwright/TGE automation.
+
+Primary Execution Runtime APIs:
+
+```text
+GET  /execution/runtime
+GET  /execution/workers
+GET  /execution/tasks
+GET  /execution/queue
+POST /execution/claim-next
+POST /execution/retry
+POST /execution/cancel
+POST /execution/tasks/{id}/run-runtime
+POST /execution/tasks/{id}/resume
+```
+
+Execution lifecycle:
+
+```text
+NEW → QUEUED → CLAIMED → RUNNING → WAITING_MANUAL
+→ SUCCESS
+→ FAILED
+→ CANCELLED
+```
+
+Retry re-queues the same task and does not create a duplicate task.
+
 ## Architecture
 
 ```text
@@ -267,4 +310,5 @@ See:
 ```text
 docs/sprints/Sprint-00.md
 docs/sprints/Sprint-01.md
+docs/sprints/Sprint-02.md
 ```
