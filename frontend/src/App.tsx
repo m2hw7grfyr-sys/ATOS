@@ -38,6 +38,7 @@ type PageKey =
   | "scheduler"
   | "platform-center"
   | "worker-center"
+  | "intelligence"
   | "account-center"
   | "execution"
   | "engagement"
@@ -148,6 +149,10 @@ type DashboardData = {
     automation_worker_lost?: number;
     automation_alerts?: number;
     automation_queue_length?: number;
+    intelligence_recommendations?: number;
+    reply_average_score?: number;
+    content_average_score?: number;
+    best_time_windows?: number;
   };
   platform_health: Array<{
     name: string;
@@ -184,6 +189,7 @@ const navigation = [
   { key: "scheduler", label: "Scheduler", icon: CalendarClock },
   { key: "platform-center", label: "Platform Center", icon: SlidersHorizontal },
   { key: "worker-center", label: "Worker Center", icon: Bot },
+  { key: "intelligence", label: "Intelligence", icon: Sparkles },
   { key: "account-center", label: "Account Center", icon: Users },
   { key: "execution", label: "Execution", icon: Play },
   { key: "engagement", label: "Engagement", icon: Activity },
@@ -199,6 +205,7 @@ const pageRoutes: Record<PageKey, string> = {
   scheduler: "/scheduler",
   "platform-center": "/platform-center",
   "worker-center": "/worker-center",
+  intelligence: "/intelligence",
   "account-center": "/account-center",
   execution: "/execution",
   engagement: "/engagement",
@@ -218,6 +225,7 @@ const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   scheduler: { title: "Scheduler", subtitle: "进入 Execution 前的唯一任务队列" },
   "platform-center": { title: "Platform Center", subtitle: "平台 Adapter、能力与健康状态" },
   "worker-center": { title: "Worker Center", subtitle: "Automation Runtime、Worker Pool 与任务 Claim" },
+  intelligence: { title: "Intelligence Runtime", subtitle: "表现分析、评分、推荐与策略优化" },
   "account-center": { title: "Account Center", subtitle: "平台账号、健康度与运行限制" },
   execution: { title: "Execution Center", subtitle: "执行运行时占位与环境状态" },
   engagement: { title: "Engagement", subtitle: "策略组合与互动任务占位" },
@@ -631,6 +639,30 @@ function DashboardPage() {
           value: data.overview.automation_alerts ?? 0,
           icon: CircleAlert,
           tone: "text-red-700",
+        },
+        {
+          label: "Recommendations",
+          value: data.overview.intelligence_recommendations ?? 0,
+          icon: Sparkles,
+          tone: "text-teal",
+        },
+        {
+          label: "Reply Score",
+          value: data.overview.reply_average_score ?? 0,
+          icon: BrainCircuit,
+          tone: "text-blue-700",
+        },
+        {
+          label: "Content Score",
+          value: data.overview.content_average_score ?? 0,
+          icon: ChartNoAxesCombined,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Best Time Windows",
+          value: data.overview.best_time_windows ?? 0,
+          icon: CalendarClock,
+          tone: "text-amber",
         },
       ]
     : [];
@@ -3300,6 +3332,149 @@ function WorkerCenterPage() {
   );
 }
 
+function IntelligencePage() {
+  const dashboard = useApiData<RecordItem>("/intelligence/dashboard");
+  const recommendations = useApiData<RecordItem[]>("/intelligence/recommendations");
+  const performance = useApiData<RecordItem>("/intelligence/performance");
+  const similarity = useApiData<RecordItem[]>("/intelligence/similarity");
+  const [scoring, setScoring] = useState(false);
+
+  async function checkSimilarity() {
+    setScoring(true);
+    try {
+      await apiRequest<RecordItem[]>("/intelligence/similarity", {
+        method: "POST",
+        data: { threshold: 80 },
+      });
+      await similarity.reload();
+      await dashboard.reload();
+    } finally {
+      setScoring(false);
+    }
+  }
+
+  const data = dashboard.data ?? {};
+  const funnel = (data.funnel as RecordItem | undefined) ?? {};
+  const perf = performance.data ?? {};
+
+  return (
+    <StateView loading={dashboard.loading} error={dashboard.error} reload={dashboard.reload}>
+      <div className="space-y-6">
+        <Section
+          title="Intelligence Overview"
+          action={
+            <button className="button-secondary" onClick={checkSimilarity} disabled={scoring}>
+              <RefreshCw className="h-4 w-4" />
+              {scoring ? "Checking..." : "Check Similarity"}
+            </button>
+          }
+        >
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            {["posts", "ai_generated", "approved", "executed", "engaged", "converted"].map((key) => (
+              <div key={key} className="panel p-4">
+                <p className="text-xs font-semibold uppercase text-gray-500">{key.replace(/_/g, " ")}</p>
+                <p className="mt-4 text-2xl font-bold">{String(funnel[key] ?? 0)}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="Top Strategies">
+            <DataTable
+              rows={(data.top_strategies as RecordItem[] | undefined) ?? []}
+              columns={[
+                { key: "strategy", label: "Strategy" },
+                { key: "platform", label: "Platform" },
+                { key: "success_rate", label: "Success" },
+                { key: "average_score", label: "Score" },
+              ]}
+            />
+          </Section>
+          <Section title="Top Replies">
+            <DataTable
+              rows={(data.top_replies as RecordItem[] | undefined) ?? []}
+              columns={[
+                { key: "reply_id", label: "Reply" },
+                { key: "relevance", label: "Relevance" },
+                { key: "quality", label: "Quality" },
+                { key: "score", label: "Score" },
+              ]}
+            />
+          </Section>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-3">
+          <Section title="Best Accounts">
+            <DataTable
+              rows={(data.best_accounts as RecordItem[] | undefined) ?? []}
+              columns={[
+                { key: "account_id", label: "Account" },
+                { key: "platform", label: "Platform" },
+                { key: "success", label: "Success" },
+                { key: "average_score", label: "Score" },
+              ]}
+            />
+          </Section>
+          <Section title="Best Time">
+            <DataTable
+              rows={(data.best_time as RecordItem[] | undefined) ?? []}
+              columns={[
+                { key: "platform", label: "Platform" },
+                { key: "day", label: "Day" },
+                { key: "hour", label: "Hour" },
+                { key: "success_rate", label: "Success" },
+              ]}
+            />
+          </Section>
+          <Section title="Platform Ranking">
+            <DataTable
+              rows={(data.platform_ranking as RecordItem[] | undefined) ?? []}
+              columns={[
+                { key: "platform", label: "Platform" },
+                { key: "success_rate", label: "Success" },
+                { key: "reply_rate", label: "Reply" },
+                { key: "average_score", label: "Score" },
+              ]}
+            />
+          </Section>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="Recommendations">
+            <DataTable
+              rows={recommendations.data ?? []}
+              columns={[
+                { key: "recommendation_type", label: "Type" },
+                { key: "title", label: "Title" },
+                { key: "priority", label: "Priority" },
+                { key: "score", label: "Score" },
+              ]}
+            />
+          </Section>
+          <Section title="Duplicate Reply Detection">
+            <DataTable
+              rows={similarity.data ?? []}
+              columns={[
+                { key: "reply_id", label: "Reply" },
+                { key: "compared_reply_id", label: "Compared" },
+                { key: "similarity_score", label: "Similarity" },
+                { key: "method", label: "Method" },
+              ]}
+            />
+          </Section>
+        </div>
+
+        <Section title="Performance Detail">
+          <pre className="panel overflow-x-auto p-4 text-xs text-gray-600">
+            {JSON.stringify(perf, null, 2)}
+          </pre>
+        </Section>
+      </div>
+    </StateView>
+  );
+}
+
 function PageContent({ page }: { page: PageKey }) {
   switch (page) {
     case "dashboard":
@@ -3316,6 +3491,8 @@ function PageContent({ page }: { page: PageKey }) {
       return <PlatformCenterPage />;
     case "worker-center":
       return <WorkerCenterPage />;
+    case "intelligence":
+      return <IntelligencePage />;
     case "account-center":
       return <AccountCenterPage />;
     case "settings":

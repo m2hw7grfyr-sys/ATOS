@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, PlatformRegistry, Post, Reply, ReplyTask, SchedulerTask, StatisticSnapshot, SystemAlert, TGEProfile, WorkerNode
+from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, ContentPerformance, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, IntelligenceRecommendation, LLMProvider, Platform, PlatformRegistry, Post, Reply, ReplyScore, ReplyTask, SchedulerTask, StatisticSnapshot, SystemAlert, TGEProfile, TimePerformance, WorkerNode
 from app.response import ok
 
 
@@ -90,6 +90,10 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "automation_worker_lost": count(ExecutionTask, ExecutionTask.status == "WORKER_LOST"),
                 "automation_alerts": count(SystemAlert, SystemAlert.status == "OPEN"),
                 "automation_queue_length": count(ExecutionQueue, ExecutionQueue.status.in_(["QUEUED", "RETRY_PENDING"])),
+                "intelligence_recommendations": count(IntelligenceRecommendation, IntelligenceRecommendation.status == "OPEN"),
+                "reply_average_score": round(float(db.scalar(select(func.coalesce(func.avg(ReplyScore.score), 0))) or 0), 2),
+                "content_average_score": round(float(db.scalar(select(func.coalesce(func.avg(ContentPerformance.score), 0))) or 0), 2),
+                "best_time_windows": count(TimePerformance, TimePerformance.success_rate > 0),
                 "execution_running": count(ExecutionTask, ExecutionTask.status == "RUNNING"),
                 "execution_success": count(ExecutionTask, ExecutionTask.status == "SUCCESS"),
                 "browser_running": count(BrowserSession, BrowserSession.status.in_(["RUNNING", "ATTACHED"])),

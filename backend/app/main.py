@@ -16,6 +16,7 @@ from app.api import (
     engagement,
     execution,
     health,
+    intelligence,
     platform_selectors,
     platform_runtime,
     pipeline,
@@ -60,6 +61,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(intelligence.router)
 app.include_router(actor_mappings.router)
 app.include_router(browser.router)
 app.include_router(platform_selectors.router)

@@ -343,6 +343,7 @@ class PromptVersion(Base, TimestampMixin):
     tone: Mapped[Optional[str]] = mapped_column(String(80), index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    performance_score: Mapped[float] = mapped_column(Float, default=0)
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
@@ -828,6 +829,139 @@ class StatisticSnapshot(Base, TimestampMixin):
     period: Mapped[str] = mapped_column(String(30), default="TODAY", index=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class ContentPerformance(Base):
+    __tablename__ = "content_performance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    post_id: Mapped[Optional[int]] = mapped_column(ForeignKey("posts.id"), index=True)
+    reply_id: Mapped[Optional[int]] = mapped_column(ForeignKey("replies.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    engagement: Mapped[int] = mapped_column(Integer, default=0)
+    conversion: Mapped[int] = mapped_column(Integer, default=0)
+    score: Mapped[float] = mapped_column(Float, default=0, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class ReplyScore(Base, TimestampMixin):
+    __tablename__ = "reply_scores"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    reply_id: Mapped[int] = mapped_column(ForeignKey("replies.id"), index=True)
+    post_id: Mapped[Optional[int]] = mapped_column(ForeignKey("posts.id"), index=True)
+    relevance: Mapped[float] = mapped_column(Float, default=0)
+    quality: Mapped[float] = mapped_column(Float, default=0)
+    engagement: Mapped[float] = mapped_column(Float, default=0)
+    conversion: Mapped[float] = mapped_column(Float, default=0)
+    risk: Mapped[float] = mapped_column(Float, default=0)
+    score: Mapped[float] = mapped_column(Float, default=0, index=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class StrategyPerformance(Base, TimestampMixin):
+    __tablename__ = "strategy_performance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    strategy: Mapped[str] = mapped_column(String(120), index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    tasks: Mapped[int] = mapped_column(Integer, default=0)
+    success: Mapped[int] = mapped_column(Integer, default=0)
+    failure: Mapped[int] = mapped_column(Integer, default=0)
+    success_rate: Mapped[float] = mapped_column(Float, default=0)
+    average_score: Mapped[float] = mapped_column(Float, default=0)
+    conversion: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class AccountPerformance(Base, TimestampMixin):
+    __tablename__ = "account_performance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    tasks: Mapped[int] = mapped_column(Integer, default=0)
+    success: Mapped[int] = mapped_column(Integer, default=0)
+    failure: Mapped[int] = mapped_column(Integer, default=0)
+    health_change: Mapped[float] = mapped_column(Float, default=0)
+    average_score: Mapped[float] = mapped_column(Float, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class PlatformPerformance(Base, TimestampMixin):
+    __tablename__ = "platform_performance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    platform: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    tasks: Mapped[int] = mapped_column(Integer, default=0)
+    success_rate: Mapped[float] = mapped_column(Float, default=0)
+    reply_rate: Mapped[float] = mapped_column(Float, default=0)
+    engagement_rate: Mapped[float] = mapped_column(Float, default=0)
+    average_score: Mapped[float] = mapped_column(Float, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class TimePerformance(Base, TimestampMixin):
+    __tablename__ = "time_performance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    day: Mapped[str] = mapped_column(String(10), index=True)
+    hour: Mapped[int] = mapped_column(Integer, index=True)
+    tasks: Mapped[int] = mapped_column(Integer, default=0)
+    success: Mapped[int] = mapped_column(Integer, default=0)
+    success_rate: Mapped[float] = mapped_column(Float, default=0, index=True)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class IntelligenceRecommendation(Base, TimestampMixin):
+    __tablename__ = "intelligence_recommendations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    recommendation_type: Mapped[str] = mapped_column(String(80), index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    message: Mapped[str] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(30), default="NORMAL", index=True)
+    score: Mapped[float] = mapped_column(Float, default=0, index=True)
+    source: Mapped[str] = mapped_column(String(80), default="intelligence", index=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(30), default="OPEN", index=True)
+
+
+class ReplySimilarity(Base, TimestampMixin):
+    __tablename__ = "reply_similarities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    reply_id: Mapped[int] = mapped_column(ForeignKey("replies.id"), index=True)
+    compared_reply_id: Mapped[int] = mapped_column(ForeignKey("replies.id"), index=True)
+    similarity_score: Mapped[float] = mapped_column(Float, default=0, index=True)
+    method: Mapped[str] = mapped_column(String(60), default="mock_token_overlap")
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class Experiment(Base, TimestampMixin):
+    __tablename__ = "experiments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    experiment_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(180))
+    platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    strategy_a: Mapped[str] = mapped_column(String(120))
+    strategy_b: Mapped[str] = mapped_column(String(120))
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+    winner: Mapped[Optional[str]] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(30), default="RUNNING", index=True)
 
 
 class AuditLog(Base):

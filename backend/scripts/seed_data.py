@@ -10,19 +10,24 @@ from app.models import (
     AITask,
     Account,
     AccountLimit,
+    AccountPerformance,
     AccountWorkingWindow,
     ActorMapping,
     AuditLog,
     BusinessEvent,
     BrowserSession,
     BrowserTab,
+    ContentPerformance,
     DataSource,
     EngagementStrategy,
     EngagementTask,
     ExecutionQueue,
     ExecutionTask,
+    Experiment,
+    IntelligenceRecommendation,
     LLMProvider,
     Platform,
+    PlatformPerformance,
     PlatformRegistry,
     PlatformWeight,
     PlatformSelector,
@@ -32,22 +37,26 @@ from app.models import (
     PromptTemplate,
     PromptVersion,
     Reply,
+    ReplyScore,
+    ReplySimilarity,
     ReplyTask,
     ReplayFile,
     ReplayIndex,
     SchedulerTask,
+    StrategyPerformance,
     StatisticSnapshot,
     RuntimeMetric,
     SystemAlert,
     SystemSetting,
     TaskLock,
     TGEProfile,
+    TimePerformance,
     WorkerLog,
     WorkerNode,
 )
 
 
-SEED_VERSION = "sprint-08-automation-runtime"
+SEED_VERSION = "sprint-09-intelligence-runtime"
 
 
 def main() -> None:
@@ -1399,6 +1408,138 @@ Community: {{community}}
                     )
                 )
 
+        for index, reply in enumerate(db.scalars(select(Reply).order_by(Reply.id.asc())).all(), start=1):
+            post = db.get(Post, reply.post_id)
+            platform_slug = platforms.get("reddit").slug if platforms.get("reddit") else "reddit"
+            if post:
+                post_platform = db.get(Platform, post.platform_id)
+                platform_slug = post_platform.slug if post_platform else platform_slug
+            score_value = max(45, min(96, 62 + (index % 7) * 4))
+            reply_score = db.scalar(select(ReplyScore).where(ReplyScore.reply_id == reply.id))
+            if not reply_score:
+                reply_score = ReplyScore(reply_id=reply.id, post_id=reply.post_id)
+                db.add(reply_score)
+            reply_score.relevance = min(100, score_value + 3)
+            reply_score.quality = min(100, score_value + 5)
+            reply_score.engagement = score_value
+            reply_score.conversion = 70 if reply.status == "APPROVED" else 40
+            reply_score.risk = 8 + (index % 4) * 3
+            reply_score.score = score_value
+            reply_score.reason = "Seed intelligence score."
+
+            content_perf = db.scalar(select(ContentPerformance).where(ContentPerformance.reply_id == reply.id))
+            if not content_perf:
+                content_perf = ContentPerformance(post_id=reply.post_id, reply_id=reply.id, platform=platform_slug)
+                db.add(content_perf)
+            content_perf.views = 80 + index * 8
+            content_perf.engagement = 8 + index
+            content_perf.conversion = 1 if reply.status == "APPROVED" else 0
+            content_perf.score = score_value
+
+        strategy_specs_intel = [
+            ("SEMI_AUTO", "reddit", 8, 7, 1, 87.5, 82, 4),
+            ("REPLY_WARMUP", "reddit", 6, 5, 1, 83.3, 78, 3),
+            ("SILENT_BROWSE", "x", 4, 3, 1, 75.0, 68, 1),
+        ]
+        for strategy, platform_slug, tasks_count, success, failure, success_rate, avg_score, conversion in strategy_specs_intel:
+            item = db.scalar(select(StrategyPerformance).where(StrategyPerformance.strategy == strategy, StrategyPerformance.platform == platform_slug))
+            if not item:
+                item = StrategyPerformance(strategy=strategy, platform=platform_slug)
+                db.add(item)
+            item.tasks = tasks_count
+            item.success = success
+            item.failure = failure
+            item.success_rate = success_rate
+            item.average_score = avg_score
+            item.conversion = conversion
+
+        for account in accounts:
+            platform = db.get(Platform, account.platform_id)
+            platform_slug = platform.slug if platform else "unknown"
+            item = db.scalar(select(AccountPerformance).where(AccountPerformance.account_id == account.id))
+            if not item:
+                item = AccountPerformance(account_id=account.id, platform=platform_slug)
+                db.add(item)
+            item.tasks = 5 + account.id
+            item.success = 4 + (account.id % 3)
+            item.failure = account.id % 2
+            item.health_change = account.health_score - 100
+            item.average_score = 72 + (account.id % 5) * 4
+
+        platform_perf_specs = [
+            ("reddit", 18, 88, 62, 48, 81),
+            ("x", 7, 71, 35, 41, 67),
+            ("facebook", 5, 64, 28, 34, 61),
+        ]
+        for platform_slug, tasks_count, success_rate, reply_rate, engagement_rate, avg_score in platform_perf_specs:
+            item = db.scalar(select(PlatformPerformance).where(PlatformPerformance.platform == platform_slug))
+            if not item:
+                item = PlatformPerformance(platform=platform_slug)
+                db.add(item)
+            item.tasks = tasks_count
+            item.success_rate = success_rate
+            item.reply_rate = reply_rate
+            item.engagement_rate = engagement_rate
+            item.average_score = avg_score
+
+        time_specs = [
+            ("reddit", "FRI", 21, 8, 7, 87.5),
+            ("reddit", "SAT", 22, 6, 5, 83.3),
+            ("x", "FRI", 18, 5, 3, 60.0),
+        ]
+        for platform_slug, day, hour, tasks_count, success, success_rate in time_specs:
+            item = db.scalar(select(TimePerformance).where(TimePerformance.platform == platform_slug, TimePerformance.day == day, TimePerformance.hour == hour))
+            if not item:
+                item = TimePerformance(platform=platform_slug, day=day, hour=hour)
+                db.add(item)
+            item.tasks = tasks_count
+            item.success = success
+            item.success_rate = success_rate
+
+        recommendation_specs = [
+            ("PLATFORM_STRATEGY", "Reddit evening replies are strongest", "Reddit replies around 21:00 have the highest seed score.", "HIGH", 88),
+            ("ACCOUNT_STRATEGY", "Keep Windows worker for browser-heavy tasks", "Windows AI workstation has the best capability mix for Browser/TGE/AI.", "NORMAL", 82),
+            ("PROMPT_FEEDBACK", "Experience-share replies perform well", "Historical approved replies favor practical experience sharing over direct promotion.", "NORMAL", 79),
+        ]
+        for recommendation_type, title, message, priority, score_value in recommendation_specs:
+            item = db.scalar(select(IntelligenceRecommendation).where(IntelligenceRecommendation.recommendation_type == recommendation_type, IntelligenceRecommendation.title == title))
+            if not item:
+                item = IntelligenceRecommendation(recommendation_type=recommendation_type, title=title, message=message)
+                db.add(item)
+            item.message = message
+            item.priority = priority
+            item.score = score_value
+            item.metadata_json = {"seed": True}
+
+        reply_rows = db.scalars(select(Reply).order_by(Reply.id.asc()).limit(2)).all()
+        if len(reply_rows) == 2 and not db.scalar(select(ReplySimilarity).where(ReplySimilarity.reply_id == reply_rows[0].id, ReplySimilarity.compared_reply_id == reply_rows[1].id)):
+            db.add(
+                ReplySimilarity(
+                    reply_id=reply_rows[0].id,
+                    compared_reply_id=reply_rows[1].id,
+                    similarity_score=82.5,
+                    method="seed_mock_embedding",
+                )
+            )
+
+        experiment = db.scalar(select(Experiment).where(Experiment.experiment_id == "EXP-REPLY-001"))
+        if not experiment:
+            db.add(
+                Experiment(
+                    experiment_id="EXP-REPLY-001",
+                    name="Experience Share vs Pure Help",
+                    platform="reddit",
+                    strategy_a="experience_share",
+                    strategy_b="pure_help",
+                    result={"strategy_a_score": 82, "strategy_b_score": 74},
+                    winner="experience_share",
+                    status="COMPLETED",
+                )
+            )
+
+        for prompt_version in db.scalars(select(PromptVersion)).all():
+            prompt_version.performance_score = prompt_version.performance_score or 78
+
         if marker:
             marker.value = {"version": SEED_VERSION}
         else:
@@ -1417,7 +1558,8 @@ Community: {{community}}
             "2 prompt versions, 4 provider routes, 5 platform weights, 2 engagement strategies, "
             "35 execution runtime demo tasks, 3 automation workers, 1 task lock, runtime metrics, "
             "1 automation alert, 4 browser sessions, 15 browser tabs, 5 engagement tasks, "
-            "8 reply tasks, 1 actor mapping."
+            "8 reply tasks, 1 actor mapping, intelligence performance data, recommendations, "
+            "similarity detection, and 1 experiment."
         )
     finally:
         db.close()

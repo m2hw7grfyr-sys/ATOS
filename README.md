@@ -314,6 +314,50 @@ GET  /automation/logs
 
 Sprint 08 does not add real browser automation. It makes sure long-running workers can safely claim, retry, and recover execution tasks.
 
+## Intelligence Runtime
+
+Sprint 09 adds the learning layer:
+
+```text
+Post / Reply / Execution / Engagement
+  ↓
+Performance Collection
+  ↓
+Reply Scoring
+  ↓
+Aggregation
+  ↓
+Recommendation
+  ↓
+Next Strategy
+```
+
+Intelligence Runtime tracks:
+
+- Content performance
+- Reply scores
+- Strategy performance
+- Account performance
+- Platform performance
+- Best time windows
+- Prompt performance score
+- Duplicate reply similarity
+- A/B strategy experiments
+
+Primary Intelligence APIs:
+
+```text
+GET  /intelligence/dashboard
+GET  /intelligence/recommendations
+GET  /intelligence/performance
+POST /intelligence/score
+POST /intelligence/feedback
+POST /intelligence/similarity
+GET  /intelligence/similarity
+```
+
+Sprint 09 uses local heuristic scoring and mock embeddings. It does not require a vector database or external AI provider.
+
 ## Architecture
 
 ```text
