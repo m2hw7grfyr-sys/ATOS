@@ -19,10 +19,15 @@ class Settings(BaseSettings):
     apify_token: str = ""
     apify_api_base_url: str = "https://api.apify.com/v2"
     openai_api_key: str = ""
+    log_level: str = "INFO"
+    log_format: str = "json"
     playwright_mock_mode: bool = True
 
     model_config = SettingsConfigDict(
-        env_file=BACKEND_DIR.parent / ".env",
+        env_file=(
+            BACKEND_DIR.parent / ".env",
+            BACKEND_DIR.parent / ".env.local",
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )

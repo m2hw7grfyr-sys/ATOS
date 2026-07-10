@@ -1,6 +1,7 @@
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 
 
@@ -14,8 +15,8 @@ def error_payload(
         "success": False,
         "code": code,
         "message": message,
-        "data": data,
         "trace_id": getattr(request.state, "trace_id", "unavailable"),
+        "data": data,
     }
 
 
@@ -44,4 +45,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     return JSONResponse(
         status_code=500,
         content=error_payload(request, "SYS-9999", "internal server error"),
+    )
+
+
+async def database_exception_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content=error_payload(request, "DB-0001", "database error"),
     )

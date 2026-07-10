@@ -1,18 +1,33 @@
-.PHONY: install init-db seed backend frontend
+.PHONY: install init-db seed backend frontend build test quality docker-up
 
 install:
 	python3 -m venv .venv
 	.venv/bin/pip install -r backend/requirements.txt
-	cd frontend && npm install
+	cd frontend && pnpm install
 
 init-db:
-	cd backend && ../.venv/bin/python -m alembic upgrade head
+	.venv/bin/python scripts/migrate.py
 
 seed:
-	cd backend && ../.venv/bin/python -m scripts.seed_data
+	.venv/bin/python scripts/seed.py
 
 backend:
 	cd backend && ../.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 frontend:
-	cd frontend && npm run dev
+	cd frontend && pnpm dev
+
+build:
+	cd frontend && pnpm build
+
+test:
+	PYTHONPATH=backend .venv/bin/python -m unittest discover backend/tests
+
+quality:
+	PYTHONPYCACHEPREFIX=.pycache python3 -m compileall backend/app backend/scripts scripts
+	PYTHONPATH=backend .venv/bin/python -m unittest discover backend/tests
+	cd frontend && pnpm lint
+	cd frontend && pnpm build
+
+docker-up:
+	docker compose up --build

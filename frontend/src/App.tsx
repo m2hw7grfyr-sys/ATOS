@@ -27,6 +27,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { apiGet, apiRequest } from "./api";
 
 type PageKey =
@@ -144,6 +145,23 @@ const navigation = [
   { key: "statistics", label: "Statistics", icon: ChartNoAxesCombined },
   { key: "settings", label: "System Settings", icon: Settings },
 ] as const;
+
+const pageRoutes: Record<PageKey, string> = {
+  dashboard: "/",
+  "data-center": "/data-center",
+  "post-pool": "/post-pool",
+  "ai-workspace": "/ai-workspace",
+  scheduler: "/scheduler",
+  "account-center": "/account-center",
+  execution: "/execution",
+  engagement: "/engagement",
+  statistics: "/statistics",
+  settings: "/settings",
+};
+
+const routePages = Object.fromEntries(
+  Object.entries(pageRoutes).map(([key, value]) => [value, key as PageKey]),
+) as Record<string, PageKey>;
 
 const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "运行总览", subtitle: "系统状态、队列与关键运营指标" },
@@ -2763,15 +2781,21 @@ function PageContent({ page }: { page: PageKey }) {
   }
 }
 
-export default function App() {
-  const [page, setPage] = useState<PageKey>("dashboard");
+function PermissionGuard({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const location = useLocation();
+  const routerNavigate = useNavigate();
+  const page = routePages[location.pathname] ?? "dashboard";
   const current = pageMeta[page];
   const currentNav = useMemo(() => navigation.find((item) => item.key === page), [page]);
 
   function navigate(next: PageKey) {
-    setPage(next);
+    routerNavigate(pageRoutes[next]);
     setMobileNavOpen(false);
   }
 
@@ -2881,9 +2905,30 @@ export default function App() {
               </button>
             </div>
           </div>
-          <PageContent page={page} />
+          <Routes>
+            {navigation.map((item) => (
+              <Route
+                key={item.key}
+                path={pageRoutes[item.key]}
+                element={
+                  <PermissionGuard>
+                    <PageContent page={item.key} />
+                  </PermissionGuard>
+                }
+              />
+            ))}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </div>
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppLayout />
+    </BrowserRouter>
   );
 }

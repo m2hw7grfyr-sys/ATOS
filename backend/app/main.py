@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 
 from app.api import (
@@ -22,14 +23,17 @@ from app.api import (
 )
 from app.config import get_settings
 from app.exception_handlers import (
+    database_exception_handler,
     http_exception_handler,
     unhandled_exception_handler,
     validation_exception_handler,
 )
+from app.logging_config import configure_logging
 from app.middleware import trace_middleware
 
 
 settings_config = get_settings()
+configure_logging()
 app = FastAPI(
     title=settings_config.app_name,
     version=settings_config.app_version,
@@ -38,6 +42,7 @@ app = FastAPI(
 app.middleware("http")(trace_middleware)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(SQLAlchemyError, database_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 app.add_middleware(
     CORSMiddleware,

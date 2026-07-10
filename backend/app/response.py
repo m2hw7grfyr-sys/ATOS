@@ -16,6 +16,6 @@ def ok(data: Any, trace_id: str, message: str = "success") -> dict[str, Any]:
         "success": True,
         "code": "OK",
         "message": message,
-        "data": data,
         "trace_id": trace_id,
+        "data": data,
     }

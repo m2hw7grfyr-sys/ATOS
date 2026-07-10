@@ -5,3 +5,4 @@ alembic==1.15.2
 pydantic-settings==2.9.1
 python-dotenv==1.1.0
 playwright==1.49.1
+psycopg[binary]==3.2.9
