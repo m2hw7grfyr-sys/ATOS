@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, PlatformRegistry, Post, Reply, ReplyTask, SchedulerTask, StatisticSnapshot, TGEProfile, WorkerNode
+from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, PlatformRegistry, Post, Reply, ReplyTask, SchedulerTask, StatisticSnapshot, SystemAlert, TGEProfile, WorkerNode
 from app.response import ok
 
 
@@ -84,6 +84,12 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "worker_avg_cpu": round(float(db.scalar(select(func.coalesce(func.avg(WorkerNode.cpu), 0))) or 0), 2),
                 "worker_avg_memory": round(float(db.scalar(select(func.coalesce(func.avg(WorkerNode.memory), 0))) or 0), 2),
                 "worker_avg_gpu": round(float(db.scalar(select(func.coalesce(func.avg(WorkerNode.gpu), 0))) or 0), 2),
+                "worker_running_tasks": count(ExecutionTask, ExecutionTask.status.in_(["CLAIMED", "RUNNING", "WAITING_MANUAL"])),
+                "worker_capacity": db.scalar(select(func.coalesce(func.sum(WorkerNode.max_concurrent_tasks), 0)).where(WorkerNode.status == "ONLINE")) or 0,
+                "automation_retry_pending": count(ExecutionTask, ExecutionTask.status == "RETRY_PENDING"),
+                "automation_worker_lost": count(ExecutionTask, ExecutionTask.status == "WORKER_LOST"),
+                "automation_alerts": count(SystemAlert, SystemAlert.status == "OPEN"),
+                "automation_queue_length": count(ExecutionQueue, ExecutionQueue.status.in_(["QUEUED", "RETRY_PENDING"])),
                 "execution_running": count(ExecutionTask, ExecutionTask.status == "RUNNING"),
                 "execution_success": count(ExecutionTask, ExecutionTask.status == "SUCCESS"),
                 "browser_running": count(BrowserSession, BrowserSession.status.in_(["RUNNING", "ATTACHED"])),

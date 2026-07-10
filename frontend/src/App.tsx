@@ -37,6 +37,7 @@ type PageKey =
   | "ai-workspace"
   | "scheduler"
   | "platform-center"
+  | "worker-center"
   | "account-center"
   | "execution"
   | "engagement"
@@ -139,6 +140,14 @@ type DashboardData = {
     active_platforms?: number;
     healthy_platforms?: number;
     failed_adapters?: number;
+    worker_online?: number;
+    worker_offline?: number;
+    worker_running_tasks?: number;
+    worker_capacity?: number;
+    automation_retry_pending?: number;
+    automation_worker_lost?: number;
+    automation_alerts?: number;
+    automation_queue_length?: number;
   };
   platform_health: Array<{
     name: string;
@@ -174,6 +183,7 @@ const navigation = [
   { key: "ai-workspace", label: "AI Workspace", icon: BrainCircuit },
   { key: "scheduler", label: "Scheduler", icon: CalendarClock },
   { key: "platform-center", label: "Platform Center", icon: SlidersHorizontal },
+  { key: "worker-center", label: "Worker Center", icon: Bot },
   { key: "account-center", label: "Account Center", icon: Users },
   { key: "execution", label: "Execution", icon: Play },
   { key: "engagement", label: "Engagement", icon: Activity },
@@ -188,6 +198,7 @@ const pageRoutes: Record<PageKey, string> = {
   "ai-workspace": "/ai-workspace",
   scheduler: "/scheduler",
   "platform-center": "/platform-center",
+  "worker-center": "/worker-center",
   "account-center": "/account-center",
   execution: "/execution",
   engagement: "/engagement",
@@ -206,6 +217,7 @@ const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   "ai-workspace": { title: "AI Workspace", subtitle: "分析、评分、策略与人工审核" },
   scheduler: { title: "Scheduler", subtitle: "进入 Execution 前的唯一任务队列" },
   "platform-center": { title: "Platform Center", subtitle: "平台 Adapter、能力与健康状态" },
+  "worker-center": { title: "Worker Center", subtitle: "Automation Runtime、Worker Pool 与任务 Claim" },
   "account-center": { title: "Account Center", subtitle: "平台账号、健康度与运行限制" },
   execution: { title: "Execution Center", subtitle: "执行运行时占位与环境状态" },
   engagement: { title: "Engagement", subtitle: "策略组合与互动任务占位" },
@@ -593,6 +605,30 @@ function DashboardPage() {
         {
           label: "Failed Adapters",
           value: data.overview.failed_adapters ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
+        },
+        {
+          label: "Worker Capacity",
+          value: `${data.overview.worker_running_tasks ?? 0}/${data.overview.worker_capacity ?? 0}`,
+          icon: Bot,
+          tone: "text-teal",
+        },
+        {
+          label: "Automation Queue",
+          value: data.overview.automation_queue_length ?? 0,
+          icon: FileClock,
+          tone: "text-amber",
+        },
+        {
+          label: "Retry Pending",
+          value: data.overview.automation_retry_pending ?? 0,
+          icon: RefreshCw,
+          tone: "text-blue-700",
+        },
+        {
+          label: "Open Alerts",
+          value: data.overview.automation_alerts ?? 0,
           icon: CircleAlert,
           tone: "text-red-700",
         },
@@ -3142,6 +3178,128 @@ function PlatformCenterPage() {
   );
 }
 
+function WorkerCenterPage() {
+  const runtime = useApiData<RecordItem>("/automation/runtime");
+  const workers = useApiData<RecordItem[]>("/automation/workers");
+  const queue = useApiData<RecordItem[]>("/automation/queue");
+  const alerts = useApiData<RecordItem[]>("/automation/alerts");
+  const metrics = useApiData<RecordItem>("/automation/metrics");
+  const [claimResult, setClaimResult] = useState<RecordItem | null>(null);
+  const [claiming, setClaiming] = useState(false);
+
+  async function claimNext() {
+    setClaiming(true);
+    try {
+      const result = await apiRequest<RecordItem | null>("/automation/claim", {
+        method: "POST",
+        data: {},
+      });
+      setClaimResult(result ?? { message: "No eligible task" });
+      await runtime.reload();
+      await workers.reload();
+      await queue.reload();
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  const overview = runtime.data ?? {};
+  const metricData = metrics.data ?? {};
+  const runtimeCards = [
+    { label: "Queue", value: overview.task_queue ?? 0, icon: FileClock, tone: "text-amber" },
+    { label: "Online Workers", value: overview.online_workers ?? 0, icon: Bot, tone: "text-teal" },
+    { label: "Running", value: overview.running_tasks ?? 0, icon: Activity, tone: "text-blue-700" },
+    { label: "Failed", value: overview.failed_tasks ?? 0, icon: CircleAlert, tone: "text-red-700" },
+    { label: "Retry Pending", value: overview.retry_pending ?? 0, icon: RefreshCw, tone: "text-blue-700" },
+    { label: "Worker Lost", value: overview.worker_lost ?? 0, icon: CircleAlert, tone: "text-red-700" },
+    { label: "Throughput", value: overview.throughput ?? 0, icon: CheckCircle2, tone: "text-emerald-700" },
+    { label: "Failure Rate", value: `${overview.failure_rate ?? 0}%`, icon: HeartPulse, tone: "text-amber" },
+  ];
+
+  return (
+    <StateView loading={runtime.loading} error={runtime.error} reload={runtime.reload}>
+      <div className="space-y-6">
+        <Section
+          title="Automation Runtime"
+          action={
+            <button className="button-secondary" onClick={claimNext} disabled={claiming}>
+              <Play className="h-4 w-4" />
+              {claiming ? "Claiming..." : "Claim Next"}
+            </button>
+          }
+        >
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {runtimeCards.map((card) => (
+              <div key={card.label} className="panel p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase text-gray-500">{card.label}</p>
+                  <card.icon className={`h-5 w-5 ${card.tone}`} />
+                </div>
+                <p className="mt-4 text-2xl font-bold">{String(card.value)}</p>
+              </div>
+            ))}
+          </div>
+          {claimResult && (
+            <pre className="panel mt-4 overflow-x-auto p-4 text-xs text-gray-600">
+              {JSON.stringify(claimResult, null, 2)}
+            </pre>
+          )}
+        </Section>
+
+        <Section title="Worker Pool">
+          <DataTable
+            rows={workers.data ?? []}
+            columns={[
+              { key: "name", label: "Worker" },
+              { key: "worker_type", label: "Type" },
+              { key: "status", label: "Status" },
+              { key: "runtime_status", label: "Runtime" },
+              { key: "current_tasks", label: "Current" },
+              { key: "max_concurrent_tasks", label: "Max" },
+              { key: "health_score", label: "Health" },
+              { key: "region", label: "Region" },
+            ]}
+          />
+        </Section>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="Execution Queue">
+            <DataTable
+              rows={queue.data ?? []}
+              columns={[
+                { key: "execution_task_id", label: "Task" },
+                { key: "priority", label: "Priority" },
+                { key: "status", label: "Status" },
+                { key: "worker_node_id", label: "Worker" },
+                { key: "required_capability", label: "Capability" },
+                { key: "lock_uuid", label: "Lock" },
+              ]}
+            />
+          </Section>
+          <Section title="Alerts">
+            <DataTable
+              rows={alerts.data ?? []}
+              columns={[
+                { key: "alert_type", label: "Type" },
+                { key: "severity", label: "Severity" },
+                { key: "status", label: "Status" },
+                { key: "message", label: "Message" },
+                { key: "created_at", label: "Created" },
+              ]}
+            />
+          </Section>
+        </div>
+
+        <Section title="Runtime Metrics">
+          <pre className="panel overflow-x-auto p-4 text-xs text-gray-600">
+            {JSON.stringify(metricData, null, 2)}
+          </pre>
+        </Section>
+      </div>
+    </StateView>
+  );
+}
+
 function PageContent({ page }: { page: PageKey }) {
   switch (page) {
     case "dashboard":
@@ -3156,6 +3314,8 @@ function PageContent({ page }: { page: PageKey }) {
       return <SchedulerPage />;
     case "platform-center":
       return <PlatformCenterPage />;
+    case "worker-center":
+      return <WorkerCenterPage />;
     case "account-center":
       return <AccountCenterPage />;
     case "settings":

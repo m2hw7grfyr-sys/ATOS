@@ -117,6 +117,7 @@ def create_execution_task_from_scheduler(db: Session, scheduler_task: SchedulerT
                 execution_task_id=task.id,
                 priority=scheduler_task.priority,
                 status="QUEUED",
+                required_capability=(scheduler_task.payload or {}).get("capability_required") or "BROWSER",
             )
         )
     return task
@@ -171,6 +172,11 @@ class ExecutionRuntime:
                 host=host,
                 version=version,
                 capability=capability or {"mode": "local", "browser_automation": False},
+                capabilities=capability or {"BROWSER": True, "LOCAL": True},
+                worker_type="LOCAL",
+                max_concurrent_tasks=1,
+                current_tasks=0,
+                priority=100,
                 status="ONLINE",
                 last_heartbeat=utc_now(),
             )
@@ -181,6 +187,7 @@ class ExecutionRuntime:
             worker.host = host or worker.host
             worker.version = version or worker.version
             worker.capability = capability or worker.capability or {}
+            worker.capabilities = capability or worker.capabilities or worker.capability or {"BROWSER": True, "LOCAL": True}
             worker.last_heartbeat = utc_now()
         return worker
 
@@ -206,31 +213,11 @@ class ExecutionRuntime:
         return task
 
     def claim_next(self, worker: WorkerNode | None = None) -> ExecutionTask | None:
-        worker = worker or self.register_worker()
+        worker = worker or self.register_worker(capability={"BROWSER": True, "LOCAL": True})
         self.heartbeat(worker)
-        queue = self.db.scalar(
-            select(ExecutionQueue)
-            .where(ExecutionQueue.status == "QUEUED")
-            .order_by(ExecutionQueue.priority.asc(), ExecutionQueue.queued_at.asc())
-        )
-        if not queue:
-            return None
-        task = self.db.get(ExecutionTask, queue.execution_task_id)
-        if not task:
-            queue.status = "FAILED"
-            queue.error_message = "Execution task missing"
-            return None
-        now = utc_now()
-        queue.status = "CLAIMED"
-        queue.worker_node_id = worker.id
-        queue.claimed_at = now
-        task.status = "CLAIMED"
-        task.queue_status = "CLAIMED"
-        task.worker_node_id = worker.id
-        task.claimed_at = now
-        task.last_heartbeat_at = now
-        execution_log(self.db, task, "TASK_CLAIMED", old_status="QUEUED", new_status="CLAIMED", message=f"Claimed by {worker.name}")
-        return task
+        from app.services.automation_runtime import AutomationRuntime
+
+        return AutomationRuntime(self.db).claim_next(worker.id)
 
     def run_claimed(self, task: ExecutionTask) -> ExecutionTask:
         queue = self.db.scalar(

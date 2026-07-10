@@ -262,6 +262,58 @@ The Sprint 05 flow never clicks the platform submit/comment button. It only prep
 
 Mock mode remains supported without TGE or Playwright. In mock mode, ATOS still creates the Reply Task, Scheduler Task, Execution Task, Browser Session, Browser Tab, platform fill result, timeline metadata, and manual confirmation state transitions.
 
+## Automation Runtime
+
+Sprint 08 adds the long-running automation foundation:
+
+```text
+Scheduler
+  ↓
+Execution Queue
+  ↓
+Automation Runtime
+  ↓
+Worker Claim
+  ↓
+Execution Runtime
+  ↓
+Result
+```
+
+Automation Runtime manages:
+
+- Multiple workers
+- Worker heartbeat
+- Worker capability scheduling
+- Priority queue
+- Concurrency control
+- Database fallback task locks
+- Retry pending flow
+- Worker lost recovery
+- Runtime metrics
+- System alerts
+
+Primary Automation APIs:
+
+```text
+GET  /automation/runtime
+GET  /automation/workers
+POST /automation/workers/register
+POST /automation/workers/heartbeat
+POST /automation/claim
+POST /automation/tasks/{id}/start
+POST /automation/tasks/{id}/complete
+POST /automation/tasks/{id}/retry
+POST /automation/recover
+GET  /automation/queue
+GET  /automation/locks
+GET  /automation/metrics
+GET  /automation/alerts
+GET  /automation/logs
+```
+
+Sprint 08 does not add real browser automation. It makes sure long-running workers can safely claim, retry, and recover execution tasks.
+
 ## Architecture
 
 ```text

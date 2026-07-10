@@ -37,14 +37,17 @@ from app.models import (
     ReplayIndex,
     SchedulerTask,
     StatisticSnapshot,
+    RuntimeMetric,
+    SystemAlert,
     SystemSetting,
+    TaskLock,
     TGEProfile,
     WorkerLog,
     WorkerNode,
 )
 
 
-SEED_VERSION = "sprint-07-platform-runtime"
+SEED_VERSION = "sprint-08-automation-runtime"
 
 
 def main() -> None:
@@ -789,7 +792,13 @@ def main() -> None:
                 ip="127.0.0.1",
                 version="sprint-02",
                 capability={"mode": "local", "browser_automation": False},
-                capabilities={"Execution": True, "Browser": False, "AI": False},
+                capabilities={"BROWSER": True, "LOCAL": True},
+                worker_type="LOCAL",
+                max_concurrent_tasks=2,
+                current_tasks=0,
+                priority=100,
+                region="local",
+                health_score=96,
                 runtime_status="READY",
                 last_seen=now,
                 last_heartbeat=now,
@@ -798,9 +807,14 @@ def main() -> None:
             db.flush()
         else:
             worker.status = "ONLINE"
-            worker.version = "sprint-02"
+            worker.version = "sprint-08"
             worker.capability = {"mode": "local", "browser_automation": False}
-            worker.capabilities = {"Execution": True, "Browser": False, "AI": False}
+            worker.capabilities = {"BROWSER": True, "LOCAL": True}
+            worker.worker_type = "LOCAL"
+            worker.max_concurrent_tasks = 2
+            worker.priority = 100
+            worker.region = "local"
+            worker.health_score = 96
             worker.runtime_status = "READY"
             worker.last_seen = now
             worker.last_heartbeat = now
@@ -816,7 +830,13 @@ def main() -> None:
                 ip="10.0.0.20",
                 version="sprint-03",
                 capability={"mode": "remote", "browser_automation": False},
-                capabilities={"Execution": True, "Browser": True, "TGE": False, "Playwright": False},
+                capabilities={"BROWSER": True, "TGE": False, "PLAYWRIGHT": False},
+                worker_type="REMOTE",
+                max_concurrent_tasks=3,
+                current_tasks=0,
+                priority=80,
+                region="linux-vps",
+                health_score=92,
                 cpu=18.5,
                 memory=42.0,
                 gpu=0.0,
@@ -829,8 +849,13 @@ def main() -> None:
             db.flush()
         else:
             remote_worker.status = "ONLINE"
-            remote_worker.version = "sprint-03"
-            remote_worker.capabilities = {"Execution": True, "Browser": True, "TGE": False, "Playwright": False}
+            remote_worker.version = "sprint-08"
+            remote_worker.worker_type = "REMOTE"
+            remote_worker.capabilities = {"BROWSER": True, "TGE": False, "PLAYWRIGHT": False}
+            remote_worker.max_concurrent_tasks = 3
+            remote_worker.priority = 80
+            remote_worker.region = "linux-vps"
+            remote_worker.health_score = 92
             remote_worker.cpu = 18.5
             remote_worker.memory = 42.0
             remote_worker.gpu = 0.0
@@ -849,7 +874,13 @@ def main() -> None:
                 ip="10.0.0.50",
                 version="sprint-06",
                 capability={"mode": "remote", "browser_automation": True},
-                capabilities={"AI": True, "Browser": True, "TGE": True, "Playwright": True, "Embedding": True},
+                capabilities={"AI": True, "BROWSER": True, "TGE": True, "PLAYWRIGHT": True, "EMBEDDING": True},
+                worker_type="REMOTE",
+                max_concurrent_tasks=5,
+                current_tasks=0,
+                priority=10,
+                region="windows-ai",
+                health_score=98,
                 cpu=22.0,
                 memory=58.0,
                 gpu=12.0,
@@ -862,8 +893,13 @@ def main() -> None:
             db.flush()
         else:
             windows_worker.status = "ONLINE"
-            windows_worker.version = "sprint-06"
-            windows_worker.capabilities = {"AI": True, "Browser": True, "TGE": True, "Playwright": True, "Embedding": True}
+            windows_worker.version = "sprint-08"
+            windows_worker.worker_type = "REMOTE"
+            windows_worker.capabilities = {"AI": True, "BROWSER": True, "TGE": True, "PLAYWRIGHT": True, "EMBEDDING": True}
+            windows_worker.max_concurrent_tasks = 5
+            windows_worker.priority = 10
+            windows_worker.region = "windows-ai"
+            windows_worker.health_score = 98
             windows_worker.cpu = 22.0
             windows_worker.memory = 58.0
             windows_worker.gpu = 12.0
@@ -878,13 +914,14 @@ def main() -> None:
                         worker_node_id=seed_worker.id,
                         worker_id=seed_worker.name,
                         log_type="application",
+                        module="seed",
                         level="INFO",
                         message="Seed worker online",
                         metadata_json={"seed": True, "runtime_status": seed_worker.runtime_status},
                     )
                 )
 
-        demo_statuses = ["RUNNING"] * 10 + ["WAITING_MANUAL"] * 10 + ["SUCCESS"] * 10
+        demo_statuses = ["QUEUED"] * 5 + ["RUNNING"] * 10 + ["WAITING_MANUAL"] * 10 + ["SUCCESS"] * 10
         for index, status in enumerate(demo_statuses, start=1):
             task_uuid_marker = f"sprint02-demo-{index:02d}"
             payload = {
@@ -918,8 +955,12 @@ def main() -> None:
                     status=status,
                     queue_status=status,
                     worker_node_id=worker.id if status in {"RUNNING", "WAITING_MANUAL"} else None,
+                    claimed_by_worker=worker.name if status in {"RUNNING", "WAITING_MANUAL"} else None,
                     claimed_at=now - timedelta(minutes=index) if status in {"RUNNING", "WAITING_MANUAL", "SUCCESS"} else None,
                     last_heartbeat_at=now if status in {"RUNNING", "WAITING_MANUAL"} else None,
+                    max_retry=3,
+                    retry_delay_seconds=60,
+                    retry_strategy="EXPONENTIAL",
                     started_at=now - timedelta(minutes=index) if status in {"RUNNING", "WAITING_MANUAL", "SUCCESS"} else None,
                     finished_at=now - timedelta(minutes=index - 1) if status == "SUCCESS" else None,
                     precheck_status="SUCCESS",
@@ -933,6 +974,10 @@ def main() -> None:
                 existing.status = status
                 existing.queue_status = status
                 existing.worker_node_id = worker.id if status in {"RUNNING", "WAITING_MANUAL"} else None
+                existing.claimed_by_worker = worker.name if status in {"RUNNING", "WAITING_MANUAL"} else None
+                existing.max_retry = existing.max_retry or 3
+                existing.retry_delay_seconds = existing.retry_delay_seconds or 60
+                existing.retry_strategy = existing.retry_strategy or "EXPONENTIAL"
             queue = db.scalar(
                 select(ExecutionQueue).where(ExecutionQueue.execution_task_id == existing.id)
             )
@@ -944,6 +989,7 @@ def main() -> None:
                         worker_node_id=worker.id if status in {"RUNNING", "WAITING_MANUAL"} else None,
                         priority="MEDIUM",
                         status=status,
+                        required_capability="BROWSER",
                         queued_at=now - timedelta(minutes=index + 30),
                         claimed_at=existing.claimed_at,
                         started_at=existing.started_at,
@@ -953,9 +999,73 @@ def main() -> None:
             else:
                 queue.status = status
                 queue.worker_node_id = worker.id if status in {"RUNNING", "WAITING_MANUAL"} else None
+                queue.required_capability = queue.required_capability or "BROWSER"
                 queue.claimed_at = existing.claimed_at
                 queue.started_at = existing.started_at
                 queue.finished_at = existing.finished_at
+
+        for seed_worker in [worker, remote_worker, windows_worker]:
+            seed_worker.current_tasks = db.scalar(
+                select(func.count()).select_from(ExecutionTask).where(
+                    ExecutionTask.worker_node_id == seed_worker.id,
+                    ExecutionTask.status.in_(["CLAIMED", "RUNNING", "WAITING_MANUAL"]),
+                )
+            ) or 0
+
+        running_task = db.scalar(
+            select(ExecutionTask).where(ExecutionTask.status == "RUNNING")
+        )
+        if running_task and running_task.lock_uuid is None:
+            lock = TaskLock(
+                resource_type="execution_task",
+                resource_id=running_task.id,
+                owner_worker_id=running_task.worker_node_id,
+                status="ACTIVE",
+                expires_at=now + timedelta(minutes=5),
+            )
+            db.add(lock)
+            db.flush()
+            running_task.lock_uuid = lock.uuid
+            queue = db.scalar(select(ExecutionQueue).where(ExecutionQueue.execution_task_id == running_task.id))
+            if queue:
+                queue.lock_uuid = lock.uuid
+                queue.lock_expires_at = lock.expires_at
+
+        metric_specs = [
+            ("automation_task_queue", "SYSTEM", 5),
+            ("automation_online_workers", "SYSTEM", 3),
+            ("automation_running_tasks", "SYSTEM", 10),
+            ("automation_retry_pending", "SYSTEM", 0),
+            ("automation_failure_rate", "SYSTEM", 8),
+        ]
+        for metric, dimension, value in metric_specs:
+            existing_metric = db.scalar(
+                select(RuntimeMetric).where(
+                    RuntimeMetric.metric == metric,
+                    RuntimeMetric.dimension == dimension,
+                    RuntimeMetric.metadata_json["seed"].as_boolean().is_(True),
+                )
+            )
+            if not existing_metric:
+                db.add(RuntimeMetric(metric=metric, dimension=dimension, value=value, metadata_json={"seed": True}))
+
+        alert = db.scalar(
+            select(SystemAlert).where(
+                SystemAlert.alert_type == "QUEUE_MONITOR_READY",
+                SystemAlert.metadata_json["seed"].as_boolean().is_(True),
+            )
+        )
+        if not alert:
+            db.add(
+                SystemAlert(
+                    alert_type="QUEUE_MONITOR_READY",
+                    severity="INFO",
+                    status="OPEN",
+                    message="Automation Runtime monitoring is seeded and ready.",
+                    source="automation",
+                    metadata_json={"seed": True},
+                )
+            )
 
         browser_sessions = []
         for index in range(1, 5):
@@ -1305,8 +1415,9 @@ Community: {{community}}
             "20 posts, 20 AI tasks, 8 scheduler tasks, 4 accounts, "
             "4 TGE profiles, pipeline statistics, 3 LLM providers, 2 prompt templates, "
             "2 prompt versions, 4 provider routes, 5 platform weights, 2 engagement strategies, "
-            "30 execution runtime demo tasks, 3 workers, 4 browser sessions, 15 browser tabs, "
-            "5 engagement tasks, 8 reply tasks, 1 actor mapping."
+            "35 execution runtime demo tasks, 3 automation workers, 1 task lock, runtime metrics, "
+            "1 automation alert, 4 browser sessions, 15 browser tabs, 5 engagement tasks, "
+            "8 reply tasks, 1 actor mapping."
         )
     finally:
         db.close()

@@ -540,9 +540,15 @@ class ExecutionTask(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(40), default="NEW", index=True)
     queue_status: Mapped[str] = mapped_column(String(40), default="NEW", index=True)
     worker_node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("worker_nodes.id"), index=True)
+    claimed_by_worker: Mapped[Optional[str]] = mapped_column(String(120), index=True)
     claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retry: Mapped[int] = mapped_column(Integer, default=3)
+    retry_delay_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    retry_strategy: Mapped[str] = mapped_column(String(40), default="EXPONENTIAL")
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    lock_uuid: Mapped[Optional[str]] = mapped_column(String(36), index=True)
     precheck_status: Mapped[str] = mapped_column(String(40), default="PENDING", index=True)
     environment_status: Mapped[str] = mapped_column(String(40), default="UNKNOWN", index=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -577,8 +583,16 @@ class WorkerNode(Base, TimestampMixin):
     os: Mapped[Optional[str]] = mapped_column(String(120))
     ip: Mapped[Optional[str]] = mapped_column(String(80), index=True)
     version: Mapped[str] = mapped_column(String(60), default="local")
+    worker_type: Mapped[str] = mapped_column(String(60), default="LOCAL", index=True)
     capability: Mapped[dict] = mapped_column(JSON, default=dict)
     capabilities: Mapped[dict] = mapped_column(JSON, default=dict)
+    max_concurrent_tasks: Mapped[int] = mapped_column(Integer, default=1)
+    current_tasks: Mapped[int] = mapped_column(Integer, default=0)
+    priority: Mapped[int] = mapped_column(Integer, default=100, index=True)
+    region: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    health_score: Mapped[float] = mapped_column(Float, default=100)
+    failure_rate: Mapped[float] = mapped_column(Float, default=0)
+    task_success_rate: Mapped[float] = mapped_column(Float, default=0)
     cpu: Mapped[Optional[float]] = mapped_column(Float)
     memory: Mapped[Optional[float]] = mapped_column(Float)
     gpu: Mapped[Optional[float]] = mapped_column(Float)
@@ -595,7 +609,9 @@ class WorkerLog(Base):
     uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
     worker_node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("worker_nodes.id"), index=True)
     worker_id: Mapped[Optional[str]] = mapped_column(String(120), index=True)
+    execution_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("execution_tasks.id"), index=True)
     log_type: Mapped[str] = mapped_column(String(60), default="application", index=True)
+    module: Mapped[str] = mapped_column(String(80), default="worker", index=True)
     level: Mapped[str] = mapped_column(String(30), default="INFO", index=True)
     message: Mapped[str] = mapped_column(Text)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -617,6 +633,48 @@ class ExecutionQueue(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[Optional[str]] = mapped_column(Text)
+    lock_uuid: Mapped[Optional[str]] = mapped_column(String(36), index=True)
+    lock_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    required_capability: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+
+
+class TaskLock(Base):
+    __tablename__ = "task_locks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    resource_type: Mapped[str] = mapped_column(String(80), default="execution_task", index=True)
+    resource_id: Mapped[int] = mapped_column(Integer, index=True)
+    owner_worker_id: Mapped[Optional[int]] = mapped_column(ForeignKey("worker_nodes.id"), index=True)
+    lock_token: Mapped[str] = mapped_column(String(80), default=new_uuid, unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="ACTIVE", index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class RuntimeMetric(Base):
+    __tablename__ = "runtime_metrics"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    metric: Mapped[str] = mapped_column(String(120), index=True)
+    value: Mapped[float] = mapped_column(Float, default=0)
+    dimension: Mapped[str] = mapped_column(String(120), default="SYSTEM", index=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class SystemAlert(Base, TimestampMixin):
+    __tablename__ = "system_alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    alert_type: Mapped[str] = mapped_column(String(80), index=True)
+    severity: Mapped[str] = mapped_column(String(40), default="WARNING", index=True)
+    status: Mapped[str] = mapped_column(String(40), default="OPEN", index=True)
+    message: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(80), default="automation", index=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class BrowserSession(Base, TimestampMixin):

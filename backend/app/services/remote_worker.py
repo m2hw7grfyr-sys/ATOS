@@ -44,8 +44,13 @@ class RemoteWorkerService:
                 os=str(payload.get("os") or ""),
                 ip=str(payload.get("ip") or self._request_ip(request) or ""),
                 version=str(payload.get("version") or "remote"),
+                worker_type=str(payload.get("worker_type") or "REMOTE"),
                 capability=capabilities,
                 capabilities=capabilities,
+                max_concurrent_tasks=int(payload.get("max_concurrent_tasks") or 1),
+                current_tasks=0,
+                priority=int(payload.get("priority") or 100),
+                region=payload.get("region"),
                 runtime_status=str(payload.get("runtime_status") or "READY"),
                 token_version=self.settings.worker_token_version,
                 last_seen=now,
@@ -60,8 +65,12 @@ class RemoteWorkerService:
             worker.os = str(payload.get("os") or worker.os or "")
             worker.ip = str(payload.get("ip") or self._request_ip(request) or worker.ip or "")
             worker.version = str(payload.get("version") or worker.version or "remote")
+            worker.worker_type = str(payload.get("worker_type") or worker.worker_type or "REMOTE")
             worker.capability = capabilities or worker.capability or {}
             worker.capabilities = capabilities or worker.capabilities or worker.capability or {}
+            worker.max_concurrent_tasks = int(payload.get("max_concurrent_tasks") or worker.max_concurrent_tasks or 1)
+            worker.priority = int(payload.get("priority") or worker.priority or 100)
+            worker.region = payload.get("region") or worker.region
             worker.runtime_status = str(payload.get("runtime_status") or worker.runtime_status or "READY")
             worker.token_version = self.settings.worker_token_version
             worker.last_seen = now
@@ -80,6 +89,7 @@ class RemoteWorkerService:
         worker.cpu = self._float_or_none(payload.get("cpu"))
         worker.memory = self._float_or_none(payload.get("memory"))
         worker.gpu = self._float_or_none(payload.get("gpu"))
+        worker.current_tasks = int(payload.get("current_tasks") or worker.current_tasks or 0)
         worker.runtime_status = str(payload.get("runtime_status") or worker.runtime_status or "READY")
         worker.capabilities = payload.get("capabilities") or worker.capabilities or worker.capability or {}
         worker.capability = worker.capabilities
@@ -121,7 +131,9 @@ class RemoteWorkerService:
         item = WorkerLog(
             worker_node_id=worker.id if worker else None,
             worker_id=worker.name if worker else None,
+            execution_task_id=metadata.get("execution_task_id") if metadata else None,
             log_type=log_type,
+            module=str((metadata or {}).get("module") or log_type),
             level=level.upper(),
             message=message,
             metadata_json=metadata or {},
