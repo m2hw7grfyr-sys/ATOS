@@ -27,6 +27,7 @@ def serialize_scheduler_task(task: SchedulerTask, db: Session) -> dict:
     if not ai_task and reply and reply.ai_task_id:
         ai_task = db.get(AITask, reply.ai_task_id)
     item["task_id"] = task.id
+    item["reply_task_id"] = task.reply_task_id
     item["platform"] = platform.slug if platform else None
     item["post_title"] = post.title if post else None
     item["account"] = account.username if account else None

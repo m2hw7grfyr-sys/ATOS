@@ -206,6 +206,62 @@ custom_http
 
 When no real API key is configured, ATOS automatically falls back to `Mock Provider`, so the full AI flow remains runnable offline.
 
+## Semi-Auto Reply Pipeline
+
+Sprint 05 connects the first complete semi-auto reply loop:
+
+```text
+Post Pool
+  ↓
+AI Runtime
+  ↓
+Reply Review
+  ↓
+Scheduler Runtime
+  ↓
+Execution Runtime
+  ↓
+Browser Runtime
+  ↓
+Platform Adapter
+  ↓
+Fill Reply
+  ↓
+WAITING_MANUAL
+  ↓
+Human Confirm
+  ↓
+Execution Complete
+```
+
+Default execution mode:
+
+```text
+SEMI_AUTO
+```
+
+Reserved but not implemented in Sprint 05:
+
+```text
+AUTO_ASSISTED
+FULL_AUTO
+```
+
+Primary Reply Pipeline APIs:
+
+```text
+GET  /reply-tasks
+POST /reply-tasks
+POST /reply-tasks/{id}/approve
+POST /reply-tasks/{id}/schedule
+POST /reply-tasks/{id}/prepare
+POST /reply-tasks/{id}/confirm
+```
+
+The Sprint 05 flow never clicks the platform submit/comment button. It only prepares the reply in the browser/editor and enters `WAITING_MANUAL`. The operator must submit manually on the platform, then confirm in ATOS.
+
+Mock mode remains supported without TGE or Playwright. In mock mode, ATOS still creates the Reply Task, Scheduler Task, Execution Task, Browser Session, Browser Tab, platform fill result, timeline metadata, and manual confirmation state transitions.
+
 ## Architecture
 
 ```text

@@ -10,7 +10,8 @@ from app.serializers import serialize_model
 from app.services.ai import AIAnalysisService, AIProviderError, ReplyGenerationService, preview_prompt
 from app.services.audit import write_audit
 from app.services.pipeline import BusinessPipelineService
-from app.services.scheduler import get_scheduler_settings, queue_approved_ai_task
+from app.services.reply_pipeline import ReplyPipelineService
+from app.services.scheduler import get_scheduler_settings
 from app.services.timeline import set_post_status
 
 
@@ -141,8 +142,9 @@ def approve_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     )
     if not reply:
         raise HTTPException(status_code=409, detail="AI task has no reply")
+    reply_pipeline = ReplyPipelineService(db, actor="operator", trace_id=request.state.trace_id)
+    reply_task = reply_pipeline.approve_reply(reply_id=reply.id)
     task.status = "APPROVED"
-    reply.status = "APPROVED"
     post = db.get(Post, task.post_id)
     if post:
         set_post_status(
@@ -164,11 +166,12 @@ def approve_task(task_id: int, request: Request, db: Session = Depends(get_db)):
         )
     scheduler_task = None
     if get_scheduler_settings(db).get("auto_queue_on_approval"):
-        scheduler_task = queue_approved_ai_task(db, ai_task_id=task.id)
+        scheduler_task = reply_pipeline.schedule_reply_task(reply_task.id, source="AI_WORKSPACE")
     db.commit()
     db.refresh(task)
     result = serialize_task(task, db)
     result["scheduler_task_id"] = scheduler_task.id if scheduler_task else None
+    result["reply_task_id"] = reply_task.id
     return ok(result, request.state.trace_id, "AI task approved")
 
 

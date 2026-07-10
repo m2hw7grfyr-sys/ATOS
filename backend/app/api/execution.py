@@ -8,6 +8,7 @@ from app.response import ok
 from app.serializers import serialize_model
 from app.services.browser_runtime import BrowserRuntime
 from app.services.execution import ExecutionRuntime, run_precheck, set_execution_status
+from app.services.reply_pipeline import ReplyPipelineService
 
 
 router = APIRouter(prefix="/execution", tags=["execution"])
@@ -26,6 +27,7 @@ def serialize_execution_task(task: ExecutionTask, db: Session) -> dict:
     item["fill_status"] = (task.payload_json or {}).get("fill_status")
     item["manual_confirmed"] = (task.payload_json or {}).get("manual_confirmed")
     item["queue_status"] = task.queue_status
+    item["reply_task_id"] = task.reply_task_id
     item["retry_count"] = task.retry_count
     item["claimed_at"] = task.claimed_at.isoformat() if task.claimed_at else None
     item["last_heartbeat_at"] = task.last_heartbeat_at.isoformat() if task.last_heartbeat_at else None
@@ -175,6 +177,13 @@ def prepare_reply_task(task_id: int, request: Request, db: Session = Depends(get
     task = db.get(ExecutionTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="execution task not found")
+    if task.reply_task_id:
+        reply_task = ReplyPipelineService(db, trace_id=request.state.trace_id).prepare_reply(task.reply_task_id)
+        db.commit()
+        db.refresh(task)
+        item = serialize_execution_task(task, db)
+        item["reply_task_status"] = reply_task.status
+        return ok(item, request.state.trace_id, "reply prepared")
     task.action_type = "PREPARE_REPLY"
     if task.precheck_status != "SUCCESS":
         run_precheck(db, task)
@@ -224,6 +233,13 @@ def mark_submitted_task(task_id: int, request: Request, db: Session = Depends(ge
     task = db.get(ExecutionTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="execution task not found")
+    if task.reply_task_id:
+        reply_task = ReplyPipelineService(db, trace_id=request.state.trace_id).confirm(task.reply_task_id)
+        db.commit()
+        db.refresh(task)
+        item = serialize_execution_task(task, db)
+        item["reply_task_status"] = reply_task.status
+        return ok(item, request.state.trace_id, "manual submission confirmed")
     payload = task.payload_json or {}
     task.payload_json = {**payload, "manual_confirmed": True}
     set_execution_status(db, task, "SUCCESS", "MANUAL_SUBMITTED", message="Manual submission confirmed")

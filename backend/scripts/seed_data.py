@@ -31,6 +31,7 @@ from app.models import (
     PromptTemplate,
     PromptVersion,
     Reply,
+    ReplyTask,
     ReplayFile,
     ReplayIndex,
     SchedulerTask,
@@ -41,7 +42,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "sprint-04-ai-runtime"
+SEED_VERSION = "sprint-05-semi-auto-reply-pipeline"
 
 
 def main() -> None:
@@ -411,10 +412,27 @@ def main() -> None:
         for index in range(8):
             post = posts[index + 1] if index + 1 < len(posts) else posts[index]
             ai_task, reply = ai_tasks[index + 1] if index + 1 < len(ai_tasks) else ai_tasks[index]
-            scheduler_specs.append(("REPLY", accounts[index % len(accounts)], post, ai_task, reply, "HIGH" if index < 2 else "MEDIUM"))
+            scheduler_specs.append(("REPLY_TASK", accounts[index % len(accounts)], post, ai_task, reply, "HIGH" if index < 2 else "MEDIUM"))
         for index, (task_type, account, post, ai_task, reply, priority) in enumerate(
             scheduler_specs, start=1
         ):
+            reply_task = db.scalar(select(ReplyTask).where(ReplyTask.reply_id == reply.id))
+            if not reply_task:
+                reply_task = ReplyTask(
+                    post_id=post.id,
+                    reply_id=reply.id,
+                    platform=platforms["reddit"].slug if post.platform_id == platforms["reddit"].id else db.get(Platform, post.platform_id).slug,
+                    account_id=account.id,
+                    reply_content=reply.content,
+                    execution_mode="SEMI_AUTO",
+                    status=["SCHEDULED", "EXECUTING", "WAITING_MANUAL", "CONFIRMED", "FAILED", "APPROVED", "SCHEDULED", "SCHEDULED"][index - 1],
+                )
+                db.add(reply_task)
+                db.flush()
+            else:
+                reply_task.account_id = reply_task.account_id or account.id
+                reply_task.reply_content = reply.content
+                reply_task.execution_mode = reply_task.execution_mode or "SEMI_AUTO"
             item = db.scalar(
                 select(SchedulerTask).where(
                     SchedulerTask.task_type == task_type,
@@ -431,23 +449,38 @@ def main() -> None:
                         post_id=post.id,
                         ai_task_id=ai_task.id if ai_task else None,
                         reply_id=reply.id if reply else None,
+                        reply_task_id=reply_task.id if reply_task else None,
                         source="PIPELINE",
                         priority=priority,
                         scheduled_at=now + timedelta(minutes=index * 15),
                         payload={
-                            "mode": "HUMAN_IN_THE_LOOP",
+                            "task_type": "PREPARE_REPLY",
+                            "mode": "SEMI_AUTO",
                             "seed": True,
-                            "action_type": "PREPARE_REPLY" if task_type == "REPLY" else "MIXED_ENGAGEMENT" if task_type == "ENGAGEMENT" else "OPEN_PAGE",
+                            "action_type": "PREPARE_REPLY" if task_type == "REPLY_TASK" else "MIXED_ENGAGEMENT" if task_type == "ENGAGEMENT" else "OPEN_PAGE",
+                            "reply_task_id": reply_task.id if reply_task else None,
                             "url": post.url,
                             "post_url": post.url,
                             "reply_content": reply.content if reply else None,
+                            "execution_mode": "SEMI_AUTO",
+                            "metadata": {"reply_id": reply.id if reply else None, "reply_task_id": reply_task.id if reply_task else None},
                         },
                         status="QUEUED",
                     )
                 )
             else:
                 item.ai_task_id = item.ai_task_id or (ai_task.id if ai_task else None)
+                item.reply_task_id = item.reply_task_id or (reply_task.id if reply_task else None)
                 item.source = item.source or "PIPELINE"
+            item = db.scalar(
+                select(SchedulerTask).where(
+                    SchedulerTask.task_type == task_type,
+                    SchedulerTask.account_id == account.id,
+                    SchedulerTask.post_id == post.id,
+                )
+            )
+            if item and reply_task:
+                reply_task.scheduler_task_id = item.id
 
         selector_specs = [
             ("reddit", "reply_box", 'div[contenteditable="true"]', "css", "Primary Reddit contenteditable reply box"),
@@ -678,6 +711,7 @@ def main() -> None:
             platform = db.get(Platform, scheduler_task.platform_id)
             execution = ExecutionTask(
                 scheduler_task_id=scheduler_task.id,
+                reply_task_id=scheduler_task.reply_task_id,
                 account_id=scheduler_task.account_id,
                 tge_profile_id=profile.id if profile else None,
                 platform=platform.slug if platform else None,
@@ -690,6 +724,10 @@ def main() -> None:
             )
             db.add(execution)
             db.flush()
+            if scheduler_task.reply_task_id:
+                reply_task = db.get(ReplyTask, scheduler_task.reply_task_id)
+                if reply_task:
+                    reply_task.execution_task_id = execution.id
             db.add(ReplayFile(execution_task_id=execution.id))
             db.add(ReplayIndex(execution_task_id=execution.id, status="INDEXED", artifact_count=0, manifest_json={"seed": True}))
 
@@ -1150,7 +1188,7 @@ Community: {{community}}
             "4 TGE profiles, pipeline statistics, 3 LLM providers, 2 prompt templates, "
             "2 prompt versions, 4 provider routes, 5 platform weights, 2 engagement strategies, "
             "30 execution runtime demo tasks, 2 workers, 4 browser sessions, 15 browser tabs, "
-            "5 engagement tasks, 1 actor mapping."
+            "5 engagement tasks, 8 reply tasks, 1 actor mapping."
         )
     finally:
         db.close()

@@ -281,6 +281,22 @@ class Reply(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="GENERATED", index=True)
 
 
+class ReplyTask(Base, TimestampMixin):
+    __tablename__ = "reply_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
+    reply_id: Mapped[int] = mapped_column(ForeignKey("replies.id"), index=True)
+    scheduler_task_id: Mapped[Optional[int]] = mapped_column(Integer, index=True)
+    execution_task_id: Mapped[Optional[int]] = mapped_column(Integer, index=True)
+    platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
+    reply_content: Mapped[str] = mapped_column(Text)
+    execution_mode: Mapped[str] = mapped_column(String(40), default="SEMI_AUTO", index=True)
+    status: Mapped[str] = mapped_column(String(40), default="CREATED", index=True)
+
+
 class PromptTemplate(Base, TimestampMixin):
     __tablename__ = "prompt_templates"
 
@@ -454,6 +470,7 @@ class SchedulerTask(Base, TimestampMixin):
     post_id: Mapped[Optional[int]] = mapped_column(ForeignKey("posts.id"))
     ai_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ai_tasks.id"), index=True)
     reply_id: Mapped[Optional[int]] = mapped_column(ForeignKey("replies.id"))
+    reply_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reply_tasks.id"), index=True)
     source: Mapped[str] = mapped_column(String(60), default="MANUAL", index=True)
     priority: Mapped[str] = mapped_column(String(20), default="MEDIUM", index=True)
     scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -497,6 +514,7 @@ class ExecutionTask(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
     scheduler_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scheduler_tasks.id"), unique=True, index=True)
+    reply_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reply_tasks.id"), index=True)
     account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
     tge_profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tge_profiles.id"), index=True)
     platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)

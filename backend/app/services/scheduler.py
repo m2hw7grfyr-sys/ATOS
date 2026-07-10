@@ -16,6 +16,7 @@ from app.models import (
     PlatformWeight,
     Post,
     Reply,
+    ReplyTask,
     SchedulerLog,
     SchedulerTask,
     SystemSetting,
@@ -140,29 +141,55 @@ def queue_approved_ai_task(
         existing.ai_task_id = existing.ai_task_id or ai_task.id
         existing.source = existing.source or source
         return existing
+    platform = db.get(Platform, post.platform_id) if post.platform_id else None
+    reply_task = db.scalar(
+        select(ReplyTask).where(
+            ReplyTask.reply_id == reply.id,
+            ReplyTask.status.in_(["CREATED", "APPROVED", "SCHEDULED", "EXECUTING", "WAITING_MANUAL"]),
+        )
+    )
+    if not reply_task:
+        reply_task = ReplyTask(
+            post_id=post.id,
+            reply_id=reply.id,
+            platform=platform.slug if platform else None,
+            account_id=account_id,
+            reply_content=reply.content,
+            execution_mode="SEMI_AUTO",
+            status="APPROVED",
+        )
+        db.add(reply_task)
+        db.flush()
     task = SchedulerTask(
-        task_type="REPLY",
+        task_type="REPLY_TASK",
         platform_id=post.platform_id,
         account_id=account_id,
         post_id=post.id,
         ai_task_id=ai_task.id,
         reply_id=reply.id,
+        reply_task_id=reply_task.id,
         source=source,
         priority=priority.upper(),
         payload={
+            "task_type": "PREPARE_REPLY",
             "ai_task_id": ai_task.id,
+            "reply_task_id": reply_task.id,
             "strategy": ai_task.strategy,
-            "mode": "HUMAN_IN_THE_LOOP",
+            "mode": "SEMI_AUTO",
             "action_type": "PREPARE_REPLY",
             "url": post.url,
             "post_url": post.url,
             "reply_content": reply.content,
+            "execution_mode": "SEMI_AUTO",
+            "metadata": {"reply_id": reply.id, "reply_task_id": reply_task.id},
         },
         status="NEW",
     )
     db.add(task)
     db.flush()
     set_status(db, task, "QUEUED", action="QUEUE_APPROVED", reason="Approved AI reply queued")
+    reply_task.scheduler_task_id = task.id
+    reply_task.status = "SCHEDULED"
     return task
 
 
@@ -228,13 +255,13 @@ def account_daily_count(db: Session, account_id: int, task_type: str) -> int:
 
 def account_limit_available(db: Session, account: Account, task_type: str, settings: dict[str, Any]) -> tuple[bool, str | None]:
     limits = db.scalar(select(AccountLimit).where(AccountLimit.account_id == account.id))
-    if limits and task_type == "REPLY":
+    if limits and task_type in {"REPLY", "REPLY_TASK"}:
         if limits.current_reply_count >= limits.reply_daily_limit:
             return False, "Daily reply limit reached"
         return True, None
     legacy_limits = account.daily_limits or {}
     reply_limit = int(legacy_limits.get("reply", settings.get("max_tasks_per_account_per_day", 5)))
-    if task_type == "REPLY" and account_daily_count(db, account.id, "REPLY") >= reply_limit:
+    if task_type in {"REPLY", "REPLY_TASK"} and account_daily_count(db, account.id, task_type) >= reply_limit:
         return False, "Daily reply limit reached"
     return True, None
 
@@ -377,7 +404,7 @@ def run_once(db: Session) -> dict[str, Any]:
         return {"status": "WAITING_ACCOUNT", "processed": 1, "task_id": selected.id}
     selected.account_id = account.id
     if (
-        selected.task_type == "REPLY"
+        selected.task_type in {"REPLY", "REPLY_TASK"}
         and (selected.payload or {}).get("action_type") == "PREPARE_REPLY"
         and not (selected.payload or {}).get("warmup_created")
     ):
@@ -398,6 +425,12 @@ def run_once(db: Session) -> dict[str, Any]:
     }
     set_status(db, selected, "DISPATCHED", action="MOCK_DISPATCH", reason="Execution placeholder only", selected_account_id=account.id)
     execution_task = ExecutionRuntime(db).push_scheduler_task(selected)
+    if selected.reply_task_id:
+        reply_task = db.get(ReplyTask, selected.reply_task_id)
+        if reply_task:
+            reply_task.account_id = selected.account_id
+            reply_task.execution_task_id = execution_task.id
+            reply_task.status = "EXECUTING"
     settings["last_dispatched_platform_id"] = selected.platform_id
     save_scheduler_settings(db, settings)
     db.commit()

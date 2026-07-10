@@ -46,6 +46,12 @@ class PlatformAdapter:
             return {"found": False, "reason": str(exc)}
         return {"found": True, "locator": locator, "selector_id": selector.id}
 
+    def open_post(self, page: Any, url: str):
+        if self.mock_mode:
+            return {"opened": True, "url": url, "mock": True}
+        page.goto(url)
+        return {"opened": True, "url": url}
+
     def focus_reply_box(self, page: Any, reply_box: Any):
         if self.mock_mode:
             return {"focused": True, "mock": True}
@@ -65,10 +71,21 @@ class PlatformAdapter:
         )
         return {"filled": True, "text_length": len(text)}
 
+    def fill_reply(self, page: Any, text: str):
+        reply_box = self.find_reply_box(page)
+        if not reply_box.get("found"):
+            return {"filled": False, "reason": reply_box.get("reason", "reply box not found")}
+        self.focus_reply_box(page, reply_box)
+        return self.fill_reply_box(page, reply_box, text)
+
     def detect_submitted(self, page: Any):
         if self.mock_mode:
             return {"submitted": True, "mock": True}
         return {"submitted": False, "reason": "manual confirmation accepted"}
+
+    def detect_reply_success(self, page: Any):
+        result = self.detect_submitted(page)
+        return {"success": bool(result.get("submitted")), **result}
 
     def detect_comment_disabled(self, page: Any):
         return self._detect_state(page, "comment_disabled")
@@ -78,6 +95,9 @@ class PlatformAdapter:
 
     def detect_rate_limited(self, page: Any):
         return self._detect_state(page, "rate_limited")
+
+    def detect_rate_limit(self, page: Any):
+        return self.detect_rate_limited(page)
 
     def _detect_state(self, page: Any, selector_key: str):
         if self.mock_mode:
@@ -137,3 +157,14 @@ class PlatformAdapter:
 
     def detect_profile_available(self, page: Any):
         return self._detect_state(page, "profile_link")
+
+
+class RedditAdapter(PlatformAdapter):
+    def __init__(self, db: Session, mock_mode: bool = True):
+        super().__init__("reddit", db, mock_mode=mock_mode)
+
+
+def adapter_for_platform(platform: str, db: Session, mock_mode: bool = True) -> PlatformAdapter:
+    if platform.lower() == "reddit":
+        return RedditAdapter(db, mock_mode=mock_mode)
+    return PlatformAdapter(platform.lower(), db, mock_mode=mock_mode)

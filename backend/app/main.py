@@ -19,6 +19,7 @@ from app.api import (
     pipeline,
     posts,
     prompts,
+    reply_tasks,
     scheduler,
     settings,
     statistics,
@@ -64,6 +65,7 @@ app.include_router(dashboard.router)
 app.include_router(data_sources.router)
 app.include_router(posts.router)
 app.include_router(prompts.router)
+app.include_router(reply_tasks.router)
 app.include_router(ai.router)
 app.include_router(ai_runtime.router)
 app.include_router(scheduler.router)

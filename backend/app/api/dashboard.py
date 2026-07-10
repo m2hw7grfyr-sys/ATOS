@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, Post, SchedulerTask, StatisticSnapshot, TGEProfile, WorkerNode
+from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, Post, Reply, ReplyTask, SchedulerTask, StatisticSnapshot, TGEProfile, WorkerNode
 from app.response import ok
 
 
@@ -108,6 +108,13 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "pipeline_approved": pipeline_approved,
                 "pipeline_scheduled": pipeline_scheduled,
                 "pipeline_success_rate": pipeline_success_rate,
+                "reply_ai_generated": count(Reply, Reply.status.in_(["GENERATED", "APPROVED"])),
+                "reply_waiting_review": count(Reply, Reply.status == "GENERATED"),
+                "reply_scheduled": count(ReplyTask, ReplyTask.status == "SCHEDULED"),
+                "reply_executing": count(ReplyTask, ReplyTask.status == "EXECUTING"),
+                "reply_waiting_manual": count(ReplyTask, ReplyTask.status == "WAITING_MANUAL"),
+                "reply_completed": count(ReplyTask, ReplyTask.status == "CONFIRMED"),
+                "reply_failed": count(ReplyTask, ReplyTask.status == "FAILED"),
             },
             "platform_health": [
                 {

@@ -89,6 +89,7 @@ def create_execution_task_from_scheduler(db: Session, scheduler_task: SchedulerT
     profile = profile_for_account(db, scheduler_task.account_id)
     task = ExecutionTask(
         scheduler_task_id=scheduler_task.id,
+        reply_task_id=scheduler_task.reply_task_id,
         account_id=scheduler_task.account_id,
         tge_profile_id=profile.id if profile else None,
         platform=platform.slug if platform else None,
