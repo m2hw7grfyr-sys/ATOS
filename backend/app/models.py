@@ -47,6 +47,22 @@ class Platform(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 
+class PlatformRegistry(Base, TimestampMixin):
+    __tablename__ = "platform_registry"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    platform_name: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    adapter_name: Mapped[str] = mapped_column(String(120), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    version: Mapped[str] = mapped_column(String(40), default="v1")
+    capabilities: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(40), default="HEALTHY", index=True)
+    last_health_check_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[Optional[str]] = mapped_column(Text)
+    error_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class DataSource(Base, TimestampMixin):
     __tablename__ = "data_sources"
 
@@ -644,9 +660,11 @@ class PlatformSelector(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
     platform: Mapped[str] = mapped_column(String(80), index=True)
+    action_type: Mapped[Optional[str]] = mapped_column(String(80), index=True)
     selector_key: Mapped[str] = mapped_column(String(120), index=True)
     selector_value: Mapped[str] = mapped_column(String(1000))
     selector_type: Mapped[str] = mapped_column(String(40), default="css")
+    version: Mapped[str] = mapped_column(String(40), default="v1")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     remark: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)

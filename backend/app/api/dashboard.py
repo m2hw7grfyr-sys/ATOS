@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, Post, Reply, ReplyTask, SchedulerTask, StatisticSnapshot, TGEProfile, WorkerNode
+from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, LLMProvider, Platform, PlatformRegistry, Post, Reply, ReplyTask, SchedulerTask, StatisticSnapshot, TGEProfile, WorkerNode
 from app.response import ok
 
 
@@ -19,6 +19,7 @@ def summary(request: Request, db: Session = Depends(get_db)):
         return db.scalar(statement) or 0
 
     platforms = db.scalars(select(Platform).order_by(Platform.name)).all()
+    platform_registry = db.scalars(select(PlatformRegistry).order_by(PlatformRegistry.platform_name)).all()
     def metric_value(metric: str) -> float:
         return db.scalar(
             select(func.coalesce(func.sum(StatisticSnapshot.value), 0)).where(
@@ -120,8 +121,23 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "reply_waiting_manual": count(ReplyTask, ReplyTask.status == "WAITING_MANUAL"),
                 "reply_completed": count(ReplyTask, ReplyTask.status == "CONFIRMED"),
                 "reply_failed": count(ReplyTask, ReplyTask.status == "FAILED"),
+                "active_platforms": count(PlatformRegistry, PlatformRegistry.enabled.is_(True)),
+                "healthy_platforms": count(PlatformRegistry, PlatformRegistry.status.in_(["HEALTHY", "UNKNOWN"])),
+                "failed_adapters": count(PlatformRegistry, PlatformRegistry.status.in_(["ERROR", "FAILED"])),
             },
             "platform_health": [
+                {
+                    "name": registry.platform_name.title(),
+                    "slug": registry.platform_name,
+                    "status": registry.status,
+                    "enabled": registry.enabled,
+                    "adapter": registry.adapter_name,
+                    "version": registry.version,
+                    "capabilities": registry.capabilities or [],
+                }
+                for registry in platform_registry
+            ]
+            or [
                 {
                     "name": platform.name,
                     "slug": platform.slug,

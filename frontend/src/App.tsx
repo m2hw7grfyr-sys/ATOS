@@ -36,6 +36,7 @@ type PageKey =
   | "post-pool"
   | "ai-workspace"
   | "scheduler"
+  | "platform-center"
   | "account-center"
   | "execution"
   | "engagement"
@@ -135,12 +136,18 @@ type DashboardData = {
     pipeline_approved?: number;
     pipeline_scheduled?: number;
     pipeline_success_rate?: number;
+    active_platforms?: number;
+    healthy_platforms?: number;
+    failed_adapters?: number;
   };
   platform_health: Array<{
     name: string;
     slug: string;
     status: string;
     enabled: boolean;
+    adapter?: string;
+    version?: string;
+    capabilities?: string[];
   }>;
   system_health: Array<{ service: string; status: string }>;
 };
@@ -166,6 +173,7 @@ const navigation = [
   { key: "post-pool", label: "Post Pool", icon: Search },
   { key: "ai-workspace", label: "AI Workspace", icon: BrainCircuit },
   { key: "scheduler", label: "Scheduler", icon: CalendarClock },
+  { key: "platform-center", label: "Platform Center", icon: SlidersHorizontal },
   { key: "account-center", label: "Account Center", icon: Users },
   { key: "execution", label: "Execution", icon: Play },
   { key: "engagement", label: "Engagement", icon: Activity },
@@ -179,6 +187,7 @@ const pageRoutes: Record<PageKey, string> = {
   "post-pool": "/post-pool",
   "ai-workspace": "/ai-workspace",
   scheduler: "/scheduler",
+  "platform-center": "/platform-center",
   "account-center": "/account-center",
   execution: "/execution",
   engagement: "/engagement",
@@ -196,6 +205,7 @@ const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   "post-pool": { title: "Post Pool", subtitle: "所有平台内容进入系统后的统一池" },
   "ai-workspace": { title: "AI Workspace", subtitle: "分析、评分、策略与人工审核" },
   scheduler: { title: "Scheduler", subtitle: "进入 Execution 前的唯一任务队列" },
+  "platform-center": { title: "Platform Center", subtitle: "平台 Adapter、能力与健康状态" },
   "account-center": { title: "Account Center", subtitle: "平台账号、健康度与运行限制" },
   execution: { title: "Execution Center", subtitle: "执行运行时占位与环境状态" },
   engagement: { title: "Engagement", subtitle: "策略组合与互动任务占位" },
@@ -568,6 +578,24 @@ function DashboardPage() {
           icon: Activity,
           tone: "text-blue-700",
         },
+        {
+          label: "Active Platforms",
+          value: data.overview.active_platforms ?? 0,
+          icon: SlidersHorizontal,
+          tone: "text-teal",
+        },
+        {
+          label: "Healthy Platforms",
+          value: data.overview.healthy_platforms ?? 0,
+          icon: CheckCircle2,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Failed Adapters",
+          value: data.overview.failed_adapters ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
+        },
       ]
     : [];
 
@@ -606,7 +634,10 @@ function DashboardPage() {
                 >
                   <div>
                     <p className="font-medium">{platform.name}</p>
-                    <p className="text-xs text-gray-500">{platform.slug}</p>
+                    <p className="text-xs text-gray-500">
+                      {platform.adapter ?? platform.slug}
+                      {platform.version ? ` · ${platform.version}` : ""}
+                    </p>
                   </div>
                   <StatusBadge value={platform.status} />
                 </div>
@@ -2992,6 +3023,125 @@ function StatisticsPage() {
   );
 }
 
+function PlatformCenterPage() {
+  const overview = useApiData<RecordItem>("/platform-runtime");
+  const health = useApiData<RecordItem[]>("/platform-runtime/health");
+  const statistics = useApiData<RecordItem>("/platform-runtime/statistics");
+  const [platform, setPlatform] = useState("reddit");
+  const [actionType, setActionType] = useState("PREPARE_REPLY");
+  const [checkResult, setCheckResult] = useState<RecordItem | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const discovered = (overview.data?.discovered as RecordItem[] | undefined) ?? [];
+  const registry = (overview.data?.registry as RecordItem[] | undefined) ?? [];
+  const stats = statistics.data ?? {};
+
+  async function runCapabilityCheck() {
+    setChecking(true);
+    try {
+      setCheckResult(
+        await apiRequest<RecordItem>("/platform-runtime/capability-check", {
+          method: "POST",
+          data: { platform, action_type: actionType },
+        }),
+      );
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <StateView loading={overview.loading} error={overview.error} reload={overview.reload}>
+      <div className="space-y-6">
+        <Section
+          title="Adapter Discovery"
+          action={
+            <button className="icon-button" title="刷新" onClick={overview.reload}>
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          }
+        >
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {discovered.map((item) => (
+              <div key={String(item.platform_name)} className="panel p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{String(item.platform_name)}</p>
+                    <p className="text-xs text-gray-500">
+                      {String(item.adapter_name)} · {String(item.version)}
+                    </p>
+                  </div>
+                  <SlidersHorizontal className="h-5 w-5 text-teal" />
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {((item.capabilities as string[] | undefined) ?? []).map((capability) => (
+                    <span key={capability} className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                      {capability}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <Section title="Platform Registry">
+            <DataTable
+              rows={registry}
+              columns={[
+                { key: "platform_name", label: "Platform" },
+                { key: "adapter_name", label: "Adapter" },
+                { key: "version", label: "Version" },
+                { key: "status", label: "Status" },
+                { key: "capability_list", label: "Capabilities" },
+              ]}
+            />
+          </Section>
+
+          <Section title="Capability Check">
+            <div className="panel space-y-3 p-4">
+              <label className="block text-xs font-semibold uppercase text-gray-500">Platform</label>
+              <input className="input" value={platform} onChange={(event) => setPlatform(event.target.value)} />
+              <label className="block text-xs font-semibold uppercase text-gray-500">Action Type</label>
+              <input className="input" value={actionType} onChange={(event) => setActionType(event.target.value)} />
+              <button className="button" onClick={runCapabilityCheck} disabled={checking}>
+                <ShieldCheck className="h-4 w-4" />
+                {checking ? "Checking..." : "Check Capability"}
+              </button>
+              {checkResult && (
+                <pre className="overflow-x-auto rounded bg-gray-50 p-3 text-xs text-gray-600">
+                  {JSON.stringify(checkResult, null, 2)}
+                </pre>
+              )}
+            </div>
+          </Section>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="Platform Health">
+            <DataTable
+              rows={health.data ?? []}
+              columns={[
+                { key: "platform", label: "Platform" },
+                { key: "adapter_name", label: "Adapter" },
+                { key: "status", label: "Status" },
+                { key: "error_count", label: "Errors" },
+                { key: "last_health_check_at", label: "Last Check" },
+              ]}
+            />
+          </Section>
+          <Section title="Platform Statistics">
+            <pre className="panel overflow-x-auto p-4 text-xs text-gray-600">
+              {JSON.stringify(stats, null, 2)}
+            </pre>
+          </Section>
+        </div>
+      </div>
+    </StateView>
+  );
+}
+
 function PageContent({ page }: { page: PageKey }) {
   switch (page) {
     case "dashboard":
@@ -3004,6 +3154,8 @@ function PageContent({ page }: { page: PageKey }) {
       return <AIWorkspacePage />;
     case "scheduler":
       return <SchedulerPage />;
+    case "platform-center":
+      return <PlatformCenterPage />;
     case "account-center":
       return <AccountCenterPage />;
     case "settings":

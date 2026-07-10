@@ -291,18 +291,22 @@ class PromptPreviewRequest(BaseModel):
 
 class PlatformSelectorCreate(BaseModel):
     platform: str
+    action_type: Optional[str] = None
     selector_key: str
     selector_value: str
     selector_type: str = "css"
+    version: str = "v1"
     enabled: bool = True
     remark: Optional[str] = None
 
 
 class PlatformSelectorUpdate(BaseModel):
     platform: Optional[str] = None
+    action_type: Optional[str] = None
     selector_key: Optional[str] = None
     selector_value: Optional[str] = None
     selector_type: Optional[str] = None
+    version: Optional[str] = None
     enabled: Optional[bool] = None
     remark: Optional[str] = None
 

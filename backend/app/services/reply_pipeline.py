@@ -20,7 +20,7 @@ from app.models import (
 from app.services.audit import write_audit
 from app.services.browser_runtime import BrowserRuntime
 from app.services.execution import ExecutionRuntime, execution_log, profile_for_account, run_precheck, set_execution_status, utc_now
-from app.services.platform_adapter import adapter_for_platform
+from app.services.platform_runtime import PlatformCapabilityError, PlatformRuntime
 from app.services.scheduler import set_status
 
 
@@ -218,6 +218,27 @@ class ReplyPipelineService:
                 self._audit("ExecutionFailed", reply_task, {"error": execution.error_message})
                 return reply_task
         url = str(payload.get("url") or payload.get("post_url") or payload.get("target_url") or "about:blank")
+        platform_key = str(payload.get("platform") or reply_task.platform or execution.platform or "unknown")
+        runtime = PlatformRuntime(self.db, mock_mode=True)
+        try:
+            capability = runtime.assert_capability(platform_key, payload.get("action_type") or "PREPARE_REPLY")
+        except PlatformCapabilityError as exc:
+            reply_task.status = "FAILED"
+            execution.payload_json = {
+                **payload,
+                "platform": platform_key,
+                "action_type": payload.get("action_type") or "PREPARE_REPLY",
+                "capability_required": runtime.required_capability(payload.get("action_type") or "PREPARE_REPLY"),
+            }
+            set_execution_status(
+                self.db,
+                execution,
+                "FAILED",
+                "PLATFORM_CAPABILITY_REJECTED",
+                error_code="PLATFORM_CAPABILITY_UNSUPPORTED",
+                error_message=str(exc),
+            )
+            return reply_task
         tab = BrowserRuntime(self.db).open_url(
             url=url,
             browser_type=browser_type,
@@ -226,7 +247,7 @@ class ReplyPipelineService:
             profile_id=execution.tge_profile_id,
             execution_task_id=execution.id,
         )
-        adapter = adapter_for_platform(reply_task.platform or execution.platform or "reddit", self.db, mock_mode=True)
+        adapter = runtime.adapter_for(platform_key)
         adapter.open_post(None, url)
         login = adapter.detect_login_required(None)
         limited = adapter.detect_rate_limit(None)
@@ -245,6 +266,9 @@ class ReplyPipelineService:
         now = utc_now()
         execution.payload_json = {
             **payload,
+            "platform": platform_key,
+            "action_type": payload.get("action_type") or "PREPARE_REPLY",
+            "capability_required": capability["capability_required"],
             "browser_tab_id": tab.id,
             "browser_session_id": tab.session_id,
             "fill_status": "REPLY_FILLED" if filled.get("filled") else "FILL_FAILED",
@@ -278,7 +302,9 @@ class ReplyPipelineService:
         reply_task.status = "SUBMITTED"
         if execution:
             payload = execution.payload_json or {}
-            adapter = adapter_for_platform(reply_task.platform or execution.platform or "reddit", self.db, mock_mode=True)
+            adapter = PlatformRuntime(self.db, mock_mode=True).adapter_for(
+                str(payload.get("platform") or reply_task.platform or execution.platform or "unknown")
+            )
             detected = adapter.detect_reply_success(None)
             execution.payload_json = {**payload, "manual_confirmed": True, "detect_reply_success": detected}
             set_execution_status(self.db, execution, "SUCCESS", "MANUAL_CONFIRMED", message="Manual confirmation accepted")
@@ -314,6 +340,7 @@ class ReplyPipelineService:
             "tge_profile_id": profile.id if profile else None,
             "reply_content": reply_task.reply_content,
             "execution_mode": reply_task.execution_mode,
+            "capability_required": "REPLY",
             "metadata": metadata or {},
         }
 

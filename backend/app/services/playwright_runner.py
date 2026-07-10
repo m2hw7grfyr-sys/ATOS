@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Account, AccountLimit, ExecutionLog, ExecutionTask, ReplayFile, SchedulerLog, SchedulerTask, SystemSetting, TGEProfile
 from app.services.execution import execution_log, set_execution_status
-from app.services.platform_adapter import PlatformAdapter
+from app.services.platform_runtime import PlatformCapabilityError, PlatformRuntime
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -300,8 +300,27 @@ def prepare_reply(db: Session, task: ExecutionTask) -> ExecutionTask:
     settings = get_playwright_settings(db)
     profile = db.get(TGEProfile, task.tge_profile_id) if task.tge_profile_id else None
     service = PlaywrightService(settings)
-    platform = task.platform or "reddit"
-    adapter = PlatformAdapter(platform, db, mock_mode=bool(settings.get("playwright_mock_mode", True)))
+    platform = str((task.payload_json or {}).get("platform") or task.platform or "unknown")
+    runtime = PlatformRuntime(db, mock_mode=bool(settings.get("playwright_mock_mode", True)))
+    try:
+        capability = runtime.assert_capability(platform, (task.payload_json or {}).get("action_type") or "PREPARE_REPLY")
+    except PlatformCapabilityError as exc:
+        set_execution_status(
+            db,
+            task,
+            "FAILED",
+            "PLATFORM_CAPABILITY_REJECTED",
+            error_code="PLATFORM_CAPABILITY_UNSUPPORTED",
+            error_message=str(exc),
+        )
+        _update_scheduler_failed(db, task, str(exc))
+        return task
+    task.payload_json = {
+        **(task.payload_json or {}),
+        "platform": platform,
+        "capability_required": capability["capability_required"],
+    }
+    adapter = runtime.adapter_for(platform)
     reply_content = _reply_content(db, task)
     if not reply_content:
         set_execution_status(db, task, "FAILED", "FILL_REPLY_FAILED", error_code="NO_REPLY_CONTENT", error_message="Reply content is missing")
@@ -394,7 +413,8 @@ def close_execution_tab(db: Session, task: ExecutionTask, *, final_status: str |
 def mark_submitted(db: Session, task: ExecutionTask) -> ExecutionTask:
     set_execution_status(db, task, "MANUAL_SUBMITTED", "MANUAL_SUBMITTED", message="Operator confirmed platform submit click")
     settings = get_playwright_settings(db)
-    adapter = PlatformAdapter(task.platform or "reddit", db, mock_mode=bool(settings.get("playwright_mock_mode", True)))
+    platform = str((task.payload_json or {}).get("platform") or task.platform or "unknown")
+    adapter = PlatformRuntime(db, mock_mode=bool(settings.get("playwright_mock_mode", True))).adapter_for(platform)
     detected = adapter.detect_submitted(None)
     task.payload_json = {
         **(task.payload_json or {}),

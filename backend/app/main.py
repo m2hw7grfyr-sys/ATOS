@@ -16,6 +16,7 @@ from app.api import (
     execution,
     health,
     platform_selectors,
+    platform_runtime,
     pipeline,
     posts,
     prompts,
@@ -61,6 +62,7 @@ app.include_router(health.router)
 app.include_router(actor_mappings.router)
 app.include_router(browser.router)
 app.include_router(platform_selectors.router)
+app.include_router(platform_runtime.router)
 app.include_router(pipeline.router)
 app.include_router(dashboard.router)
 app.include_router(data_sources.router)

@@ -23,6 +23,7 @@ from app.models import (
     ExecutionTask,
     LLMProvider,
     Platform,
+    PlatformRegistry,
     PlatformWeight,
     PlatformSelector,
     Post,
@@ -43,7 +44,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "sprint-06-remote-access-foundation"
+SEED_VERSION = "sprint-07-platform-runtime"
 
 
 def main() -> None:
@@ -76,6 +77,35 @@ def main() -> None:
                 db.add(item)
                 db.flush()
             platforms[slug] = item
+
+        platform_registry_specs = [
+            ("reddit", "RedditAdapter", "v1", ["REPLY", "BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
+            ("x", "XAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
+            ("facebook", "FacebookAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
+            ("instagram", "InstagramAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
+            ("tiktok", "TikTokAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
+        ]
+        for platform_name, adapter_name, version, capabilities, status in platform_registry_specs:
+            registry = db.scalar(
+                select(PlatformRegistry).where(PlatformRegistry.platform_name == platform_name)
+            )
+            if not registry:
+                db.add(
+                    PlatformRegistry(
+                        platform_name=platform_name,
+                        adapter_name=adapter_name,
+                        enabled=True,
+                        version=version,
+                        capabilities={capability: True for capability in capabilities},
+                        status=status,
+                    )
+                )
+            else:
+                registry.adapter_name = adapter_name
+                registry.enabled = True
+                registry.version = version
+                registry.capabilities = {capability: True for capability in capabilities}
+                registry.status = status
 
         source_specs = [
             (
@@ -484,16 +514,19 @@ def main() -> None:
                 reply_task.scheduler_task_id = item.id
 
         selector_specs = [
-            ("reddit", "reply_box", 'div[contenteditable="true"]', "css", "Primary Reddit contenteditable reply box"),
-            ("reddit", "comment_button", 'button:has-text("Comment")', "css", "Manual submit button reference only; ATOS never clicks it in v0.8"),
-            ("reddit", "login_required", 'text="Log In"', "text", "Detect login prompt"),
-            ("reddit", "rate_limited", 'text="You are doing that too much"', "text", "Detect rate limit text"),
-            ("reddit", "comment_disabled", 'text="comments are locked"', "text", "Detect disabled comments"),
+            ("reddit", "PREPARE_REPLY", "reply_box", 'div[contenteditable="true"]', "css", "v1", "Primary Reddit contenteditable reply box"),
+            ("reddit", "PREPARE_REPLY", "comment_button", 'button:has-text("Comment")', "css", "v1", "Manual submit button reference only; ATOS never clicks it in v0.8"),
+            ("reddit", "PREPARE_REPLY", "login_required", 'text="Log In"', "text", "v1", "Detect login prompt"),
+            ("reddit", "PREPARE_REPLY", "rate_limited", 'text="You are doing that too much"', "text", "v1", "Detect rate limit text"),
+            ("reddit", "PREPARE_REPLY", "comment_disabled", 'text="comments are locked"', "text", "v1", "Detect disabled comments"),
+            ("reddit", "LIKE_POST", "like_button", 'button[aria-label*="upvote" i]', "css", "v1", "Reddit upvote selector scaffold"),
+            ("reddit", "VISIT_PROFILE", "profile_link", 'a[href*="/user/"]', "css", "v1", "Reddit author profile link scaffold"),
         ]
-        for platform, key, value, selector_type, remark in selector_specs:
+        for platform, action_type, key, value, selector_type, version, remark in selector_specs:
             selector = db.scalar(
                 select(PlatformSelector).where(
                     PlatformSelector.platform == platform,
+                    PlatformSelector.action_type == action_type,
                     PlatformSelector.selector_key == key,
                     PlatformSelector.selector_value == value,
                 )
@@ -502,13 +535,19 @@ def main() -> None:
                 db.add(
                     PlatformSelector(
                         platform=platform,
+                        action_type=action_type,
                         selector_key=key,
                         selector_value=value,
                         selector_type=selector_type,
+                        version=version,
                         enabled=True,
                         remark=remark,
                     )
                 )
+            else:
+                selector.action_type = action_type
+                selector.version = version
+                selector.enabled = True
 
         setting_specs = [
             ("ai.default_provider", "AI", {"provider": "mock", "model": "mock-v0.3"}, False),
@@ -592,6 +631,13 @@ def main() -> None:
             ("visit_profile_count", "REDDIT", 3),
             ("engagement_success_rate", "REDDIT", 100),
             ("warmup_before_reply_count", "REDDIT", 2),
+            ("platform_tasks", "reddit", 14),
+            ("platform_tasks", "x", 5),
+            ("platform_tasks", "facebook", 4),
+            ("platform_tasks", "instagram", 2),
+            ("platform_tasks", "tiktok", 1),
+            ("platform_success_rate", "reddit", 92),
+            ("platform_failure_rate", "reddit", 8),
         ]:
             item = db.scalar(
                 select(StatisticSnapshot).where(
