@@ -9,11 +9,13 @@ from app.models import (
     AIAnalysisResult,
     AITask,
     Account,
+    AccountAutoSubmitLimit,
     AccountLimit,
     AccountPerformance,
     AccountWorkingWindow,
     ActorMapping,
     AuditLog,
+    AutoAssistedPlatformConfig,
     BusinessEvent,
     BrowserSession,
     BrowserTab,
@@ -58,7 +60,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "sprint-12-submission-hardening"
+SEED_VERSION = "sprint-13-auto-assisted-stabilization"
 
 
 def main() -> None:
@@ -93,12 +95,12 @@ def main() -> None:
             platforms[slug] = item
 
         platform_registry_specs = [
-            ("reddit", "RedditAdapter", "v1", ["REPLY", "BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
+            ("reddit", "RedditAdapter", "v1", ["REPLY", "BROWSE", "LIKE", "PROFILE_VISIT", "AUTO_SUBMIT"], "HEALTHY"),
             (
                 "x",
                 "XAdapter",
                 "v1",
-                ["BROWSE", "OPEN_POST", "REPLY", "REPLY_FILL", "MANUAL_CONFIRM", "SUBMISSION_SCAFFOLD", "LIKE", "PROFILE_VISIT"],
+                ["BROWSE", "OPEN_POST", "REPLY", "REPLY_FILL", "MANUAL_CONFIRM", "SUBMISSION_SCAFFOLD", "AUTO_SUBMIT", "LIKE", "PROFILE_VISIT"],
                 "HEALTHY",
             ),
             ("facebook", "FacebookAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
@@ -445,6 +447,7 @@ def main() -> None:
                             {"day": "SUN", "start": "00:00", "end": "23:59"},
                         ],
                     },
+                    allow_auto_assisted=False,
                     remark="Seed account for local scheduler validation.",
                     status="ACTIVE",
                 )
@@ -456,6 +459,7 @@ def main() -> None:
                 item.account_level = item.account_level or "seed"
                 item.remark = item.remark or "Seed account for local scheduler validation."
                 item.working_time = item.working_time or {"timezone": "Asia/Shanghai", "windows": []}
+                item.allow_auto_assisted = bool(getattr(item, "allow_auto_assisted", False))
             limit = db.scalar(select(AccountLimit).where(AccountLimit.account_id == item.id))
             if not limit:
                 db.add(
@@ -466,6 +470,22 @@ def main() -> None:
                         bookmark_daily_limit=5,
                         visit_profile_daily_limit=5,
                         reply_daily_limit=5,
+                    )
+                )
+            auto_submit_limit = db.scalar(
+                select(AccountAutoSubmitLimit).where(
+                    AccountAutoSubmitLimit.account_id == item.id,
+                    AccountAutoSubmitLimit.platform == platform_slug,
+                )
+            )
+            if not auto_submit_limit:
+                db.add(
+                    AccountAutoSubmitLimit(
+                        account_id=item.id,
+                        platform=platform_slug,
+                        daily_auto_submit_limit=3 if platform_slug in {"reddit", "x"} else 0,
+                        auto_submitted_today=0,
+                        last_reset_at=now,
                     )
                 )
             existing_windows = db.scalars(
@@ -701,7 +721,9 @@ def main() -> None:
                 {
                     "default_execution_mode": "SEMI_AUTO",
                     "auto_assisted_enabled": False,
+                    "auto_assisted_test_mode": False,
                     "full_auto_enabled": False,
+                    "auto_assisted_real_submit_enabled": False,
                     "max_retry": 1,
                     "verify_timeout_seconds": 20,
                     "capture_screenshot_enabled": True,
@@ -733,6 +755,33 @@ def main() -> None:
                 item.value = {**(item.value or {}), **value}
                 item.category = category
                 item.is_secret = is_secret
+
+        for platform_slug, max_daily in [("reddit", 3), ("x", 3)]:
+            auto_config = db.scalar(
+                select(AutoAssistedPlatformConfig).where(AutoAssistedPlatformConfig.platform == platform_slug)
+            )
+            if not auto_config:
+                db.add(
+                    AutoAssistedPlatformConfig(
+                        platform=platform_slug,
+                        auto_assisted_enabled=False,
+                        max_daily_auto_submit=max_daily,
+                        allowed_accounts=[],
+                        allowed_time_window={
+                            "allowed_start_time": "09:00",
+                            "allowed_end_time": "22:00",
+                            "timezone": "Asia/Shanghai",
+                        },
+                        remark="Seed AUTO_ASSISTED platform guard. Default disabled.",
+                    )
+                )
+            else:
+                auto_config.max_daily_auto_submit = auto_config.max_daily_auto_submit or max_daily
+                auto_config.allowed_time_window = auto_config.allowed_time_window or {
+                    "allowed_start_time": "09:00",
+                    "allowed_end_time": "22:00",
+                    "timezone": "Asia/Shanghai",
+                }
 
         for metric, dimension, value in [
             ("imported_posts", "SYSTEM", 20),
@@ -1354,7 +1403,7 @@ def main() -> None:
             .order_by(ExecutionTask.id.asc())
             .limit(6)
         ).all()
-        submission_statuses = ["WAITING_MANUAL", "VERIFIED", "FAILED", "PREPARED", "MANUAL_REQUIRED", "VERIFYING"]
+        submission_statuses = ["WAITING_MANUAL", "COMPLETED", "FAILED", "PREPARED", "MANUAL_REQUIRED", "MANUAL_REVIEW"]
         for index, execution in enumerate(seeded_executions, start=1):
             reply_task = db.get(ReplyTask, execution.reply_task_id) if execution.reply_task_id else None
             if not reply_task:
@@ -1376,20 +1425,20 @@ def main() -> None:
                     browser_tab_id=tab.id if tab else None,
                     execution_mode=reply_task.execution_mode or "SEMI_AUTO",
                     status=status,
-                    submitted_at=now - timedelta(minutes=4) if status in {"VERIFIED", "FAILED"} else None,
-                    verified_at=now - timedelta(minutes=2) if status == "VERIFIED" else None,
-                    result_url="https://www.reddit.com/comments/mock/submission" if status == "VERIFIED" else None,
-                    result_external_id="reddit-mock-comment" if status == "VERIFIED" else None,
-                    operator_id="seed-operator" if status == "VERIFIED" else None,
-                    confirmed_at=now - timedelta(minutes=3) if status == "VERIFIED" else None,
-                    verification_level="EXTERNAL_ID_VERIFIED" if status == "VERIFIED" else "NONE",
-                    verification_status="EXTERNAL_ID_VERIFIED" if status == "VERIFIED" else "NONE",
-                    error_code="VERIFICATION_FAILED" if status == "FAILED" else "LOGIN_REQUIRED" if status == "MANUAL_REQUIRED" else None,
-                    error_message="Seed failure" if status in {"FAILED", "MANUAL_REQUIRED"} else None,
-                    failure_reason="VERIFICATION_FAILED" if status == "FAILED" else None,
+                    submitted_at=now - timedelta(minutes=4) if status in {"COMPLETED", "FAILED", "MANUAL_REVIEW"} else None,
+                    verified_at=now - timedelta(minutes=2) if status == "COMPLETED" else None,
+                    result_url="https://www.reddit.com/comments/mock/submission" if status == "COMPLETED" else None,
+                    result_external_id="reddit-mock-comment" if status == "COMPLETED" else None,
+                    operator_id="seed-operator" if status == "COMPLETED" else None,
+                    confirmed_at=now - timedelta(minutes=3) if status == "COMPLETED" else None,
+                    verification_level="EXTERNAL_ID_VERIFIED" if status == "COMPLETED" else "NONE",
+                    verification_status="EXTERNAL_ID_VERIFIED" if status == "COMPLETED" else "NONE",
+                    error_code="VERIFICATION_FAILED" if status in {"FAILED", "MANUAL_REVIEW"} else "LOGIN_REQUIRED" if status == "MANUAL_REQUIRED" else None,
+                    error_message="Seed failure" if status in {"FAILED", "MANUAL_REQUIRED", "MANUAL_REVIEW"} else None,
+                    failure_reason="VERIFICATION_FAILED" if status in {"FAILED", "MANUAL_REVIEW"} else None,
                     retry_count=0,
                     max_retry=1,
-                    manual_confirmed=status == "VERIFIED",
+                    manual_confirmed=status == "COMPLETED",
                     metadata_json={"seed": True, "demo_key": f"submission-task-{index}"},
                 )
                 db.add(existing_submission)
@@ -1436,7 +1485,7 @@ def main() -> None:
             if not reply_task:
                 continue
             tab = seeded_tabs[(index - 1) % len(seeded_tabs)] if seeded_tabs else None
-            status = "WAITING_MANUAL" if index <= 2 else "VERIFIED"
+            status = "WAITING_MANUAL" if index <= 2 else "COMPLETED"
             submission = db.scalar(select(SubmissionTask).where(SubmissionTask.reply_task_id == reply_task.id))
             if not submission:
                 submission = SubmissionTask(
@@ -1450,15 +1499,15 @@ def main() -> None:
                     browser_tab_id=tab.id if tab else None,
                     execution_mode="SEMI_AUTO",
                     status=status,
-                    submitted_at=now - timedelta(minutes=3) if status == "VERIFIED" else None,
-                    verified_at=now - timedelta(minutes=1) if status == "VERIFIED" else None,
-                    result_url="https://x.com/mock/status/1" if status == "VERIFIED" else None,
-                    result_external_id="x-mock-reply" if status == "VERIFIED" else None,
-                    operator_id="seed-operator" if status == "VERIFIED" else None,
-                    confirmed_at=now - timedelta(minutes=2) if status == "VERIFIED" else None,
-                    verification_level="EXTERNAL_ID_VERIFIED" if status == "VERIFIED" else "NONE",
-                    verification_status="EXTERNAL_ID_VERIFIED" if status == "VERIFIED" else "NONE",
-                    manual_confirmed=status == "VERIFIED",
+                    submitted_at=now - timedelta(minutes=3) if status == "COMPLETED" else None,
+                    verified_at=now - timedelta(minutes=1) if status == "COMPLETED" else None,
+                    result_url="https://x.com/mock/status/1" if status == "COMPLETED" else None,
+                    result_external_id="x-mock-reply" if status == "COMPLETED" else None,
+                    operator_id="seed-operator" if status == "COMPLETED" else None,
+                    confirmed_at=now - timedelta(minutes=2) if status == "COMPLETED" else None,
+                    verification_level="EXTERNAL_ID_VERIFIED" if status == "COMPLETED" else "NONE",
+                    verification_status="EXTERNAL_ID_VERIFIED" if status == "COMPLETED" else "NONE",
+                    manual_confirmed=status == "COMPLETED",
                     metadata_json={"seed": True, "x_seed": True, "demo_key": f"x-submission-task-{index}"},
                 )
                 db.add(submission)

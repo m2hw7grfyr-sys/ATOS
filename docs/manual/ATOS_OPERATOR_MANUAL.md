@@ -809,7 +809,129 @@ Submission Detail / contract 中包含标准截图路径：
 
 ---
 
-## 19. 推荐每日检查清单
+## 19. AUTO_ASSISTED 使用说明
+
+### 19.1 模式定义
+
+`AUTO_ASSISTED` 是审核通过后的辅助提交模式。
+
+当前版本只支持 Test Mode 模拟提交。
+
+真实 Reddit / X 提交点击仍然禁用。
+
+默认模式仍然是 `SEMI_AUTO`。
+
+### 19.2 如何开启 AUTO_ASSISTED
+
+进入：
+
+System Settings
+
+↓
+
+Submission Policy
+
+开启：
+
+- Auto Assisted Enabled
+- Auto Assisted Test Mode
+
+然后进入：
+
+AUTO_ASSISTED Platform Controls
+
+分别开启：
+
+- reddit
+- x
+
+最后到 Account Center 中确认账号：
+
+- `allow_auto_assisted = true`
+
+三层都满足后，任务才可能通过 Policy Check。
+
+### 19.3 如何关闭 AUTO_ASSISTED
+
+进入 System Settings：
+
+- 关闭 Auto Assisted Enabled
+- 关闭平台级 AUTO_ASSISTED
+
+或者点击：
+
+Emergency Stop
+
+Emergency Stop 会：
+
+- 关闭全局 AUTO_ASSISTED
+- 关闭平台 AUTO_ASSISTED
+- 把待执行 AUTO_ASSISTED 任务回退到 `WAITING_MANUAL`
+- 写入 Audit Log
+
+### 19.4 如何查看 Policy Blocked
+
+进入 Submission 页面。
+
+查看任务列表的：
+
+- Policy
+- Failure
+- Retry
+
+Policy 显示阻断原因，例如：
+
+- Global AUTO_ASSISTED is disabled
+- Platform AUTO_ASSISTED is disabled
+- Account AUTO_ASSISTED permission is disabled
+- Outside platform AUTO_ASSISTED time window
+- No browser session bound
+
+### 19.5 如何处理 Manual Fallback
+
+常见回退：
+
+`LOGIN_REQUIRED`
+
+- 回到 TGE 环境重新登录。
+- 完成后重试或切回人工。
+
+`RATE_LIMITED`
+
+- 停止回复。
+- 等待冷却。
+
+`VERIFICATION_FAILED`
+
+- 进入 `MANUAL_REVIEW`。
+- 人工确认平台页面是否真的提交成功。
+
+`BROWSER_DISCONNECTED`
+
+- 等待 Browser Runtime 恢复。
+- 使用 Retry。
+
+### 19.6 如何运行 AUTO_ASSISTED Now
+
+进入 Submission 页面。
+
+点击：
+
+Run AUTO_ASSISTED Now
+
+系统会：
+
+1. 执行 Policy Check。
+2. 如果未通过，回退人工。
+3. 如果 Test Mode 通过，模拟提交。
+4. 执行 verify。
+5. 记录结果和统计。
+
+当前版本不会点击真实 Reddit / X 提交按钮。
+
+---
+
+## 20. 推荐每日检查清单
 
 - Dashboard 无大量红色异常。
 - Data Center 最近采集成功。
@@ -823,7 +945,7 @@ Submission Detail / contract 中包含标准截图路径：
 
 ---
 
-## 20. 版本边界
+## 21. 版本边界
 
 当前 ATOS 已具备：
 
@@ -839,10 +961,12 @@ Submission Detail / contract 中包含标准截图路径：
 - Submission Runtime。
 - X Adapter v1 semi-auto flow。
 - Cross-platform Submission Hardening。
+- AUTO_ASSISTED Test Mode scaffold。
 
 当前 ATOS 尚未实现：
 
 - 全自动提交。
+- 真实 Reddit / X 自动提交点击。
 - 真实大规模向量库。
 - 生产 Redis Lock。
 - 完整远程 Worker 执行 loop。

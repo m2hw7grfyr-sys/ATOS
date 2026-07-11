@@ -43,6 +43,7 @@ class XAdapter(PlatformAdapter):
         "REPLY_FILL",
         "MANUAL_CONFIRM",
         "SUBMISSION_SCAFFOLD",
+        "AUTO_SUBMIT",
         "LIKE",
         "PROFILE_VISIT",
     }
@@ -246,6 +247,9 @@ class XAdapter(PlatformAdapter):
             return {"detected": False, "code": "X_UNKNOWN_ERROR", "reason": str(exc)}
 
     def submit_reply(self, page: Any, *, allow_auto_submit: bool = False) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario == "submit_success":
+            return {"submitted": True, "mock": True, "scenario": scenario}
         return {
             "submitted": False,
             "code": "MANUAL_REQUIRED" if not allow_auto_submit else "NOT_IMPLEMENTED",

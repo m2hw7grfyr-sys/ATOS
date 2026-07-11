@@ -160,6 +160,9 @@ type DashboardData = {
     submission_verified?: number;
     submission_failed?: number;
     submission_manual_required?: number;
+    auto_assisted_submitting?: number;
+    auto_assisted_completed?: number;
+    auto_assisted_manual_review?: number;
     reddit_waiting_manual?: number;
     x_waiting_manual?: number;
     reddit_failed?: number;
@@ -714,6 +717,18 @@ function DashboardPage() {
           label: "Manual Required",
           value: data.overview.submission_manual_required ?? 0,
           icon: Users,
+          tone: "text-amber",
+        },
+        {
+          label: "Auto Completed",
+          value: data.overview.auto_assisted_completed ?? 0,
+          icon: ShieldCheck,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Manual Review",
+          value: data.overview.auto_assisted_manual_review ?? 0,
+          icon: CircleAlert,
           tone: "text-amber",
         },
         {
@@ -1773,6 +1788,7 @@ function AccountCenterPage() {
   const [displayName, setDisplayName] = useState("");
   const [profileUrl, setProfileUrl] = useState("");
   const [riskStatus, setRiskStatus] = useState("LOW");
+  const [allowAutoAssisted, setAllowAutoAssisted] = useState(false);
   const [remark, setRemark] = useState("");
   const [replyLimit, setReplyLimit] = useState("5");
   const [currentReply, setCurrentReply] = useState("0");
@@ -1789,6 +1805,7 @@ function AccountCenterPage() {
     setDisplayName("");
     setProfileUrl("");
     setRiskStatus("LOW");
+    setAllowAutoAssisted(false);
     setRemark("");
     setReplyLimit("5");
     setCurrentReply("0");
@@ -1807,6 +1824,7 @@ function AccountCenterPage() {
     setDisplayName(String(account.display_name ?? ""));
     setProfileUrl(String(account.profile_url ?? ""));
     setRiskStatus(String(account.risk_status ?? "LOW"));
+    setAllowAutoAssisted(Boolean(account.allow_auto_assisted));
     setRemark(String(account.remark ?? ""));
     setReplyLimit(String(limits.reply_daily_limit ?? 5));
     setCurrentReply(String(limits.current_reply_count ?? 0));
@@ -1827,6 +1845,7 @@ function AccountCenterPage() {
           display_name: displayName,
           profile_url: profileUrl,
           risk_status: riskStatus,
+          allow_auto_assisted: allowAutoAssisted,
           remark,
           daily_limits: { browse: 20, like: 8, reply: 5 },
           working_time: { timezone: "Asia/Shanghai", ranges: ["09:00-12:00"] },
@@ -1936,6 +1955,7 @@ function AccountCenterPage() {
       tge_environment_id: item.tge_environment_id ?? "—",
       reply_daily_limit: limits.reply_daily_limit ?? "—",
       current_reply_count: limits.current_reply_count ?? "—",
+      allow_auto_assisted: item.allow_auto_assisted ?? false,
       last_seen_at: item.tge_profile ? (item.tge_profile as RecordItem).last_seen_at ?? "—" : "—",
     };
   });
@@ -1955,6 +1975,10 @@ function AccountCenterPage() {
             <select className="field" value={windowDay} onChange={(e) => setWindowDay(e.target.value)}>{["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((item) => <option key={item} value={item}>{item}</option>)}</select>
             <input className="field" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} />
             <input className="field" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} />
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input type="checkbox" checked={allowAutoAssisted} onChange={(e) => setAllowAutoAssisted(e.target.checked)} />
+              Allow AUTO_ASSISTED
+            </label>
             <div className="flex gap-2 md:col-span-3 xl:col-span-4">
               <button className="button" type="submit">{editingAccount ? "更新账号" : "保存账号"}</button>
               <button className="button-secondary" type="button" onClick={() => setShowForm(false)}>取消</button>
@@ -1966,7 +1990,7 @@ function AccountCenterPage() {
           <div className="panel overflow-x-auto">
             <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                {["Platform", "Username", "Health", "Risk", "Status", "TGE", "Reply Limit", "Used", "Last Seen", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+                {["Platform", "Username", "Health", "Risk", "Status", "AUTO", "TGE", "Reply Limit", "Used", "Last Seen", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
               </tr></thead>
               <tbody>{rows.map((account) => (
                 <tr key={String(account.uuid)} className="border-b border-line last:border-0">
@@ -1975,6 +1999,7 @@ function AccountCenterPage() {
                   <td className="px-4 py-3">{String(account.health_score)}</td>
                   <td className="px-4 py-3"><StatusBadge value={account.risk_status} /></td>
                   <td className="px-4 py-3"><StatusBadge value={account.status} /></td>
+                  <td className="px-4 py-3"><StatusBadge value={account.allow_auto_assisted ? "ALLOW" : "OFF"} /></td>
                   <td className="px-4 py-3 font-mono text-xs">{String(account.tge_environment_id ?? "—")}</td>
                   <td className="px-4 py-3">{String(account.reply_daily_limit)}</td>
                   <td className="px-4 py-3">{String(account.current_reply_count)}</td>
@@ -2005,6 +2030,7 @@ function AccountCenterPage() {
                   cooling_down_until: selectedAccount.cooling_down_until,
                   failure_count_24h: selectedAccount.failure_count_24h,
                   restriction_count_7d: selectedAccount.restriction_count_7d,
+                  allow_auto_assisted: selectedAccount.allow_auto_assisted,
                 }, null, 2)}</pre>
               </div>
               <div className="panel p-4">
@@ -2053,6 +2079,7 @@ function SettingsPage() {
   const tgeSettings = useApiData<RecordItem>("/settings/tge");
   const playwrightSettings = useApiData<RecordItem>("/settings/playwright");
   const submissionSettings = useApiData<RecordItem>("/settings/submission");
+  const autoAssistedPlatforms = useApiData<RecordItem[]>("/settings/auto-assisted-platforms");
   const platformSelectors = useApiData<RecordItem[]>("/platform-selectors");
   const [showProviderForm, setShowProviderForm] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
@@ -2074,6 +2101,7 @@ function SettingsPage() {
   const [tgeForm, setTgeForm] = useState<Record<string, unknown>>({});
   const [playwrightForm, setPlaywrightForm] = useState<Record<string, unknown>>({});
   const [submissionForm, setSubmissionForm] = useState<Record<string, unknown>>({});
+  const [autoAssistedEdits, setAutoAssistedEdits] = useState<Record<string, Record<string, unknown>>>({});
   const [selectorForm, setSelectorForm] = useState<Record<string, unknown>>({
     platform: "reddit",
     selector_key: "reply_box",
@@ -2141,6 +2169,23 @@ function SettingsPage() {
       setSubmissionForm(submissionSettings.data);
     }
   }, [submissionSettings.data, submissionForm]);
+
+  useEffect(() => {
+    if ((autoAssistedPlatforms.data ?? []).length && Object.keys(autoAssistedEdits).length === 0) {
+      const edits: Record<string, Record<string, unknown>> = {};
+      for (const item of autoAssistedPlatforms.data ?? []) {
+        const windowConfig = (item.allowed_time_window ?? {}) as Record<string, unknown>;
+        edits[String(item.platform)] = {
+          ...item,
+          allowed_accounts_text: Array.isArray(item.allowed_accounts) ? item.allowed_accounts.join(", ") : "",
+          allowed_start_time: windowConfig.allowed_start_time ?? windowConfig.start ?? "09:00",
+          allowed_end_time: windowConfig.allowed_end_time ?? windowConfig.end ?? "22:00",
+          timezone: windowConfig.timezone ?? "Asia/Shanghai",
+        };
+      }
+      setAutoAssistedEdits(edits);
+    }
+  }, [autoAssistedPlatforms.data, autoAssistedEdits]);
 
   useEffect(() => {
     if ((platformWeights.data ?? []).length && Object.keys(weightEdits).length === 0) {
@@ -2412,6 +2457,17 @@ function SettingsPage() {
     setSubmissionForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updateAutoAssistedPlatform(platform: string, key: string, value: unknown) {
+    setAutoAssistedEdits((current) => ({
+      ...current,
+      [platform]: {
+        ...(current[platform] ?? {}),
+        platform,
+        [key]: value,
+      },
+    }));
+  }
+
   function updateSelectorField(key: string, value: unknown) {
     setSelectorForm((current) => ({ ...current, [key]: value }));
   }
@@ -2446,7 +2502,9 @@ function SettingsPage() {
         body: JSON.stringify({
           default_execution_mode: String(submissionForm.default_execution_mode ?? "SEMI_AUTO"),
           auto_assisted_enabled: Boolean(submissionForm.auto_assisted_enabled),
+          auto_assisted_test_mode: Boolean(submissionForm.auto_assisted_test_mode),
           full_auto_enabled: Boolean(submissionForm.full_auto_enabled),
+          auto_assisted_real_submit_enabled: Boolean(submissionForm.auto_assisted_real_submit_enabled),
           max_retry: Number(submissionForm.max_retry ?? 1),
           verify_timeout_seconds: Number(submissionForm.verify_timeout_seconds ?? 20),
           capture_screenshot_enabled: Boolean(submissionForm.capture_screenshot_enabled),
@@ -2465,6 +2523,47 @@ function SettingsPage() {
       await submissionSettings.reload();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "保存 Submission Policy 失败");
+    }
+  }
+
+  async function saveAutoAssistedPlatform(platform: string) {
+    const item = autoAssistedEdits[platform] ?? {};
+    try {
+      await apiRequest(`/settings/auto-assisted-platforms/${platform}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          auto_assisted_enabled: Boolean(item.auto_assisted_enabled),
+          max_daily_auto_submit: Number(item.max_daily_auto_submit ?? 3),
+          allowed_accounts: String(item.allowed_accounts_text ?? item.allowed_accounts ?? "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+          allowed_time_window: {
+            allowed_start_time: String(item.allowed_start_time ?? "09:00"),
+            allowed_end_time: String(item.allowed_end_time ?? "22:00"),
+            timezone: String(item.timezone ?? "Asia/Shanghai"),
+          },
+          remark: String(item.remark ?? ""),
+        }),
+      });
+      setFeedback(`${platform} AUTO_ASSISTED 配置已保存。`);
+      setAutoAssistedEdits({});
+      await autoAssistedPlatforms.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存平台 AUTO_ASSISTED 失败");
+    }
+  }
+
+  async function emergencyStopAutoAssisted() {
+    try {
+      await apiRequest("/submission/emergency-stop", { method: "POST" });
+      setFeedback("Emergency Stop 已执行，AUTO_ASSISTED 已全部关闭。");
+      setSubmissionForm({});
+      setAutoAssistedEdits({});
+      await submissionSettings.reload();
+      await autoAssistedPlatforms.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Emergency Stop 失败");
     }
   }
 
@@ -2607,7 +2706,12 @@ function SettingsPage() {
         </Section>
         <Section
           title="Submission Policy"
-          action={<button className="button" onClick={saveSubmissionSettings}><Settings className="h-4 w-4" />保存 Submission</button>}
+          action={
+            <div className="flex flex-wrap gap-2">
+              <button className="button-secondary" onClick={emergencyStopAutoAssisted}><ShieldCheck className="h-4 w-4" />Emergency Stop</button>
+              <button className="button" onClick={saveSubmissionSettings}><Settings className="h-4 w-4" />保存 Submission</button>
+            </div>
+          }
         >
           <div className="panel grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4">
             <label className="text-xs font-semibold text-gray-600">
@@ -2655,6 +2759,8 @@ function SettingsPage() {
             </div>
             {[
               ["auto_assisted_enabled", "Auto Assisted Enabled"],
+              ["auto_assisted_test_mode", "Auto Assisted Test Mode"],
+              ["auto_assisted_real_submit_enabled", "Real Submit Enabled"],
               ["full_auto_enabled", "Full Auto Enabled"],
               ["capture_screenshot_enabled", "Capture Screenshot"],
               ["capture_html_enabled", "Capture HTML"],
@@ -2669,6 +2775,55 @@ function SettingsPage() {
                 {label}
               </label>
             ))}
+          </div>
+        </Section>
+        <Section title="AUTO_ASSISTED Platform Controls">
+          <div className="grid gap-4 lg:grid-cols-2">
+            {(autoAssistedPlatforms.data ?? []).map((item) => {
+              const platform = String(item.platform);
+              const edit = autoAssistedEdits[platform] ?? item;
+              return (
+                <div key={platform} className="panel space-y-4 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold uppercase text-ink">{platform}</p>
+                      <p className="text-xs text-gray-500">平台级 AUTO_ASSISTED 闸门。默认关闭。</p>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input type="checkbox" checked={Boolean(edit.auto_assisted_enabled)} onChange={(e) => updateAutoAssistedPlatform(platform, "auto_assisted_enabled", e.target.checked)} />
+                      Enabled
+                    </label>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="text-xs font-semibold text-gray-600">
+                      Max Daily Auto Submit
+                      <input className="field mt-2" type="number" min="0" value={String(edit.max_daily_auto_submit ?? 3)} onChange={(e) => updateAutoAssistedPlatform(platform, "max_daily_auto_submit", Number(e.target.value))} />
+                    </label>
+                    <label className="text-xs font-semibold text-gray-600">
+                      Allowed Accounts
+                      <input className="field mt-2" value={String(edit.allowed_accounts_text ?? "")} onChange={(e) => updateAutoAssistedPlatform(platform, "allowed_accounts_text", e.target.value)} placeholder="account id / username, comma separated" />
+                    </label>
+                    <label className="text-xs font-semibold text-gray-600">
+                      Start Time
+                      <input className="field mt-2" value={String(edit.allowed_start_time ?? "09:00")} onChange={(e) => updateAutoAssistedPlatform(platform, "allowed_start_time", e.target.value)} />
+                    </label>
+                    <label className="text-xs font-semibold text-gray-600">
+                      End Time
+                      <input className="field mt-2" value={String(edit.allowed_end_time ?? "22:00")} onChange={(e) => updateAutoAssistedPlatform(platform, "allowed_end_time", e.target.value)} />
+                    </label>
+                    <label className="text-xs font-semibold text-gray-600">
+                      Timezone
+                      <input className="field mt-2" value={String(edit.timezone ?? "Asia/Shanghai")} onChange={(e) => updateAutoAssistedPlatform(platform, "timezone", e.target.value)} />
+                    </label>
+                    <label className="text-xs font-semibold text-gray-600">
+                      Remark
+                      <input className="field mt-2" value={String(edit.remark ?? "")} onChange={(e) => updateAutoAssistedPlatform(platform, "remark", e.target.value)} />
+                    </label>
+                  </div>
+                  <button className="button-secondary" onClick={() => void saveAutoAssistedPlatform(platform)}>保存 {platform}</button>
+                </div>
+              );
+            })}
           </div>
         </Section>
         <Section
@@ -3109,7 +3264,7 @@ function SubmissionPage() {
   const stats = useApiData<RecordItem[]>("/submission-stats");
   const [feedback, setFeedback] = useState("");
 
-  async function submissionAction(taskId: unknown, action: "submit" | "confirm" | "cancel" | "retry" | "mark-failed") {
+  async function submissionAction(taskId: unknown, action: "submit" | "run-auto" | "confirm" | "cancel" | "retry" | "mark-failed") {
     try {
       if (action === "mark-failed") {
         const failureReason = window.prompt("请输入失败原因，例如 LOGIN_REQUIRED / REPLY_BOX_NOT_FOUND / UNKNOWN_ERROR");
@@ -3120,12 +3275,16 @@ function SubmissionPage() {
         });
       } else if (action === "submit") {
         await apiRequest(`/submission/tasks/${String(taskId)}/submit`, { method: "POST" });
+      } else if (action === "run-auto") {
+        await apiRequest(`/submission-tasks/${String(taskId)}/run-auto-assisted`, { method: "POST" });
       } else {
         await apiRequest(`/submission-tasks/${String(taskId)}/${action}`, { method: "POST" });
       }
       setFeedback(
         action === "submit"
           ? "Submission policy 已评估。默认 SEMI_AUTO 不会自动提交。"
+          : action === "run-auto"
+            ? "AUTO_ASSISTED 已执行策略检查；未满足条件会回退人工。"
           : action === "confirm"
             ? "人工提交结果已记录。"
             : action === "retry"
@@ -3150,6 +3309,8 @@ function SubmissionPage() {
     ["Verified", dashboard.data?.submission_verified ?? 0, ShieldCheck, "text-emerald-700"],
     ["Failed", dashboard.data?.submission_failed ?? 0, CircleAlert, "text-red-700"],
     ["Manual Required", dashboard.data?.submission_manual_required ?? 0, Users, "text-amber"],
+    ["Auto Completed", dashboard.data?.auto_assisted_completed ?? 0, ShieldCheck, "text-emerald-700"],
+    ["Manual Review", dashboard.data?.auto_assisted_manual_review ?? 0, CircleAlert, "text-amber"],
   ] as const;
 
   return (
@@ -3167,7 +3328,7 @@ function SubmissionPage() {
           </div>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {cards.map(([label, value, Icon, tone]) => (
             <div key={label} className="panel p-4">
               <div className="flex items-center justify-between gap-2">
@@ -3183,7 +3344,7 @@ function SubmissionPage() {
             <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                  {["id", "platform", "account", "mode", "status", "verify", "reply", "tab", "result", "failure", "retry", "actions"].map((label) => (
+                  {["id", "platform", "account", "mode", "status", "policy", "verify", "reply", "tab", "result", "failure", "retry", "actions"].map((label) => (
                     <th key={label} className="px-4 py-3 font-semibold">{label}</th>
                   ))}
                 </tr>
@@ -3196,6 +3357,9 @@ function SubmissionPage() {
                     <td className="px-4 py-3">{String(task.account ?? "—")}</td>
                     <td className="px-4 py-3">{String(task.execution_mode)}</td>
                     <td className="px-4 py-3"><StatusBadge value={task.status} /></td>
+                    <td className="max-w-xs px-4 py-3 text-xs text-gray-500">
+                      {((task.policy_check as RecordItem | undefined)?.blocked) ? String((task.policy_check as RecordItem).reason ?? "BLOCKED") : "PASS"}
+                    </td>
                     <td className="px-4 py-3 text-xs">{String(task.verification_status ?? task.verification_level ?? "NONE")}</td>
                     <td className="max-w-sm px-4 py-3 text-xs text-gray-600">{String(task.reply_content_preview ?? "—")}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">S {String(task.browser_session_id ?? "—")} / T {String(task.browser_tab_id ?? "—")}</td>
@@ -3204,7 +3368,8 @@ function SubmissionPage() {
                     <td className="max-w-xs px-4 py-3 text-xs text-gray-500">{task.retryable ? `可重试 · ${String(task.retry_count ?? 0)}` : String(task.retry_blocked_reason ?? "不可重试")}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "submit")}>Policy Submit</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "submit")}>Policy Check</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "run-auto")}>Run AUTO_ASSISTED Now</button>
                         <button className="button" onClick={() => void submissionAction(task.id, "confirm")}>Confirm Submitted</button>
                         <button className="button-secondary" onClick={() => void submissionAction(task.id, "mark-failed")}>Mark Failed</button>
                         <button className="button-secondary" onClick={() => void submissionAction(task.id, "retry")} disabled={!task.retryable}>Retry</button>
@@ -3227,8 +3392,13 @@ function SubmissionPage() {
               { key: "verified_count", label: "Verified" },
               { key: "failed_count", label: "Failed" },
               { key: "manual_required_count", label: "Manual Required" },
+              { key: "auto_submit_attempts", label: "Auto Attempts" },
+              { key: "auto_submit_success", label: "Auto Success" },
+              { key: "manual_fallback", label: "Manual Fallback" },
+              { key: "policy_blocked", label: "Policy Blocked" },
               { key: "retry_count", label: "Retry" },
               { key: "success_rate", label: "Success %" },
+              { key: "fallback_rate", label: "Fallback %" },
               { key: "failure_rate", label: "Failure %" },
             ]}
           />

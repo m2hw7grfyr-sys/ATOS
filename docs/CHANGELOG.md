@@ -4,6 +4,14 @@ ATOS 的重要文档、架构和实现变更记录在此文件中。
 
 格式参考 Keep a Changelog，版本遵循 Semantic Versioning。
 
+## Sprint 13
+
+- Added AUTO_ASSISTED global, platform, and account guards
+- Added AUTO_ASSISTED Test Mode scaffold for Reddit and X
+- Added policy blocked, manual fallback, emergency stop, and audit logging
+- Added AUTO_ASSISTED dashboard and submission statistics
+- Added AUTO_ASSISTED operator documentation
+
 ## App v1.2
 
 - Added LLM Provider abstraction methods

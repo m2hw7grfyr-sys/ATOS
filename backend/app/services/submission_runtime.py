@@ -3,20 +3,29 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    Account,
+    AccountAutoSubmitLimit,
+    AccountLimit,
+    AccountWorkingWindow,
+    AutoAssistedPlatformConfig,
+    BrowserSession,
     BrowserTab,
     ExecutionQueue,
     ExecutionTask,
+    PlatformRegistry,
     Post,
     ReplyTask,
     SchedulerTask,
     SubmissionLog,
     SubmissionTask,
     SystemSetting,
+    WorkerNode,
 )
 from app.services.audit import write_audit
 from app.services.browser_runtime import BrowserRuntime
@@ -28,6 +37,7 @@ SUBMISSION_SETTING_KEY = "execution.submission"
 DEFAULT_SUBMISSION_SETTINGS: dict[str, Any] = {
     "default_execution_mode": "SEMI_AUTO",
     "auto_assisted_enabled": False,
+    "auto_assisted_test_mode": False,
     "full_auto_enabled": False,
     "max_retry": 1,
     "verify_timeout_seconds": 20,
@@ -41,21 +51,27 @@ DEFAULT_SUBMISSION_SETTINGS: dict[str, Any] = {
     "verification_level_default": "MANUAL_CONFIRMED",
     "retry_on_browser_disconnect": True,
     "retry_on_worker_offline": True,
+    "auto_assisted_real_submit_enabled": False,
 }
 
 SUBMISSION_STATES = {
     "CREATED",
     "PREPARED",
+    "SUBMITTING",
     "WAITING_MANUAL",
     "MANUAL_CONFIRMED",
     "VERIFYING",
     "VERIFIED",
+    "COMPLETED",
     "FAILED",
     "MANUAL_REQUIRED",
+    "MANUAL_REVIEW",
+    "RETRY_PENDING",
     "CANCELLED",
     "UNKNOWN",
+    "VERIFICATION_FAILED",
 }
-FINAL_STATUSES = {"VERIFIED", "FAILED", "CANCELLED"}
+FINAL_STATUSES = {"VERIFIED", "COMPLETED", "FAILED", "CANCELLED"}
 VERIFICATION_LEVELS = {
     "NONE",
     "MANUAL_CONFIRMED",
@@ -149,6 +165,106 @@ def save_submission_settings(db: Session, values: dict[str, Any]) -> dict[str, A
     return merged
 
 
+def get_auto_assisted_platform_configs(db: Session) -> list[dict[str, Any]]:
+    ensure_default_auto_assisted_platforms(db)
+    rows = db.scalars(select(AutoAssistedPlatformConfig).order_by(AutoAssistedPlatformConfig.platform.asc())).all()
+    return [
+        {
+            "id": row.id,
+            "uuid": row.uuid,
+            "platform": row.platform,
+            "auto_assisted_enabled": row.auto_assisted_enabled,
+            "max_daily_auto_submit": row.max_daily_auto_submit,
+            "allowed_accounts": row.allowed_accounts or [],
+            "allowed_time_window": row.allowed_time_window or {},
+            "enabled_by": row.enabled_by,
+            "enabled_at": row.enabled_at.isoformat() if row.enabled_at else None,
+            "remark": row.remark,
+            "status": row.status,
+        }
+        for row in rows
+    ]
+
+
+def ensure_default_auto_assisted_platforms(db: Session) -> None:
+    for platform, limit in {"reddit": 3, "x": 3}.items():
+        existing = db.scalar(select(AutoAssistedPlatformConfig).where(AutoAssistedPlatformConfig.platform == platform))
+        if not existing:
+            db.add(
+                AutoAssistedPlatformConfig(
+                    platform=platform,
+                    auto_assisted_enabled=False,
+                    max_daily_auto_submit=limit,
+                    allowed_accounts=[],
+                    allowed_time_window={"allowed_start_time": "09:00", "allowed_end_time": "22:00", "timezone": "Asia/Shanghai"},
+                )
+            )
+    db.flush()
+
+
+def save_auto_assisted_platform_config(
+    db: Session,
+    platform: str,
+    values: dict[str, Any],
+    *,
+    actor: str = "operator",
+    trace_id: str = "system",
+) -> dict[str, Any]:
+    platform = platform.lower().strip()
+    ensure_default_auto_assisted_platforms(db)
+    item = db.scalar(select(AutoAssistedPlatformConfig).where(AutoAssistedPlatformConfig.platform == platform))
+    if not item:
+        item = AutoAssistedPlatformConfig(platform=platform)
+        db.add(item)
+    old_enabled = item.auto_assisted_enabled
+    if "auto_assisted_enabled" in values:
+        item.auto_assisted_enabled = bool(values["auto_assisted_enabled"])
+        if item.auto_assisted_enabled and not old_enabled:
+            item.enabled_by = actor
+            item.enabled_at = utc_now()
+    if "max_daily_auto_submit" in values:
+        item.max_daily_auto_submit = max(0, int(values["max_daily_auto_submit"] or 0))
+    if "allowed_accounts" in values:
+        item.allowed_accounts = values.get("allowed_accounts") or []
+    if "allowed_time_window" in values:
+        item.allowed_time_window = values.get("allowed_time_window") or {}
+    if "remark" in values:
+        item.remark = values.get("remark")
+    db.flush()
+    action = "AUTO_ASSISTED Enabled" if item.auto_assisted_enabled and not old_enabled else "AUTO_ASSISTED Disabled" if old_enabled and not item.auto_assisted_enabled else "AUTO_ASSISTED Platform Config Updated"
+    write_audit(
+        db,
+        action=action,
+        entity_type="AutoAssistedPlatformConfig",
+        entity_uuid=item.uuid,
+        actor=actor,
+        trace_id=trace_id,
+        detail={"platform": platform, "auto_assisted_enabled": item.auto_assisted_enabled},
+    )
+    return get_auto_assisted_platform_config(db, platform)
+
+
+def get_auto_assisted_platform_config(db: Session, platform: str) -> dict[str, Any]:
+    platform = platform.lower().strip()
+    ensure_default_auto_assisted_platforms(db)
+    item = db.scalar(select(AutoAssistedPlatformConfig).where(AutoAssistedPlatformConfig.platform == platform))
+    if not item:
+        return {}
+    return {
+        "id": item.id,
+        "uuid": item.uuid,
+        "platform": item.platform,
+        "auto_assisted_enabled": item.auto_assisted_enabled,
+        "max_daily_auto_submit": item.max_daily_auto_submit,
+        "allowed_accounts": item.allowed_accounts or [],
+        "allowed_time_window": item.allowed_time_window or {},
+        "enabled_by": item.enabled_by,
+        "enabled_at": item.enabled_at.isoformat() if item.enabled_at else None,
+        "remark": item.remark,
+        "status": item.status,
+    }
+
+
 @dataclass
 class SubmissionAction:
     allowed: bool
@@ -161,7 +277,7 @@ class ExecutionPolicyEngine:
     def __init__(self, db: Session):
         self.db = db
 
-    def evaluate(self, execution_mode: str | None) -> SubmissionAction:
+    def evaluate(self, execution_mode: str | None, task: SubmissionTask | None = None) -> SubmissionAction:
         settings = get_submission_settings(self.db)
         mode = str(execution_mode or settings["default_execution_mode"]).upper()
         if mode == "SEMI_AUTO":
@@ -171,11 +287,12 @@ class ExecutionPolicyEngine:
                 reason="SEMI_AUTO requires a human to submit on the platform page.",
             )
         if mode == "AUTO_ASSISTED":
-            enabled = bool(settings.get("auto_assisted_enabled"))
+            checks = self.auto_assisted_checks(task, settings)
+            enabled = not checks["blocked"]
             return SubmissionAction(
                 allowed=enabled,
                 status="READY" if enabled else "WAITING_POLICY",
-                reason="AUTO_ASSISTED is enabled." if enabled else "AUTO_ASSISTED is disabled by policy.",
+                reason="AUTO_ASSISTED policy passed." if enabled else checks["reason"],
                 allow_auto_submit=enabled,
             )
         if mode == "FULL_AUTO":
@@ -187,6 +304,123 @@ class ExecutionPolicyEngine:
                 allow_auto_submit=enabled,
             )
         return SubmissionAction(False, "WAITING_POLICY", f"Unsupported execution mode: {mode}")
+
+    def auto_assisted_checks(self, task: SubmissionTask | None, settings: dict[str, Any] | None = None) -> dict[str, Any]:
+        settings = settings or get_submission_settings(self.db)
+        reasons: list[str] = []
+        if not bool(settings.get("auto_assisted_enabled")):
+            reasons.append("Global AUTO_ASSISTED is disabled")
+        if not bool(settings.get("auto_assisted_test_mode")) and not bool(settings.get("auto_assisted_real_submit_enabled")):
+            reasons.append("Real AUTO_ASSISTED submit is disabled in this build; enable Test Mode to simulate")
+        if not task:
+            return {"blocked": bool(reasons), "reason": "; ".join(reasons) or "AUTO_ASSISTED policy passed", "reasons": reasons}
+
+        platform = str(task.platform or "").lower()
+        reply_task = self.db.get(ReplyTask, task.reply_task_id) if task.reply_task_id else None
+        if not reply_task:
+            reasons.append("No approved reply task is linked")
+        elif reply_task.status not in {"APPROVED", "SCHEDULED", "EXECUTING", "WAITING_MANUAL", "SUBMITTED", "CONFIRMED"}:
+            reasons.append(f"Reply task is not approved: {reply_task.status}")
+        platform_config = self.db.scalar(
+            select(AutoAssistedPlatformConfig).where(AutoAssistedPlatformConfig.platform == platform)
+        )
+        if not platform_config or not platform_config.auto_assisted_enabled:
+            reasons.append(f"Platform AUTO_ASSISTED is disabled for {platform or 'unknown'}")
+
+        account = self.db.get(Account, task.account_id) if task.account_id else None
+        if not account:
+            reasons.append("No account bound to submission task")
+        elif not account.allow_auto_assisted:
+            reasons.append("Account AUTO_ASSISTED permission is disabled")
+        elif account.status != "ACTIVE":
+            reasons.append("Account is not ACTIVE")
+        elif account.risk_status in {"HIGH", "CRITICAL"}:
+            reasons.append(f"Account risk_status blocks AUTO_ASSISTED: {account.risk_status}")
+
+        if platform_config and account and platform_config.allowed_accounts:
+            allowed = {str(item) for item in platform_config.allowed_accounts}
+            if str(account.id) not in allowed and account.username not in allowed and account.uuid not in allowed:
+                reasons.append("Account is not in platform allowed_accounts")
+
+        if account and not self._daily_limit_available(account, platform, platform_config):
+            reasons.append("Account daily AUTO_ASSISTED limit reached")
+
+        if not self._time_window_allowed(platform_config):
+            reasons.append("Outside platform AUTO_ASSISTED time window")
+
+        if not self._platform_supports_auto_submit(platform):
+            reasons.append(f"Platform capability AUTO_SUBMIT is not registered for {platform or 'unknown'}")
+
+        worker = self.db.get(WorkerNode, task.worker_id) if task.worker_id else None
+        if not worker:
+            reasons.append("No worker bound to submission task")
+        elif worker.status not in {"ONLINE", "HEALTHY", "READY", "ACTIVE"}:
+            reasons.append(f"Worker is not healthy: {worker.status}")
+
+        session = self.db.get(BrowserSession, task.browser_session_id) if task.browser_session_id else None
+        if not session:
+            reasons.append("No browser session bound to submission task")
+        elif session.status not in {"RUNNING", "ATTACHED", "ACTIVE", "READY"}:
+            reasons.append(f"Browser session is not normal: {session.status}")
+
+        if not settings.get("screenshot_required", True) or not settings.get("capture_screenshot_enabled", True):
+            reasons.append("Screenshot capture is required for AUTO_ASSISTED")
+
+        return {"blocked": bool(reasons), "reason": "; ".join(reasons) or "AUTO_ASSISTED policy passed", "reasons": reasons}
+
+    def _platform_supports_auto_submit(self, platform: str) -> bool:
+        if not platform:
+            return False
+        registry = self.db.scalar(select(PlatformRegistry).where(PlatformRegistry.platform_name == platform))
+        if registry and registry.capabilities:
+            return bool(registry.capabilities.get("AUTO_SUBMIT"))
+        try:
+            adapter = PlatformRuntime(self.db, mock_mode=True).adapter_for(platform)
+            return "AUTO_SUBMIT" in adapter.capabilities
+        except Exception:
+            return False
+
+    def _daily_limit_available(
+        self,
+        account: Account,
+        platform: str,
+        platform_config: AutoAssistedPlatformConfig | None,
+    ) -> bool:
+        today = utc_now().date()
+        limit = self.db.scalar(
+            select(AccountAutoSubmitLimit).where(
+                AccountAutoSubmitLimit.account_id == account.id,
+                AccountAutoSubmitLimit.platform == platform,
+            )
+        )
+        if not limit:
+            limit = AccountAutoSubmitLimit(
+                account_id=account.id,
+                platform=platform,
+                daily_auto_submit_limit=(platform_config.max_daily_auto_submit if platform_config else 3),
+                auto_submitted_today=0,
+                last_reset_at=utc_now(),
+            )
+            self.db.add(limit)
+            self.db.flush()
+        if not limit.last_reset_at or limit.last_reset_at.date() != today:
+            limit.auto_submitted_today = 0
+            limit.last_reset_at = utc_now()
+        max_allowed = min(limit.daily_auto_submit_limit, platform_config.max_daily_auto_submit if platform_config else limit.daily_auto_submit_limit)
+        return limit.auto_submitted_today < max_allowed
+
+    def _time_window_allowed(self, platform_config: AutoAssistedPlatformConfig | None) -> bool:
+        window = (platform_config.allowed_time_window if platform_config else None) or {}
+        start = window.get("allowed_start_time") or window.get("start") or window.get("start_time")
+        end = window.get("allowed_end_time") or window.get("end") or window.get("end_time")
+        if not start or not end:
+            return True
+        try:
+            zone = ZoneInfo(str(window.get("timezone") or "Asia/Shanghai"))
+            current = utc_now().astimezone(zone).strftime("%H:%M")
+            return str(start) <= current <= str(end)
+        except Exception:
+            return True
 
 
 class FailureRecoveryService:
@@ -215,6 +449,13 @@ class FailureRecoveryService:
                 "retryable": False,
                 "failure_type": failure_type,
                 "reason": "Platform rejected the content; automatic retry is blocked.",
+            }
+        if failure_type == "VERIFICATION_FAILED":
+            return {
+                "action": "MANUAL_REVIEW",
+                "retryable": False,
+                "failure_type": failure_type,
+                "reason": "Submission could not be verified; manual review is required.",
             }
         if failure_type == "BROWSER_DISCONNECTED" and settings.get("retry_on_browser_disconnect", True):
             retryable = task.retry_count < max_retry
@@ -275,7 +516,7 @@ class SubmissionRuntime:
 
     def prepare_submission(self, *, reply_task: ReplyTask, execution: ExecutionTask | None = None) -> SubmissionTask:
         task = self.get_or_create(reply_task=reply_task, execution=execution)
-        action = self.policy.evaluate(task.execution_mode)
+        action = self.policy.evaluate(task.execution_mode, task)
         old_status = task.status
         self.set_status(task, "WAITING_MANUAL" if action.status == "WAITING_MANUAL" else "MANUAL_REQUIRED" if action.status == "WAITING_POLICY" else "PREPARED", reason=action.reason)
         task.failure_reason = None if action.status != "WAITING_POLICY" else action.reason
@@ -297,37 +538,50 @@ class SubmissionRuntime:
 
     def submit_reply(self, submission_task_id: int) -> SubmissionTask:
         task = self._task(submission_task_id)
-        action = self.policy.evaluate(task.execution_mode)
+        action = self.policy.evaluate(task.execution_mode, task)
+        self.log(task, "POLICY_CHECKED", action.reason, metadata={"execution_mode": task.execution_mode})
+        self._audit("Policy Checked", task, {"policy_result": "PASSED" if action.allowed else "BLOCKED", "reason": action.reason})
         if not action.allowed:
             self.set_status(task, "MANUAL_REQUIRED" if action.status == "WAITING_POLICY" else action.status, reason=action.reason)
             task.failure_reason = action.reason
-            self.log(task, "WAITING_POLICY", action.reason, level="WARNING")
+            self.log(task, "POLICY_BLOCKED", action.reason, level="WARNING")
+            self._audit("Policy Blocked", task, {"policy_result": "BLOCKED", "reason": action.reason})
             return task
+        settings = get_submission_settings(self.db)
         adapter = PlatformRuntime(self.db, mock_mode=True).adapter_for(str(task.platform or "unknown"))
         old_status = task.status
-        self.set_status(task, "PREPARED", reason="Auto-assisted submission policy allowed.")
-        self.log(task, "SUBMITTING", "Submission adapter invoked.", metadata={"mode": task.execution_mode})
-        result = adapter.submit_reply(None, allow_auto_submit=action.allow_auto_submit)
+        self.set_status(task, "SUBMITTING", reason="Auto-assisted submission policy allowed.")
+        self.log(task, "AUTO_SUBMIT_STARTED", "Submission adapter invoked.", metadata={"mode": task.execution_mode, "test_mode": settings.get("auto_assisted_test_mode")})
+        self._audit("Policy Passed", task, {"old_status": old_status, "new_status": task.status})
+        self._audit("Auto Submit Started", task, {"execution_mode": task.execution_mode, "test_mode": settings.get("auto_assisted_test_mode")})
+        page = {"test_mode": "submit_success"} if settings.get("auto_assisted_test_mode") else None
+        result = adapter.submit_reply(page, allow_auto_submit=action.allow_auto_submit)
         if not result.get("submitted"):
             failure = str(result.get("failure_type") or result.get("code") or "UNKNOWN_ERROR")
             self.capture_failure(task, failure if failure in SUBMISSION_FAILURE_TYPES else "UNKNOWN_ERROR", result)
             self._update_execution_failure(task, failure, str(result.get("reason") or failure))
+            self._audit("Manual Fallback", task, {"failure": failure, "reason": result.get("reason")})
             return task
         task.submitted_at = utc_now()
-        self.set_status(task, "MANUAL_CONFIRMED", reason="Submission adapter reported submit action completed.")
-        self.log(task, "SUBMITTED", "Submission adapter reported submit action completed.", metadata=result)
+        self.log(task, "AUTO_SUBMIT_COMPLETED", "Submission adapter reported submit action completed.", metadata=result)
+        self._audit("Auto Submit Completed", task, result)
         self.verify_success(task)
+        if task.status == "VERIFIED":
+            self.set_status(task, "COMPLETED", reason="AUTO_ASSISTED submit verified and completed.")
+            self._increment_auto_submit(task)
         self._audit("SubmissionSubmitted", task, {"old_status": old_status, "new_status": task.status})
         return task
 
     def verify_success(self, task: SubmissionTask) -> SubmissionTask:
         adapter = PlatformRuntime(self.db, mock_mode=True).adapter_for(str(task.platform or "unknown"))
         self.set_status(task, "VERIFYING", reason="Verification started.")
-        self.log(task, "VERIFYING", "Verification started.")
+        self.log(task, "VERIFICATION_STARTED", "Verification started.")
+        self._audit("Verification Started", task, {"verification_timeout_seconds": get_submission_settings(self.db).get("verify_timeout_seconds")})
         reply_task = self.db.get(ReplyTask, task.reply_task_id) if task.reply_task_id else None
         verified = adapter.verify_reply_success(None, reply_task.reply_content if reply_task else None)
         if not verified.get("verified") and not verified.get("success"):
             self.capture_failure(task, "VERIFICATION_FAILED", verified)
+            self._audit("Verification Failed", task, verified)
             return task
         url_result = adapter.get_submitted_reply_url(None)
         id_result = adapter.get_submitted_reply_id(None)
@@ -338,6 +592,7 @@ class SubmissionRuntime:
         task.verification_level = self._verification_level(task, verified, url_result, id_result)
         task.verification_status = task.verification_level
         self.capture_result(task, {"verification": verified, "url": url_result, "external_id": id_result})
+        self._audit("Verification Completed", task, {"verification_level": task.verification_level})
         return task
 
     def record_manual_result(
@@ -438,7 +693,14 @@ class SubmissionRuntime:
         task.error_code = normalized
         task.error_message = str((metadata or {}).get("reason") or normalized)
         decision = self.recovery.decision(task, normalized)
-        new_status = "MANUAL_REQUIRED" if decision["action"] == "MANUAL_REQUIRED" else "FAILED"
+        if decision["action"] == "MANUAL_REQUIRED":
+            new_status = "MANUAL_REQUIRED"
+        elif decision["action"] == "MANUAL_REVIEW":
+            new_status = "MANUAL_REVIEW"
+        elif decision["action"] == "RETRY_PENDING":
+            new_status = "RETRY_PENDING"
+        else:
+            new_status = "FAILED"
         self.set_status(task, new_status, reason=decision["reason"], error_code=normalized, error_message=task.error_message)
         self.log(
             task,
@@ -487,6 +749,31 @@ class SubmissionRuntime:
     def rollback_if_needed(self, task: SubmissionTask) -> None:
         self.log(task, "ROLLBACK_SKIPPED", "No rollback is available for platform submissions.")
 
+    def emergency_stop(self) -> dict[str, Any]:
+        settings = save_submission_settings(
+            self.db,
+            {
+                "auto_assisted_enabled": False,
+                "full_auto_enabled": False,
+                "default_execution_mode": "SEMI_AUTO",
+            },
+        )
+        ensure_default_auto_assisted_platforms(self.db)
+        platform_items = self.db.scalars(select(AutoAssistedPlatformConfig)).all()
+        for item in platform_items:
+            item.auto_assisted_enabled = False
+        tasks = self.db.scalars(
+            select(SubmissionTask).where(
+                SubmissionTask.execution_mode == "AUTO_ASSISTED",
+                SubmissionTask.status.in_(["PREPARED", "SUBMITTING", "VERIFYING", "RETRY_PENDING"]),
+            )
+        ).all()
+        for task in tasks:
+            self.set_status(task, "WAITING_MANUAL", reason="Emergency Stop disabled AUTO_ASSISTED.")
+            self.log(task, "MANUAL_FALLBACK", "Emergency Stop moved task to WAITING_MANUAL.", level="WARNING")
+        self._audit_system("AUTO_ASSISTED Disabled", {"reason": "Emergency Stop", "affected_tasks": len(tasks)})
+        return {"settings": settings, "affected_tasks": len(tasks)}
+
     def dashboard_counts(self) -> dict[str, int]:
         rows = self.db.execute(select(SubmissionTask.status, func.count(SubmissionTask.id)).group_by(SubmissionTask.status)).all()
         counts = {str(status).lower(): int(count) for status, count in rows}
@@ -505,12 +792,15 @@ class SubmissionRuntime:
             "submission_verified": counts.get("verified", 0),
             "submission_failed": counts.get("failed", 0),
             "submission_manual_required": counts.get("manual_required", 0),
+            "auto_assisted_submitting": counts.get("submitting", 0),
+            "auto_assisted_completed": counts.get("completed", 0),
+            "auto_assisted_manual_review": counts.get("manual_review", 0),
             "reddit_waiting_manual": platform_counts.get("reddit", {}).get("waiting_manual", 0),
             "x_waiting_manual": platform_counts.get("x", {}).get("waiting_manual", 0),
             "reddit_failed": platform_counts.get("reddit", {}).get("failed", 0),
             "x_failed": platform_counts.get("x", {}).get("failed", 0),
             "manual_confirmed_today": counts.get("manual_confirmed", 0) + counts.get("verified", 0),
-            "retry_pending": counts.get("prepared", 0),
+            "retry_pending": counts.get("retry_pending", 0),
         }
 
     def submission_statistics(self) -> list[dict[str, Any]]:
@@ -531,10 +821,27 @@ class SubmissionRuntime:
                     "verified_count": 0,
                     "failed_count": 0,
                     "manual_required_count": 0,
+                    "auto_submit_attempts": 0,
+                    "auto_submit_success": 0,
+                    "verification_success": 0,
+                    "verification_failed": 0,
+                    "manual_fallback": 0,
+                    "policy_blocked": 0,
                     "retry_count": 0,
                 },
             )
             status_key = str(status or "").upper()
+            if status_key in {"SUBMITTING", "VERIFYING", "VERIFIED", "COMPLETED", "FAILED", "MANUAL_REQUIRED", "MANUAL_REVIEW"}:
+                item["auto_submit_attempts"] += int(count)
+            if status_key in {"VERIFIED", "COMPLETED"}:
+                item["auto_submit_success"] += int(count)
+                item["verification_success"] += int(count)
+            if status_key in {"VERIFICATION_FAILED", "MANUAL_REVIEW"}:
+                item["verification_failed"] += int(count)
+            if status_key in {"WAITING_MANUAL", "MANUAL_REQUIRED"}:
+                item["manual_fallback"] += int(count)
+            if status_key == "MANUAL_REQUIRED":
+                item["policy_blocked"] += int(count)
             if status_key in {"WAITING_MANUAL", "MANUAL_CONFIRMED", "VERIFIED"}:
                 item["filled_count"] += int(count)
             if status_key in {"MANUAL_CONFIRMED", "VERIFIED"}:
@@ -556,6 +863,8 @@ class SubmissionRuntime:
             total = max(item["filled_count"], 1)
             item["success_rate"] = round((item["verified_count"] / total) * 100, 2)
             item["failure_rate"] = round((item["failed_count"] / total) * 100, 2)
+            attempts = max(item["auto_submit_attempts"], 1)
+            item["fallback_rate"] = round((item["manual_fallback"] / attempts) * 100, 2)
         return list(by_platform.values())
 
     def failures(self) -> list[dict[str, Any]]:
@@ -731,6 +1040,31 @@ class SubmissionRuntime:
         set_execution_status(self.db, execution, "FAILED", "SUBMISSION_FAILED", error_code=code, error_message=message)
         execution_log(self.db, execution, "SUBMISSION_RUNTIME_FAILED", new_status="FAILED", message=message)
 
+    def _increment_auto_submit(self, task: SubmissionTask) -> None:
+        if not task.account_id or not task.platform:
+            return
+        platform = str(task.platform).lower()
+        limit = self.db.scalar(
+            select(AccountAutoSubmitLimit).where(
+                AccountAutoSubmitLimit.account_id == task.account_id,
+                AccountAutoSubmitLimit.platform == platform,
+            )
+        )
+        if not limit:
+            limit = AccountAutoSubmitLimit(
+                account_id=task.account_id,
+                platform=platform,
+                daily_auto_submit_limit=3,
+                auto_submitted_today=0,
+                last_reset_at=utc_now(),
+            )
+            self.db.add(limit)
+        if not limit.last_reset_at or limit.last_reset_at.date() != utc_now().date():
+            limit.auto_submitted_today = 0
+            limit.last_reset_at = utc_now()
+        limit.auto_submitted_today += 1
+        self.log(task, "AUTO_SUBMIT_LIMIT_UPDATED", "Account daily AUTO_ASSISTED counter incremented.", metadata={"auto_submitted_today": limit.auto_submitted_today})
+
     def _task(self, task_id: int) -> SubmissionTask:
         task = self.db.get(SubmissionTask, task_id)
         if not task:
@@ -746,4 +1080,15 @@ class SubmissionRuntime:
             actor=self.actor,
             trace_id=self.trace_id,
             detail={"submission_task_id": task.id, **(detail or {})},
+        )
+
+    def _audit_system(self, action: str, detail: dict[str, Any] | None = None) -> None:
+        write_audit(
+            self.db,
+            action=action,
+            entity_type="SubmissionRuntime",
+            entity_uuid="system",
+            actor=self.actor,
+            trace_id=self.trace_id,
+            detail=detail or {},
         )

@@ -132,7 +132,9 @@ class PlaywrightSettingsUpdate(BaseModel):
 class SubmissionSettingsUpdate(BaseModel):
     default_execution_mode: str = "SEMI_AUTO"
     auto_assisted_enabled: bool = False
+    auto_assisted_test_mode: bool = False
     full_auto_enabled: bool = False
+    auto_assisted_real_submit_enabled: bool = False
     max_retry: int = 1
     verify_timeout_seconds: int = 20
     capture_screenshot_enabled: bool = True
@@ -164,6 +166,7 @@ class AccountCreate(BaseModel):
     environment_name: Optional[str] = None
     daily_limits: dict[str, Any] = Field(default_factory=dict)
     working_time: dict[str, Any] = Field(default_factory=dict)
+    allow_auto_assisted: bool = False
 
 
 class AccountUpdate(BaseModel):
@@ -185,6 +188,7 @@ class AccountUpdate(BaseModel):
     failure_count_24h: Optional[int] = None
     restriction_count_7d: Optional[int] = None
     auto_downgrade_enabled: Optional[bool] = None
+    allow_auto_assisted: Optional[bool] = None
 
 
 class TGEProfileCreate(BaseModel):

@@ -562,7 +562,9 @@ docs/sprints/Sprint-03.md
 docs/sprints/Sprint-10.md
 docs/sprints/Sprint-11.md
 docs/sprints/Sprint-12.md
+docs/sprints/Sprint-13.md
 docs/SUBMISSION_RUNTIME.md
 docs/SUBMISSION_HARDENING.md
+docs/AUTO_ASSISTED_MODE.md
 docs/platforms/X_ADAPTER.md
 ```

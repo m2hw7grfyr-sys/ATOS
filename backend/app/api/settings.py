@@ -26,7 +26,12 @@ from app.services.scheduler import (
 )
 from app.services.tge import get_tge_settings, safe_tge_settings, save_tge_settings
 from app.services.playwright_runner import get_playwright_settings, save_playwright_settings
-from app.services.submission_runtime import get_submission_settings, save_submission_settings
+from app.services.submission_runtime import (
+    get_auto_assisted_platform_configs,
+    save_auto_assisted_platform_config,
+    get_submission_settings,
+    save_submission_settings,
+)
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -172,7 +177,40 @@ def update_submission_config(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    return ok(save_submission_settings(db, payload.model_dump()), request.state.trace_id, "submission settings updated")
+    before = get_submission_settings(db)
+    after = save_submission_settings(db, payload.model_dump())
+    from app.services.audit import write_audit
+
+    if bool(before.get("auto_assisted_enabled")) != bool(after.get("auto_assisted_enabled")):
+        write_audit(
+            db,
+            action="AUTO_ASSISTED Enabled" if after.get("auto_assisted_enabled") else "AUTO_ASSISTED Disabled",
+            entity_type="SystemSetting",
+            entity_uuid="execution.submission",
+            actor="administrator",
+            trace_id=request.state.trace_id,
+            detail={"auto_assisted_enabled": after.get("auto_assisted_enabled")},
+        )
+    db.commit()
+    return ok(after, request.state.trace_id, "submission settings updated")
+
+
+@router.get("/auto-assisted-platforms")
+def list_auto_assisted_platforms(request: Request, db: Session = Depends(get_db)):
+    return ok(get_auto_assisted_platform_configs(db), request.state.trace_id)
+
+
+@router.put("/auto-assisted-platforms/{platform}")
+def update_auto_assisted_platform(platform: str, payload: dict, request: Request, db: Session = Depends(get_db)):
+    result = save_auto_assisted_platform_config(
+        db,
+        platform,
+        payload,
+        actor="administrator",
+        trace_id=request.state.trace_id,
+    )
+    db.commit()
+    return ok(result, request.state.trace_id, "AUTO_ASSISTED platform settings updated")
 
 
 @router.get("/llm-providers")

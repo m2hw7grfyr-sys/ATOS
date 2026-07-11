@@ -458,7 +458,39 @@ class Account(Base, TimestampMixin):
     failure_count_24h: Mapped[int] = mapped_column(Integer, default=0)
     restriction_count_7d: Mapped[int] = mapped_column(Integer, default=0)
     auto_downgrade_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    allow_auto_assisted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     remark: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class AutoAssistedPlatformConfig(Base, TimestampMixin):
+    __tablename__ = "auto_assisted_platform_configs"
+    __table_args__ = (UniqueConstraint("platform", name="uq_auto_assisted_platform"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    auto_assisted_enabled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    max_daily_auto_submit: Mapped[int] = mapped_column(Integer, default=3)
+    allowed_accounts: Mapped[list] = mapped_column(JSON, default=list)
+    allowed_time_window: Mapped[dict] = mapped_column(JSON, default=dict)
+    enabled_by: Mapped[Optional[str]] = mapped_column(String(120))
+    enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    remark: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class AccountAutoSubmitLimit(Base, TimestampMixin):
+    __tablename__ = "account_auto_submit_limits"
+    __table_args__ = (UniqueConstraint("account_id", "platform", name="uq_account_auto_submit_limit"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    daily_auto_submit_limit: Mapped[int] = mapped_column(Integer, default=3)
+    auto_submitted_today: Mapped[int] = mapped_column(Integer, default=0)
+    last_reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
 
 

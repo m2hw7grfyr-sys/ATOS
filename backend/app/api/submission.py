@@ -33,8 +33,10 @@ def serialize_submission_task(task: SubmissionTask, db: Session) -> dict:
     item["browser_session_status"] = session.status if session else None
     item["browser_tab_url"] = tab.url if tab else None
     item["contract"] = SubmissionRuntime(db).contract(task)
-    item["retryable"] = SubmissionRuntime(db).recovery.decision(task, task.error_code or task.failure_reason)["retryable"]
-    item["retry_blocked_reason"] = item.get("retry_blocked_reason") or SubmissionRuntime(db).recovery.decision(task, task.error_code or task.failure_reason)["reason"]
+    runtime = SubmissionRuntime(db)
+    item["policy_check"] = runtime.policy.auto_assisted_checks(task)
+    item["retryable"] = runtime.recovery.decision(task, task.error_code or task.failure_reason)["retryable"]
+    item["retry_blocked_reason"] = item.get("retry_blocked_reason") or runtime.recovery.decision(task, task.error_code or task.failure_reason)["reason"]
     return item
 
 
@@ -66,6 +68,18 @@ def submit_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(task)
     return ok(serialize_submission_task(task, db), request.state.trace_id, "submission policy evaluated")
+
+
+@router.post("/tasks/{task_id}/run-auto-assisted")
+def run_auto_assisted_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    return submit_task(task_id, request, db)
+
+
+@router.post("/emergency-stop")
+def emergency_stop(request: Request, db: Session = Depends(get_db)):
+    result = SubmissionRuntime(db, actor="administrator", trace_id=request.state.trace_id).emergency_stop()
+    db.commit()
+    return ok(result, request.state.trace_id, "AUTO_ASSISTED emergency stop completed")
 
 
 @router.post("/tasks/{task_id}/record-manual-result")
@@ -198,6 +212,11 @@ def alias_retry_submission_task(task_id: int, request: Request, db: Session = De
 @task_router.post("/{task_id}/cancel")
 def alias_cancel_submission_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     return cancel_submission_task(task_id, request, db)
+
+
+@task_router.post("/{task_id}/run-auto-assisted")
+def alias_run_auto_assisted_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    return run_auto_assisted_task(task_id, request, db)
 
 
 @stats_router.get("/submission-stats")

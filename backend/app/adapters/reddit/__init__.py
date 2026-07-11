@@ -9,7 +9,7 @@ class RedditAdapter(PlatformAdapter):
     platform = "reddit"
     adapter_name = "RedditAdapter"
     version = "v1"
-    capabilities = {"REPLY", "BROWSE", "LIKE", "PROFILE_VISIT"}
+    capabilities = {"REPLY", "BROWSE", "LIKE", "PROFILE_VISIT", "AUTO_SUBMIT"}
 
     def _locator(self, page: Any, selector):
         selector_type = (selector.selector_type or "css").lower()

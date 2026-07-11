@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Account, ExecutionTask, Platform, Post, Reply, ReplyTask, SchedulerTask, SubmissionTask
+from app.models import Account, AutoAssistedPlatformConfig, BrowserSession, ExecutionTask, Platform, PlatformRegistry, Post, Reply, ReplyTask, SchedulerTask, SubmissionTask, WorkerNode
 from app.services.submission_runtime import SubmissionRuntime, get_submission_settings, save_submission_settings
 
 
@@ -17,8 +17,43 @@ class SubmissionRuntimeTest(unittest.TestCase):
         self.platform = Platform(name="Reddit", slug="reddit", adapter_key="reddit")
         self.db.add(self.platform)
         self.db.flush()
-        self.account = Account(platform_id=self.platform.id, username="submission_account", status="ACTIVE", risk_status="LOW")
+        self.registry = PlatformRegistry(
+            platform_name="reddit",
+            adapter_name="RedditAdapter",
+            capabilities={"AUTO_SUBMIT": True, "REPLY": True},
+            status="HEALTHY",
+        )
+        self.db.add(self.registry)
+        self.db.flush()
+        self.account = Account(
+            platform_id=self.platform.id,
+            username="submission_account",
+            status="ACTIVE",
+            risk_status="LOW",
+            allow_auto_assisted=False,
+        )
         self.db.add(self.account)
+        self.db.flush()
+        self.worker = WorkerNode(name="local-test-worker", status="ONLINE", host="localhost", version="test", capability={"BROWSER": True})
+        self.db.add(self.worker)
+        self.db.flush()
+        self.session = BrowserSession(
+            browser_type="mock",
+            worker_id=self.worker.id,
+            account_id=self.account.id,
+            status="RUNNING",
+            metadata_json={"test": True},
+        )
+        self.db.add(self.session)
+        self.db.flush()
+        self.platform_config = AutoAssistedPlatformConfig(
+            platform="reddit",
+            auto_assisted_enabled=False,
+            max_daily_auto_submit=3,
+            allowed_accounts=[],
+            allowed_time_window={},
+        )
+        self.db.add(self.platform_config)
         self.db.flush()
         self.post = Post(platform_id=self.platform.id, title="Need a focus workflow", url="https://example.com/post")
         self.db.add(self.post)
@@ -54,8 +89,14 @@ class SubmissionRuntimeTest(unittest.TestCase):
             reply_task_id=self.reply_task.id,
             account_id=self.account.id,
             platform="reddit",
+            worker_node_id=self.worker.id,
             action_type="PREPARE_REPLY",
-            payload_json={"platform": "reddit", "reply_content": self.reply.content, "browser_tab_id": None},
+            payload_json={
+                "platform": "reddit",
+                "reply_content": self.reply.content,
+                "browser_tab_id": None,
+                "browser_session_id": self.session.id,
+            },
             status="WAITING_MANUAL",
             queue_status="WAITING_MANUAL",
         )
@@ -123,10 +164,42 @@ class SubmissionRuntimeTest(unittest.TestCase):
         runtime = SubmissionRuntime(self.db, trace_id="test")
         task = runtime.prepare_submission(reply_task=self.reply_task, execution=self.execution)
         failed = runtime.mark_failed(task.id, "BROWSER_DISCONNECTED")
-        self.assertEqual(failed.status, "FAILED")
+        self.assertEqual(failed.status, "RETRY_PENDING")
         retried = runtime.retry(failed.id)
         self.assertEqual(retried.status, "PREPARED")
         self.assertEqual(retried.retry_count, 1)
+
+    def test_auto_assisted_test_mode_completes_with_all_guards_enabled(self):
+        save_submission_settings(
+            self.db,
+            {
+                "default_execution_mode": "AUTO_ASSISTED",
+                "auto_assisted_enabled": True,
+                "auto_assisted_test_mode": True,
+            },
+        )
+        self.platform_config.auto_assisted_enabled = True
+        self.account.allow_auto_assisted = True
+        self.reply_task.status = "APPROVED"
+        self.reply_task.execution_mode = "AUTO_ASSISTED"
+        self.execution.payload_json = {**self.execution.payload_json, "execution_mode": "AUTO_ASSISTED"}
+        runtime = SubmissionRuntime(self.db, trace_id="test")
+        task = runtime.prepare_submission(reply_task=self.reply_task, execution=self.execution)
+        self.assertEqual(task.status, "PREPARED")
+        completed = runtime.submit_reply(task.id)
+        self.assertEqual(completed.status, "COMPLETED")
+        self.assertEqual(completed.verification_level, "EXTERNAL_ID_VERIFIED")
+
+    def test_emergency_stop_moves_auto_assisted_tasks_to_waiting_manual(self):
+        save_submission_settings(self.db, {"default_execution_mode": "AUTO_ASSISTED", "auto_assisted_enabled": True})
+        self.reply_task.execution_mode = "AUTO_ASSISTED"
+        runtime = SubmissionRuntime(self.db, trace_id="test")
+        task = runtime.get_or_create(reply_task=self.reply_task, execution=self.execution)
+        task.status = "SUBMITTING"
+        result = runtime.emergency_stop()
+        self.assertEqual(result["affected_tasks"], 1)
+        self.assertEqual(task.status, "WAITING_MANUAL")
+        self.assertFalse(get_submission_settings(self.db)["auto_assisted_enabled"])
 
 
 if __name__ == "__main__":
