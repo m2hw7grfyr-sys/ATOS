@@ -91,9 +91,13 @@ class SubmissionRuntimeTest(unittest.TestCase):
         )
         self.assertEqual(task.status, "VERIFIED")
         self.assertTrue(task.manual_confirmed)
+        self.assertEqual(task.operator_id, "operator")
+        self.assertIsNotNone(task.confirmed_at)
+        self.assertIn(task.verification_level, {"MANUAL_CONFIRMED", "URL_VERIFIED", "EXTERNAL_ID_VERIFIED"})
         self.assertEqual(self.reply_task.status, "CONFIRMED")
         self.assertEqual(self.execution.status, "SUCCESS")
         self.assertEqual(self.scheduler.status, "EXECUTED")
+        self.assertEqual(runtime.contract(task)["platform"], "reddit")
 
     def test_auto_assisted_disabled_by_policy(self):
         save_submission_settings(self.db, {"default_execution_mode": "AUTO_ASSISTED", "auto_assisted_enabled": False})
@@ -103,7 +107,26 @@ class SubmissionRuntimeTest(unittest.TestCase):
             reply_task=self.reply_task,
             execution=self.execution,
         )
-        self.assertEqual(task.status, "WAITING_POLICY")
+        self.assertEqual(task.status, "MANUAL_REQUIRED")
+
+    def test_mark_failed_and_retry_guard(self):
+        runtime = SubmissionRuntime(self.db, trace_id="test")
+        task = runtime.prepare_submission(reply_task=self.reply_task, execution=self.execution)
+        failed = runtime.mark_failed(task.id, "LOGIN_REQUIRED")
+        self.assertEqual(failed.status, "MANUAL_REQUIRED")
+        self.assertEqual(failed.error_code, "LOGIN_REQUIRED")
+        retried = runtime.retry(failed.id)
+        self.assertEqual(retried.status, "MANUAL_REQUIRED")
+        self.assertIn("operator", retried.retry_blocked_reason.lower())
+
+    def test_retry_allowed_for_browser_disconnect_once(self):
+        runtime = SubmissionRuntime(self.db, trace_id="test")
+        task = runtime.prepare_submission(reply_task=self.reply_task, execution=self.execution)
+        failed = runtime.mark_failed(task.id, "BROWSER_DISCONNECTED")
+        self.assertEqual(failed.status, "FAILED")
+        retried = runtime.retry(failed.id)
+        self.assertEqual(retried.status, "PREPARED")
+        self.assertEqual(retried.retry_count, 1)
 
 
 if __name__ == "__main__":

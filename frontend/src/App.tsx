@@ -160,6 +160,12 @@ type DashboardData = {
     submission_verified?: number;
     submission_failed?: number;
     submission_manual_required?: number;
+    reddit_waiting_manual?: number;
+    x_waiting_manual?: number;
+    reddit_failed?: number;
+    x_failed?: number;
+    manual_confirmed_today?: number;
+    retry_pending?: number;
   };
   platform_health: Array<{
     name: string;
@@ -709,6 +715,42 @@ function DashboardPage() {
           value: data.overview.submission_manual_required ?? 0,
           icon: Users,
           tone: "text-amber",
+        },
+        {
+          label: "Reddit Waiting",
+          value: data.overview.reddit_waiting_manual ?? 0,
+          icon: FileClock,
+          tone: "text-amber",
+        },
+        {
+          label: "X Waiting",
+          value: data.overview.x_waiting_manual ?? 0,
+          icon: FileClock,
+          tone: "text-blue-700",
+        },
+        {
+          label: "Reddit Failed",
+          value: data.overview.reddit_failed ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
+        },
+        {
+          label: "X Failed",
+          value: data.overview.x_failed ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
+        },
+        {
+          label: "Manual Confirmed",
+          value: data.overview.manual_confirmed_today ?? 0,
+          icon: ShieldCheck,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Retry Pending",
+          value: data.overview.retry_pending ?? 0,
+          icon: RefreshCw,
+          tone: "text-blue-700",
         },
       ]
     : [];
@@ -2409,6 +2451,14 @@ function SettingsPage() {
           verify_timeout_seconds: Number(submissionForm.verify_timeout_seconds ?? 20),
           capture_screenshot_enabled: Boolean(submissionForm.capture_screenshot_enabled),
           capture_html_enabled: Boolean(submissionForm.capture_html_enabled),
+          max_reply_retry: Number(submissionForm.max_reply_retry ?? 1),
+          max_submission_retry: Number(submissionForm.max_submission_retry ?? 1),
+          screenshot_required: Boolean(submissionForm.screenshot_required),
+          html_snapshot_on_failure: Boolean(submissionForm.html_snapshot_on_failure),
+          manual_confirm_required: Boolean(submissionForm.manual_confirm_required),
+          verification_level_default: String(submissionForm.verification_level_default ?? "MANUAL_CONFIRMED"),
+          retry_on_browser_disconnect: Boolean(submissionForm.retry_on_browser_disconnect),
+          retry_on_worker_offline: Boolean(submissionForm.retry_on_worker_offline),
         }),
       });
       setFeedback("Submission Policy 已保存。");
@@ -2580,6 +2630,26 @@ function SettingsPage() {
               Verify Timeout Seconds
               <input className="field mt-2" type="number" min="1" value={String(submissionForm.verify_timeout_seconds ?? 20)} onChange={(e) => updateSubmissionField("verify_timeout_seconds", Number(e.target.value))} />
             </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Max Reply Retry
+              <input className="field mt-2" type="number" min="0" value={String(submissionForm.max_reply_retry ?? 1)} onChange={(e) => updateSubmissionField("max_reply_retry", Number(e.target.value))} />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Max Submission Retry
+              <input className="field mt-2" type="number" min="0" value={String(submissionForm.max_submission_retry ?? 1)} onChange={(e) => updateSubmissionField("max_submission_retry", Number(e.target.value))} />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Verification Level Default
+              <select
+                className="field mt-2"
+                value={String(submissionForm.verification_level_default ?? "MANUAL_CONFIRMED")}
+                onChange={(e) => updateSubmissionField("verification_level_default", e.target.value)}
+              >
+                {["NONE", "MANUAL_CONFIRMED", "DOM_VERIFIED", "URL_VERIFIED", "EXTERNAL_ID_VERIFIED", "FULL_VERIFIED"].map((level) => (
+                  <option key={level} value={level}>{level}</option>
+                ))}
+              </select>
+            </label>
             <div className="rounded border border-line bg-gray-50 p-3 text-xs text-gray-600">
               默认 SEMI_AUTO。AUTO_ASSISTED / FULL_AUTO 仅保留策略结构，未开启时不会自动点击提交。
             </div>
@@ -2588,6 +2658,11 @@ function SettingsPage() {
               ["full_auto_enabled", "Full Auto Enabled"],
               ["capture_screenshot_enabled", "Capture Screenshot"],
               ["capture_html_enabled", "Capture HTML"],
+              ["screenshot_required", "Screenshot Required"],
+              ["html_snapshot_on_failure", "HTML Snapshot On Failure"],
+              ["manual_confirm_required", "Manual Confirm Required"],
+              ["retry_on_browser_disconnect", "Retry Browser Disconnect"],
+              ["retry_on_worker_offline", "Retry Worker Offline"],
             ].map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <input type="checkbox" checked={Boolean(submissionForm[key])} onChange={(e) => updateSubmissionField(key, e.target.checked)} />
@@ -3028,24 +3103,41 @@ function ExecutionPage() {
 }
 
 function SubmissionPage() {
-  const { data, error, loading, reload } = useApiData<RecordItem[]>("/submission/tasks");
+  const { data, error, loading, reload } = useApiData<RecordItem[]>("/submission-tasks");
   const dashboard = useApiData<RecordItem>("/submission/dashboard");
   const logs = useApiData<RecordItem[]>("/submission/logs");
+  const stats = useApiData<RecordItem[]>("/submission-stats");
   const [feedback, setFeedback] = useState("");
 
-  async function submissionAction(taskId: unknown, action: "submit" | "record-manual-result" | "cancel") {
+  async function submissionAction(taskId: unknown, action: "submit" | "confirm" | "cancel" | "retry" | "mark-failed") {
     try {
-      await apiRequest(`/submission/tasks/${String(taskId)}/${action}`, { method: "POST" });
+      if (action === "mark-failed") {
+        const failureReason = window.prompt("请输入失败原因，例如 LOGIN_REQUIRED / REPLY_BOX_NOT_FOUND / UNKNOWN_ERROR");
+        if (!failureReason) return;
+        await apiRequest(`/submission-tasks/${String(taskId)}/mark-failed`, {
+          method: "POST",
+          body: JSON.stringify({ failure_reason: failureReason }),
+        });
+      } else if (action === "submit") {
+        await apiRequest(`/submission/tasks/${String(taskId)}/submit`, { method: "POST" });
+      } else {
+        await apiRequest(`/submission-tasks/${String(taskId)}/${action}`, { method: "POST" });
+      }
       setFeedback(
         action === "submit"
           ? "Submission policy 已评估。默认 SEMI_AUTO 不会自动提交。"
-          : action === "record-manual-result"
+          : action === "confirm"
             ? "人工提交结果已记录。"
-            : "Submission task 已取消。",
+            : action === "retry"
+              ? "Retry 已评估。"
+              : action === "mark-failed"
+                ? "任务已标记失败。"
+                : "Submission task 已取消。",
       );
       await reload();
       await dashboard.reload();
       await logs.reload();
+      await stats.reload();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "Submission 操作失败");
     }
@@ -3091,7 +3183,7 @@ function SubmissionPage() {
             <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                  {["id", "platform", "account", "mode", "status", "reply", "worker", "browser", "result", "failure", "created", "actions"].map((label) => (
+                  {["id", "platform", "account", "mode", "status", "verify", "reply", "tab", "result", "failure", "retry", "actions"].map((label) => (
                     <th key={label} className="px-4 py-3 font-semibold">{label}</th>
                   ))}
                 </tr>
@@ -3104,16 +3196,18 @@ function SubmissionPage() {
                     <td className="px-4 py-3">{String(task.account ?? "—")}</td>
                     <td className="px-4 py-3">{String(task.execution_mode)}</td>
                     <td className="px-4 py-3"><StatusBadge value={task.status} /></td>
+                    <td className="px-4 py-3 text-xs">{String(task.verification_status ?? task.verification_level ?? "NONE")}</td>
                     <td className="max-w-sm px-4 py-3 text-xs text-gray-600">{String(task.reply_content_preview ?? "—")}</td>
-                    <td className="px-4 py-3">{String(task.worker ?? task.worker_id ?? "—")}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">S {String(task.browser_session_id ?? "—")} / T {String(task.browser_tab_id ?? "—")}</td>
                     <td className="max-w-xs px-4 py-3 text-xs text-blue-700">{String(task.result_url ?? "—")}</td>
-                    <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.failure_reason ?? "—")}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{task.created_at ? new Date(String(task.created_at)).toLocaleString() : "—"}</td>
+                    <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.error_code ?? task.failure_reason ?? "—")}</td>
+                    <td className="max-w-xs px-4 py-3 text-xs text-gray-500">{task.retryable ? `可重试 · ${String(task.retry_count ?? 0)}` : String(task.retry_blocked_reason ?? "不可重试")}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <button className="button-secondary" onClick={() => void submissionAction(task.id, "submit")}>Policy Submit</button>
-                        <button className="button" onClick={() => void submissionAction(task.id, "record-manual-result")}>Manual Confirm</button>
+                        <button className="button" onClick={() => void submissionAction(task.id, "confirm")}>Confirm Submitted</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "mark-failed")}>Mark Failed</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "retry")} disabled={!task.retryable}>Retry</button>
                         <button className="button-secondary" onClick={() => void submissionAction(task.id, "cancel")}>Cancel</button>
                       </div>
                     </td>
@@ -3122,6 +3216,22 @@ function SubmissionPage() {
               </tbody>
             </table>
           </div>
+        </Section>
+        <Section title="Submission Statistics">
+          <DataTable
+            rows={stats.data ?? []}
+            columns={[
+              { key: "platform", label: "Platform" },
+              { key: "filled_count", label: "Filled" },
+              { key: "manual_confirmed_count", label: "Manual Confirmed" },
+              { key: "verified_count", label: "Verified" },
+              { key: "failed_count", label: "Failed" },
+              { key: "manual_required_count", label: "Manual Required" },
+              { key: "retry_count", label: "Retry" },
+              { key: "success_rate", label: "Success %" },
+              { key: "failure_rate", label: "Failure %" },
+            ]}
+          />
         </Section>
         <Section title="Recent Submission Timeline">
           <div className="panel overflow-x-auto">

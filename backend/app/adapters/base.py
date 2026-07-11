@@ -43,6 +43,18 @@ class PlatformAdapter(ABC):
             )
         return self.db.scalar(statement.order_by(PlatformSelector.action_type.desc(), PlatformSelector.id.asc()))
 
+    def selectors(self, key: str, action_type: str | None = None) -> list[PlatformSelector]:
+        statement = select(PlatformSelector).where(
+            PlatformSelector.platform == self.platform,
+            PlatformSelector.selector_key == key,
+            PlatformSelector.enabled.is_(True),
+        )
+        if action_type:
+            statement = statement.where(
+                (PlatformSelector.action_type == action_type) | (PlatformSelector.action_type.is_(None))
+            )
+        return list(self.db.scalars(statement.order_by(PlatformSelector.version.desc(), PlatformSelector.id.asc())).all())
+
     def open_post(self, page: Any, url: str) -> dict[str, Any]:
         if "BROWSE" not in self.capabilities and "REPLY" not in self.capabilities:
             return {"opened": False, "reason": "capability not supported"}
@@ -50,6 +62,12 @@ class PlatformAdapter(ABC):
             return {"opened": True, "url": url, "mock": True}
         page.goto(url)
         return {"opened": True, "url": url}
+
+    def test_scenario(self, page: Any) -> str | None:
+        if isinstance(page, dict):
+            value = page.get("test_mode") or page.get("scenario")
+            return str(value).lower() if value else None
+        return None
 
     @abstractmethod
     def find_reply_box(self, page: Any) -> dict[str, Any]:
@@ -175,6 +193,13 @@ class PlatformAdapter(ABC):
         return {"external_id": None, "code": "NOT_IMPLEMENTED"}
 
     def _detect_state(self, page: Any, selector_key: str) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario == "login_required" and selector_key in {"login_required", "login_required_indicator"}:
+            return {"detected": True, "test_mode": True}
+        if scenario == "rate_limited" and selector_key in {"rate_limited", "rate_limit_indicator"}:
+            return {"detected": True, "test_mode": True}
+        if scenario == "error_state" and selector_key in {"error_indicator"}:
+            return {"detected": True, "test_mode": True}
         if self.mock_mode:
             return {"detected": False, "mock": True}
         selector = self.selector(selector_key)

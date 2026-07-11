@@ -137,6 +137,14 @@ class SubmissionSettingsUpdate(BaseModel):
     verify_timeout_seconds: int = 20
     capture_screenshot_enabled: bool = True
     capture_html_enabled: bool = True
+    max_reply_retry: int = 1
+    max_submission_retry: int = 1
+    screenshot_required: bool = True
+    html_snapshot_on_failure: bool = True
+    manual_confirm_required: bool = True
+    verification_level_default: str = "MANUAL_CONFIRMED"
+    retry_on_browser_disconnect: bool = True
+    retry_on_worker_offline: bool = True
 
 
 class AccountCreate(BaseModel):

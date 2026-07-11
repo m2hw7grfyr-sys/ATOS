@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Request
 from app.database import get_db
 from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, ContentPerformance, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, IntelligenceRecommendation, LLMProvider, Platform, PlatformRegistry, Post, Reply, ReplyScore, ReplyTask, SchedulerTask, StatisticSnapshot, SubmissionTask, SystemAlert, TGEProfile, TimePerformance, WorkerNode
 from app.response import ok
+from app.services.submission_runtime import SubmissionRuntime
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -40,6 +41,7 @@ def summary(request: Request, db: Session = Depends(get_db)):
     pipeline_scheduled = count(Post, Post.status == "SCHEDULED")
     pipeline_total = count(Post)
     pipeline_success_rate = round((pipeline_scheduled / max(pipeline_total, 1)) * 100, 2)
+    submission_overview = SubmissionRuntime(db).dashboard_counts()
 
     return ok(
         {
@@ -131,14 +133,15 @@ def summary(request: Request, db: Session = Depends(get_db)):
                 "reply_waiting_manual": count(ReplyTask, ReplyTask.status == "WAITING_MANUAL"),
                 "reply_completed": count(ReplyTask, ReplyTask.status == "CONFIRMED"),
                 "reply_failed": count(ReplyTask, ReplyTask.status == "FAILED"),
-                "submission_ready": count(SubmissionTask, SubmissionTask.status == "READY"),
+                "submission_ready": count(SubmissionTask, SubmissionTask.status == "PREPARED"),
                 "submission_waiting_manual": count(SubmissionTask, SubmissionTask.status == "WAITING_MANUAL"),
-                "submission_submitting": count(SubmissionTask, SubmissionTask.status == "SUBMITTING"),
+                "submission_submitting": count(SubmissionTask, SubmissionTask.status == "VERIFYING"),
                 "submission_verified": count(SubmissionTask, SubmissionTask.status == "VERIFIED"),
                 "submission_failed": count(SubmissionTask, SubmissionTask.status == "FAILED"),
                 "submission_manual_required": count(
-                    SubmissionTask, SubmissionTask.status.in_(["WAITING_MANUAL", "WAITING_POLICY"])
+                    SubmissionTask, SubmissionTask.status == "MANUAL_REQUIRED"
                 ),
+                **submission_overview,
                 "active_platforms": count(PlatformRegistry, PlatformRegistry.enabled.is_(True)),
                 "healthy_platforms": count(PlatformRegistry, PlatformRegistry.status.in_(["HEALTHY", "UNKNOWN"])),
                 "failed_adapters": count(PlatformRegistry, PlatformRegistry.status.in_(["ERROR", "FAILED"])),

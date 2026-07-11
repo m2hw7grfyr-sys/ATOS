@@ -67,6 +67,13 @@ class XAdapterTest(unittest.TestCase):
         self.assertTrue(adapter.find_reply_box(None)["found"])
         self.assertTrue(adapter.fill_reply(None, self.reply.content)["filled"])
 
+    def test_x_test_mode_failures(self):
+        adapter = XAdapter(self.db, mock_mode=True)
+        self.assertTrue(adapter.detect_login_required({"test_mode": "login_required"})["detected"])
+        self.assertTrue(adapter.detect_rate_limit({"test_mode": "rate_limited"})["detected"])
+        self.assertFalse(adapter.find_reply_box({"test_mode": "reply_box_not_found"})["found"])
+        self.assertEqual(adapter.open_post({"test_mode": "browser_disconnected"}, self.post.url)["code"], "BROWSER_DISCONNECTED")
+
     def test_x_reply_pipeline_reaches_waiting_manual_and_confirmed(self):
         service = ReplyPipelineService(self.db, trace_id="x-test")
         reply_task = service.approve_reply(reply_id=self.reply.id, account_id=self.account.id)

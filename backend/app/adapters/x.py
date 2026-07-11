@@ -65,6 +65,14 @@ class XAdapter(PlatformAdapter):
         return selector, self._locator(page, selector).first
 
     def open_post(self, page: Any, url: str) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario in {"page_load_failed", "browser_disconnected", "worker_offline"}:
+            code = {
+                "page_load_failed": "X_PAGE_LOAD_FAILED",
+                "browser_disconnected": "BROWSER_DISCONNECTED",
+                "worker_offline": "WORKER_OFFLINE",
+            }[scenario]
+            return {"opened": False, "code": code, "reason": f"test mode {scenario}"}
         normalized = self.normalize_url(url)
         if not normalized.get("valid"):
             return {"opened": False, "code": "X_PAGE_LOAD_FAILED", **normalized}
@@ -92,16 +100,25 @@ class XAdapter(PlatformAdapter):
             return {"opened": False, "code": "X_PAGE_LOAD_FAILED", "reason": str(exc), **normalized}
 
     def detect_login_required(self, page: Any) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario == "login_required":
+            return {"detected": True, "test_mode": True}
         if self.mock_mode:
             return {"detected": False, "mock": True}
         return self._detect_state(page, "login_required_indicator")
 
     def detect_rate_limit(self, page: Any) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario == "rate_limited":
+            return {"detected": True, "test_mode": True}
         if self.mock_mode:
             return {"detected": False, "mock": True}
         return self._detect_state(page, "rate_limit_indicator")
 
     def detect_error_state(self, page: Any) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario == "error_state":
+            return {"detected": True, "test_mode": True}
         if self.mock_mode:
             return {"detected": False, "mock": True}
         return self._detect_state(page, "error_indicator")
@@ -116,6 +133,11 @@ class XAdapter(PlatformAdapter):
         }
 
     def find_reply_box(self, page: Any) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario == "reply_box_not_found":
+            return {"found": False, "code": "X_REPLY_BOX_NOT_FOUND", "reason": "test mode reply box not found"}
+        if scenario == "editor_not_ready":
+            return {"found": False, "code": "X_EDITOR_NOT_READY", "reason": "test mode editor not ready"}
         if self.mock_mode:
             return {"found": True, "status": "REPLY_BOX_FOUND", "mock": True}
         login = self.detect_login_required(page)
@@ -128,32 +150,42 @@ class XAdapter(PlatformAdapter):
         if error.get("detected"):
             return {"found": False, "code": "X_UNKNOWN_ERROR", "reason": "X error indicator detected"}
 
-        reply_selector, reply_button = self._selector_locator(page, "reply_button", "PREPARE_REPLY")
-        if reply_button:
+        reply_selectors = self.selectors("reply_button", "PREPARE_REPLY")
+        reply_selector = None
+        last_error = None
+        for candidate in reply_selectors:
+            reply_button = self._locator(page, candidate).first
             try:
                 reply_button.wait_for(state="visible", timeout=5000)
                 reply_button.click(timeout=3000)
+                reply_selector = candidate
+                break
             except Exception as exc:
-                return {"found": False, "code": "X_REPLY_BOX_NOT_FOUND", "reason": str(exc)}
+                last_error = str(exc)
+        if reply_selectors and not reply_selector:
+            return {"found": False, "code": "X_REPLY_BOX_NOT_FOUND", "reason": last_error}
 
-        editor_selector = (
-            self.selector("reply_textarea_or_editor", action_type="PREPARE_REPLY")
-            or self.selector("reply_box", action_type="PREPARE_REPLY")
+        editor_selectors = self.selectors("reply_textarea_or_editor", action_type="PREPARE_REPLY") or self.selectors(
+            "reply_box", action_type="PREPARE_REPLY"
         )
-        if not editor_selector:
+        if not editor_selectors:
             return {"found": False, "code": "X_REPLY_BOX_NOT_FOUND", "reason": "X reply editor selector missing"}
-        try:
-            locator = self._locator(page, editor_selector).first
-            locator.wait_for(state="visible", timeout=7000)
-            return {
-                "found": True,
-                "status": "REPLY_BOX_FOUND",
-                "locator": locator,
-                "selector_id": editor_selector.id,
-                "reply_button_selector_id": reply_selector.id if reply_selector else None,
-            }
-        except Exception as exc:
-            return {"found": False, "code": "X_EDITOR_NOT_READY", "reason": str(exc)}
+        last_error = None
+        for editor_selector in editor_selectors:
+            try:
+                locator = self._locator(page, editor_selector).first
+                locator.wait_for(state="visible", timeout=7000)
+                return {
+                    "found": True,
+                    "status": "REPLY_BOX_FOUND",
+                    "locator": locator,
+                    "selector_id": editor_selector.id,
+                    "selector_version": editor_selector.version,
+                    "reply_button_selector_id": reply_selector.id if reply_selector else None,
+                }
+            except Exception as exc:
+                last_error = str(exc)
+        return {"found": False, "code": "X_EDITOR_NOT_READY", "reason": last_error}
 
     def focus_reply_box(self, page: Any, reply_box: Any) -> dict[str, Any]:
         if self.mock_mode:
@@ -162,6 +194,9 @@ class XAdapter(PlatformAdapter):
         return {"focused": True}
 
     def fill_reply_box(self, page: Any, reply_box: Any, text: str) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario in {"editor_not_ready", "content_rejected"}:
+            return {"filled": False, "code": "X_EDITOR_NOT_READY" if scenario == "editor_not_ready" else "X_CONTENT_REJECTED"}
         if self.mock_mode:
             return {"filled": True, "text_length": len(text), "visible": True, "mock": True}
         try:
@@ -219,6 +254,8 @@ class XAdapter(PlatformAdapter):
         }
 
     def verify_reply_success(self, page: Any, reply_content: str | None = None) -> dict[str, Any]:
+        if self.test_scenario(page) == "failed":
+            return {"verified": False, "success": False, "reason": "test mode verification failed"}
         if self.mock_mode:
             return {"verified": True, "success": True, "mock": True}
         if reply_content:

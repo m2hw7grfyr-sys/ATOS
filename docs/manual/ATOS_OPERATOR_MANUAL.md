@@ -660,7 +660,156 @@ X 当前支持标准半自动回复链路。
 
 ---
 
-## 18. 推荐每日检查清单
+## 18. Reddit / X 提交确认与恢复
+
+Reddit 和 X 现在共用同一套提交确认流程。
+
+核心状态：
+
+- `WAITING_MANUAL`
+- `MANUAL_CONFIRMED`
+- `VERIFIED`
+- `MANUAL_REQUIRED`
+- `FAILED`
+- `CANCELLED`
+
+### 18.1 如何处理 WAITING_MANUAL
+
+含义：
+
+- ATOS 已打开帖子。
+- ATOS 已填入回复内容。
+- 等待你在平台页面人工点击提交。
+
+操作：
+
+1. 打开对应浏览器 Tab。
+2. 检查平台、账号、帖子 URL。
+3. 检查回复内容。
+4. 在 Reddit 或 X 页面人工点击提交。
+5. 回到 ATOS Submission 页面。
+6. 点击 `Confirm Submitted`。
+
+确认后系统会记录：
+
+- platform
+- account_id
+- post_id
+- reply_task_id
+- execution_task_id
+- submission_task_id
+- operator_id
+- confirmed_at
+- result_url
+- external_reply_id
+- verification_status
+
+### 18.2 如何 Mark Failed
+
+当你确认任务不能继续时使用。
+
+操作：
+
+1. 在 Submission 页面找到任务。
+2. 点击 `Mark Failed`。
+3. 输入失败原因。
+
+常用失败原因：
+
+- `LOGIN_REQUIRED`
+- `REPLY_BOX_NOT_FOUND`
+- `EDITOR_NOT_READY`
+- `RATE_LIMITED`
+- `PAGE_LOAD_FAILED`
+- `BROWSER_DISCONNECTED`
+- `WORKER_OFFLINE`
+- `CONTENT_REJECTED`
+- `UNKNOWN_ERROR`
+
+系统会同步更新：
+
+- submission task
+- execution task
+- reply task
+- scheduler task
+- audit log
+
+### 18.3 如何 Retry
+
+只有可重试任务才允许 Retry。
+
+允许自动重试：
+
+- `BROWSER_DISCONNECTED`
+- `WORKER_OFFLINE`
+
+禁止自动重试：
+
+- `LOGIN_REQUIRED`
+- `RATE_LIMITED`
+- `CONTENT_REJECTED`
+- `MANUAL_REQUIRED`
+
+默认：
+
+- Reply Task 最多 1 次重试。
+- Submission Task 最多 1 次重试。
+
+如果按钮不可用，查看 `retry_blocked_reason`。
+
+### 18.4 如何查看截图
+
+Submission Detail / contract 中包含标准截图路径：
+
+- before_open
+- after_open
+- before_reply_box
+- after_reply_box
+- before_fill
+- after_fill
+- waiting_manual
+- manual_confirmed
+- failure
+
+这些路径对应 Replay 文件。
+
+如果还没有真实截图，说明当前任务运行在 Mock/Test Mode。
+
+### 18.5 常见失败原因
+
+`LOGIN_REQUIRED`
+
+- 账号未登录。
+- 处理：进入 TGE Profile 重新登录。
+
+`RATE_LIMITED`
+
+- 平台限流。
+- 处理：暂停回复，进入冷却。
+
+`REPLY_BOX_NOT_FOUND`
+
+- selector 失效或页面结构变化。
+- 处理：检查 Platform Selector Registry。
+
+`EDITOR_NOT_READY`
+
+- 回复框打开但编辑器不可输入。
+- 处理：重试一次，仍失败则人工处理。
+
+`BROWSER_DISCONNECTED`
+
+- 浏览器连接中断。
+- 处理：允许重试。
+
+`WORKER_OFFLINE`
+
+- Worker 离线。
+- 处理：等待 Worker 恢复后重试。
+
+---
+
+## 19. 推荐每日检查清单
 
 - Dashboard 无大量红色异常。
 - Data Center 最近采集成功。
@@ -674,7 +823,7 @@ X 当前支持标准半自动回复链路。
 
 ---
 
-## 19. 版本边界
+## 20. 版本边界
 
 当前 ATOS 已具备：
 
@@ -689,6 +838,7 @@ X 当前支持标准半自动回复链路。
 - Intelligence Runtime。
 - Submission Runtime。
 - X Adapter v1 semi-auto flow。
+- Cross-platform Submission Hardening。
 
 当前 ATOS 尚未实现：
 

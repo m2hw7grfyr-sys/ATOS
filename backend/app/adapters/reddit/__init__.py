@@ -20,17 +20,23 @@ class RedditAdapter(PlatformAdapter):
         return page.locator(selector.selector_value)
 
     def find_reply_box(self, page: Any) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario == "reply_box_not_found":
+            return {"found": False, "code": "REPLY_BOX_NOT_FOUND", "reason": "test mode reply box not found"}
         if self.mock_mode:
             return {"found": True, "mock": True}
-        selector = self.selector("reply_box", action_type="PREPARE_REPLY")
-        if not selector:
+        selectors = self.selectors("reply_box", action_type="PREPARE_REPLY")
+        if not selectors:
             return {"found": False, "reason": "reply_box selector missing"}
-        locator = self._locator(page, selector).first
-        try:
-            locator.wait_for(state="visible", timeout=5000)
-        except Exception as exc:
-            return {"found": False, "reason": str(exc)}
-        return {"found": True, "locator": locator, "selector_id": selector.id}
+        last_error = None
+        for selector in selectors:
+            locator = self._locator(page, selector).first
+            try:
+                locator.wait_for(state="visible", timeout=5000)
+                return {"found": True, "locator": locator, "selector_id": selector.id, "selector_version": selector.version}
+            except Exception as exc:
+                last_error = str(exc)
+        return {"found": False, "code": "REPLY_BOX_NOT_FOUND", "reason": last_error or "reply box not found"}
 
     def focus_reply_box(self, page: Any, reply_box: Any) -> dict[str, Any]:
         if self.mock_mode:
@@ -39,6 +45,9 @@ class RedditAdapter(PlatformAdapter):
         return {"focused": True}
 
     def fill_reply_box(self, page: Any, reply_box: Any, text: str) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario in {"editor_not_ready", "content_rejected"}:
+            return {"filled": False, "code": "EDITOR_NOT_READY" if scenario == "editor_not_ready" else "CONTENT_REJECTED"}
         if self.mock_mode:
             return {"filled": True, "text_length": len(text), "mock": True}
         reply_box.evaluate(
@@ -52,6 +61,9 @@ class RedditAdapter(PlatformAdapter):
         return {"filled": True, "text_length": len(text)}
 
     def fill_reply(self, page: Any, text: str) -> dict[str, Any]:
+        scenario = self.test_scenario(page)
+        if scenario in {"editor_not_ready", "content_rejected"}:
+            return {"filled": False, "code": "EDITOR_NOT_READY" if scenario == "editor_not_ready" else "CONTENT_REJECTED"}
         reply_box = self.find_reply_box(page)
         if not reply_box.get("found"):
             return {"filled": False, "reason": reply_box.get("reason", "reply box not found")}
@@ -59,18 +71,25 @@ class RedditAdapter(PlatformAdapter):
         return self.fill_reply_box(page, reply_box, text)
 
     def detect_submit_button(self, page: Any) -> dict[str, Any]:
+        if self.test_scenario(page) == "submission_failed":
+            return {"detected": False, "code": "SUBMISSION_FAILED", "reason": "test mode submission failed"}
         if self.mock_mode:
             return {"detected": True, "mock": True}
-        selector = self.selector("comment_button", action_type="SUBMIT_REPLY") or self.selector(
+        selectors = self.selectors("comment_button", action_type="SUBMIT_REPLY") or self.selectors(
             "comment_button", action_type="PREPARE_REPLY"
         )
-        if not selector:
+        if not selectors:
             return {"detected": False, "code": "SUBMIT_BUTTON_NOT_FOUND", "reason": "comment_button selector missing"}
-        try:
-            locator = self._locator(page, selector).first
-            return {"detected": locator.is_visible(timeout=1500), "selector_id": selector.id}
-        except Exception as exc:
-            return {"detected": False, "code": "SUBMIT_BUTTON_NOT_FOUND", "reason": str(exc)}
+        last_error = None
+        for selector in selectors:
+            try:
+                locator = self._locator(page, selector).first
+                visible = locator.is_visible(timeout=1500)
+                if visible:
+                    return {"detected": True, "selector_id": selector.id}
+            except Exception as exc:
+                last_error = str(exc)
+        return {"detected": False, "code": "SUBMIT_BUTTON_NOT_FOUND", "reason": last_error}
 
     def submit_reply(self, page: Any, *, allow_auto_submit: bool = False) -> dict[str, Any]:
         if not allow_auto_submit:
@@ -103,6 +122,8 @@ class RedditAdapter(PlatformAdapter):
         return {"submitted": True, "code": "SUBMITTED"}
 
     def verify_reply_success(self, page: Any, reply_content: str | None = None) -> dict[str, Any]:
+        if self.test_scenario(page) == "failed":
+            return {"verified": False, "success": False, "reason": "test mode verification failed"}
         if self.mock_mode:
             return {"verified": True, "success": True, "mock": True}
         if reply_content:

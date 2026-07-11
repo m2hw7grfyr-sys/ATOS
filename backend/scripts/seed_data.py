@@ -58,7 +58,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "sprint-11-x-adapter-v1"
+SEED_VERSION = "sprint-12-submission-hardening"
 
 
 def main() -> None:
@@ -706,6 +706,14 @@ def main() -> None:
                     "verify_timeout_seconds": 20,
                     "capture_screenshot_enabled": True,
                     "capture_html_enabled": True,
+                    "max_reply_retry": 1,
+                    "max_submission_retry": 1,
+                    "screenshot_required": True,
+                    "html_snapshot_on_failure": True,
+                    "manual_confirm_required": True,
+                    "verification_level_default": "MANUAL_CONFIRMED",
+                    "retry_on_browser_disconnect": True,
+                    "retry_on_worker_offline": True,
                 },
                 False,
             ),
@@ -721,6 +729,10 @@ def main() -> None:
                         is_secret=is_secret,
                     )
                 )
+            elif key == "execution.submission":
+                item.value = {**(item.value or {}), **value}
+                item.category = category
+                item.is_secret = is_secret
 
         for metric, dimension, value in [
             ("imported_posts", "SYSTEM", 20),
@@ -1342,7 +1354,7 @@ def main() -> None:
             .order_by(ExecutionTask.id.asc())
             .limit(6)
         ).all()
-        submission_statuses = ["WAITING_MANUAL", "VERIFIED", "FAILED", "READY", "WAITING_POLICY", "SUBMITTING"]
+        submission_statuses = ["WAITING_MANUAL", "VERIFIED", "FAILED", "PREPARED", "MANUAL_REQUIRED", "VERIFYING"]
         for index, execution in enumerate(seeded_executions, start=1):
             reply_task = db.get(ReplyTask, execution.reply_task_id) if execution.reply_task_id else None
             if not reply_task:
@@ -1358,6 +1370,7 @@ def main() -> None:
                     execution_task_id=execution.id,
                     platform=reply_task.platform or execution.platform,
                     account_id=reply_task.account_id or execution.account_id,
+                    post_id=reply_task.post_id,
                     worker_id=execution.worker_node_id or worker.id,
                     browser_session_id=tab.session_id if tab else None,
                     browser_tab_id=tab.id if tab else None,
@@ -1367,6 +1380,12 @@ def main() -> None:
                     verified_at=now - timedelta(minutes=2) if status == "VERIFIED" else None,
                     result_url="https://www.reddit.com/comments/mock/submission" if status == "VERIFIED" else None,
                     result_external_id="reddit-mock-comment" if status == "VERIFIED" else None,
+                    operator_id="seed-operator" if status == "VERIFIED" else None,
+                    confirmed_at=now - timedelta(minutes=3) if status == "VERIFIED" else None,
+                    verification_level="EXTERNAL_ID_VERIFIED" if status == "VERIFIED" else "NONE",
+                    verification_status="EXTERNAL_ID_VERIFIED" if status == "VERIFIED" else "NONE",
+                    error_code="VERIFICATION_FAILED" if status == "FAILED" else "LOGIN_REQUIRED" if status == "MANUAL_REQUIRED" else None,
+                    error_message="Seed failure" if status in {"FAILED", "MANUAL_REQUIRED"} else None,
                     failure_reason="VERIFICATION_FAILED" if status == "FAILED" else None,
                     retry_count=0,
                     max_retry=1,
@@ -1377,6 +1396,7 @@ def main() -> None:
                 db.flush()
             else:
                 existing_submission.status = status
+                existing_submission.post_id = reply_task.post_id
                 existing_submission.execution_task_id = execution.id
                 existing_submission.browser_session_id = existing_submission.browser_session_id or (tab.session_id if tab else None)
                 existing_submission.browser_tab_id = existing_submission.browser_tab_id or (tab.id if tab else None)
@@ -1424,6 +1444,7 @@ def main() -> None:
                     execution_task_id=execution.id,
                     platform="x",
                     account_id=execution.account_id,
+                    post_id=reply_task.post_id,
                     worker_id=execution.worker_node_id or worker.id,
                     browser_session_id=tab.session_id if tab else None,
                     browser_tab_id=tab.id if tab else None,
@@ -1433,6 +1454,10 @@ def main() -> None:
                     verified_at=now - timedelta(minutes=1) if status == "VERIFIED" else None,
                     result_url="https://x.com/mock/status/1" if status == "VERIFIED" else None,
                     result_external_id="x-mock-reply" if status == "VERIFIED" else None,
+                    operator_id="seed-operator" if status == "VERIFIED" else None,
+                    confirmed_at=now - timedelta(minutes=2) if status == "VERIFIED" else None,
+                    verification_level="EXTERNAL_ID_VERIFIED" if status == "VERIFIED" else "NONE",
+                    verification_status="EXTERNAL_ID_VERIFIED" if status == "VERIFIED" else "NONE",
                     manual_confirmed=status == "VERIFIED",
                     metadata_json={"seed": True, "x_seed": True, "demo_key": f"x-submission-task-{index}"},
                 )
@@ -1440,6 +1465,7 @@ def main() -> None:
                 db.flush()
             else:
                 submission.platform = "x"
+                submission.post_id = reply_task.post_id
                 submission.execution_task_id = execution.id
                 submission.status = status
                 submission.manual_confirmed = status == "VERIFIED"

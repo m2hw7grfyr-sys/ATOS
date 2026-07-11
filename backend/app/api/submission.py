@@ -12,6 +12,8 @@ from app.services.submission_runtime import SubmissionRuntime
 
 
 router = APIRouter(prefix="/submission", tags=["submission"])
+task_router = APIRouter(prefix="/submission-tasks", tags=["submission"])
+stats_router = APIRouter(tags=["submission"])
 
 
 def serialize_submission_task(task: SubmissionTask, db: Session) -> dict:
@@ -30,6 +32,9 @@ def serialize_submission_task(task: SubmissionTask, db: Session) -> dict:
     item["worker"] = worker.name if worker else None
     item["browser_session_status"] = session.status if session else None
     item["browser_tab_url"] = tab.url if tab else None
+    item["contract"] = SubmissionRuntime(db).contract(task)
+    item["retryable"] = SubmissionRuntime(db).recovery.decision(task, task.error_code or task.failure_reason)["retryable"]
+    item["retry_blocked_reason"] = item.get("retry_blocked_reason") or SubmissionRuntime(db).recovery.decision(task, task.error_code or task.failure_reason)["reason"]
     return item
 
 
@@ -92,9 +97,10 @@ def cancel_submission_task(task_id: int, request: Request, db: Session = Depends
     task = db.get(SubmissionTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="submission task not found")
+    runtime = SubmissionRuntime(db, trace_id=request.state.trace_id)
     old = task.status
-    task.status = "CANCELLED"
-    SubmissionRuntime(db, trace_id=request.state.trace_id).log(
+    runtime.set_status(task, "CANCELLED", reason="Submission task cancelled by operator.")
+    runtime.log(
         task,
         "CANCELLED",
         "Submission task cancelled by operator.",
@@ -103,6 +109,31 @@ def cancel_submission_task(task_id: int, request: Request, db: Session = Depends
     db.commit()
     db.refresh(task)
     return ok(serialize_submission_task(task, db), request.state.trace_id, "submission task cancelled")
+
+
+@router.post("/tasks/{task_id}/mark-failed")
+def mark_failed_submission_task(task_id: int, payload: dict, request: Request, db: Session = Depends(get_db)):
+    reason = str(payload.get("failure_reason") or "").strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="failure_reason is required")
+    try:
+        task = SubmissionRuntime(db, trace_id=request.state.trace_id).mark_failed(task_id, reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_submission_task(task, db), request.state.trace_id, "submission task marked failed")
+
+
+@router.post("/tasks/{task_id}/retry")
+def retry_submission_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    try:
+        task = SubmissionRuntime(db, trace_id=request.state.trace_id).retry(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_submission_task(task, db), request.state.trace_id, "submission retry evaluated")
 
 
 @router.get("/tasks/{task_id}/logs")
@@ -137,3 +168,43 @@ def prepare_submission_for_reply(reply_task_id: int, request: Request, db: Sessi
     db.commit()
     db.refresh(task)
     return ok(serialize_submission_task(task, db), request.state.trace_id, "submission prepared")
+
+
+@task_router.get("")
+def alias_list_submission_tasks(request: Request, db: Session = Depends(get_db)):
+    return list_submission_tasks(request, db)
+
+
+@task_router.get("/{task_id}")
+def alias_get_submission_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    return get_submission_task(task_id, request, db)
+
+
+@task_router.post("/{task_id}/confirm")
+def alias_confirm_submission_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    return record_manual_result(task_id, request, db)
+
+
+@task_router.post("/{task_id}/mark-failed")
+def alias_mark_failed_submission_task(task_id: int, payload: dict, request: Request, db: Session = Depends(get_db)):
+    return mark_failed_submission_task(task_id, payload, request, db)
+
+
+@task_router.post("/{task_id}/retry")
+def alias_retry_submission_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    return retry_submission_task(task_id, request, db)
+
+
+@task_router.post("/{task_id}/cancel")
+def alias_cancel_submission_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+    return cancel_submission_task(task_id, request, db)
+
+
+@stats_router.get("/submission-stats")
+def submission_stats(request: Request, db: Session = Depends(get_db)):
+    return ok(SubmissionRuntime(db).submission_statistics(), request.state.trace_id)
+
+
+@stats_router.get("/submission-failures")
+def submission_failures(request: Request, db: Session = Depends(get_db)):
+    return ok(SubmissionRuntime(db).failures(), request.state.trace_id)
