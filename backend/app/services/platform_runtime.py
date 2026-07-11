@@ -17,7 +17,11 @@ from app.models import ExecutionTask, PlatformRegistry, StatisticSnapshot, utc_n
 CAPABILITY_BY_ACTION = {
     "PREPARE_REPLY": "REPLY",
     "REPLY": "REPLY",
+    "REPLY_FILL": "REPLY_FILL",
+    "MANUAL_CONFIRM": "MANUAL_CONFIRM",
+    "SUBMIT_REPLY": "SUBMISSION_SCAFFOLD",
     "OPEN_PAGE": "BROWSE",
+    "OPEN_POST": "OPEN_POST",
     "BROWSE_POST": "BROWSE",
     "MIXED_ENGAGEMENT": "BROWSE",
     "LIKE_POST": "LIKE",

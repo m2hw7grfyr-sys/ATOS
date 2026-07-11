@@ -58,7 +58,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "sprint-10-submission-runtime"
+SEED_VERSION = "sprint-11-x-adapter-v1"
 
 
 def main() -> None:
@@ -75,7 +75,7 @@ def main() -> None:
         platforms = {}
         for name, slug, status in [
             ("Reddit", "reddit", "ACTIVE"),
-            ("X", "x", "PLANNED"),
+            ("X", "x", "ACTIVE"),
             ("Facebook", "facebook", "PLANNED"),
             ("Instagram", "instagram", "PLANNED"),
             ("TikTok", "tiktok", "PLANNED"),
@@ -94,7 +94,13 @@ def main() -> None:
 
         platform_registry_specs = [
             ("reddit", "RedditAdapter", "v1", ["REPLY", "BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
-            ("x", "XAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
+            (
+                "x",
+                "XAdapter",
+                "v1",
+                ["BROWSE", "OPEN_POST", "REPLY", "REPLY_FILL", "MANUAL_CONFIRM", "SUBMISSION_SCAFFOLD", "LIKE", "PROFILE_VISIT"],
+                "HEALTHY",
+            ),
             ("facebook", "FacebookAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
             ("instagram", "InstagramAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
             ("tiktok", "TikTokAdapter", "v1-scaffold", ["BROWSE", "LIKE", "PROFILE_VISIT"], "HEALTHY"),
@@ -185,6 +191,36 @@ def main() -> None:
                 )
             )
 
+        x_mapping = db.scalar(
+            select(ActorMapping).where(
+                ActorMapping.actor_id == "demo/social-search",
+                ActorMapping.platform == "x",
+            )
+        )
+        if not x_mapping:
+            db.add(
+                ActorMapping(
+                    data_source_id=sources[1].id,
+                    actor_id="demo/social-search",
+                    platform="x",
+                    mapping_name="Default X Mapping",
+                    title_path="text",
+                    content_path="text",
+                    url_path="url",
+                    author_path="author_handle",
+                    author_id_path="author_id",
+                    community_path="community",
+                    source_post_id_path="tweet_id",
+                    published_at_path="created_at",
+                    score_path="engagement_count",
+                    comment_count_path="reply_count",
+                    media_path="media",
+                    language_path="language",
+                    enabled=True,
+                    remark="Default X actor mapping seed.",
+                )
+            )
+
         now = datetime.now(timezone.utc)
         post_specs = [
             ("reddit", 0, "ADHD", "focus_builder", "How do you keep a routine when every day feels different?", "I have tried several planners but stop using them after a week.", ["routine", "question"], "WAITING_REVIEW"),
@@ -214,15 +250,49 @@ def main() -> None:
                     status,
                 )
             )
+        for index in range(21, 28):
+            post_specs.append(
+                (
+                    "x",
+                    1,
+                    "builders",
+                    f"x_builder_{index}",
+                    f"X demo post {index}: practical operator workflow",
+                    "Seed X content for validating semi-auto reply fill and manual confirmation.",
+                    ["x_adapter", "semi_auto"],
+                    "WAITING_REVIEW" if index % 2 else "SCHEDULED",
+                )
+            )
         posts = []
         for index, spec in enumerate(post_specs, start=1):
             platform_slug, source_index, community, author, title, content, tags, status = spec
-            source_post_id = f"seed-{index:03d}"
+            source_post_id = f"110000000000000{index:03d}" if platform_slug == "x" else f"seed-{index:03d}"
             item = db.scalar(
                 select(Post).where(Post.source_post_id == source_post_id)
             )
+            url = (
+                f"https://x.com/{author}/status/{source_post_id}"
+                if platform_slug == "x"
+                else f"https://example.com/{platform_slug}/{source_post_id}"
+            )
+            raw_json = {
+                "seed": True,
+                "source_post_id": source_post_id,
+                "platform": platform_slug,
+            }
+            if platform_slug == "x":
+                raw_json.update(
+                    {
+                        "external_post_id": source_post_id,
+                        "author_handle": author,
+                        "post_url": url,
+                        "engagement_count": 10 + index,
+                        "reply_count": index % 5,
+                        "like_count": 5 + index,
+                        "repost_count": index % 3,
+                    }
+                )
             if not item:
-                url = f"https://example.com/{platform_slug}/{source_post_id}"
                 item = Post(
                     platform_id=platforms[platform_slug].id,
                     data_source_id=sources[source_index].id,
@@ -234,7 +304,7 @@ def main() -> None:
                     content=content,
                     url=url,
                     tags=tags,
-                    raw_json={"seed": True, "source_post_id": source_post_id},
+                    raw_json=raw_json,
                     published_at=now - timedelta(hours=index * 2),
                     status=status,
                     pipeline_stage=status,
@@ -244,6 +314,9 @@ def main() -> None:
             else:
                 item.status = status
                 item.pipeline_stage = status
+                item.url = url
+                item.url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
+                item.raw_json = raw_json
             posts.append(item)
 
         ai_tasks = []
@@ -535,6 +608,13 @@ def main() -> None:
             ("reddit", "PREPARE_REPLY", "comment_disabled", 'text="comments are locked"', "text", "v1", "Detect disabled comments"),
             ("reddit", "LIKE_POST", "like_button", 'button[aria-label*="upvote" i]', "css", "v1", "Reddit upvote selector scaffold"),
             ("reddit", "VISIT_PROFILE", "profile_link", 'a[href*="/user/"]', "css", "v1", "Reddit author profile link scaffold"),
+            ("x", "PREPARE_REPLY", "reply_button", '[data-testid="reply"]', "css", "v1", "X reply button"),
+            ("x", "PREPARE_REPLY", "reply_box", '[data-testid="tweetTextarea_0"]', "css", "v1", "X reply editor fallback"),
+            ("x", "PREPARE_REPLY", "reply_textarea_or_editor", '[data-testid="tweetTextarea_0"] div[contenteditable="true"], div[role="textbox"][contenteditable="true"]', "css", "v1", "X rich text editor"),
+            ("x", "SUBMIT_REPLY", "submit_button_scaffold", '[data-testid="tweetButton"]', "css", "v1", "X submit button scaffold only; auto submit disabled by default"),
+            ("x", "PREPARE_REPLY", "login_required_indicator", 'text="Log in"', "text", "v1", "X login required indicator"),
+            ("x", "PREPARE_REPLY", "rate_limit_indicator", 'text="Rate limit exceeded"', "text", "v1", "X rate limit indicator"),
+            ("x", "PREPARE_REPLY", "error_indicator", '[data-testid="error-detail"]', "css", "v1", "X generic error indicator"),
         ]
         for platform, action_type, key, value, selector_type, version, remark in selector_specs:
             selector = db.scalar(
@@ -805,6 +885,105 @@ def main() -> None:
                     reply_task.execution_task_id = execution.id
             db.add(ReplayFile(execution_task_id=execution.id))
             db.add(ReplayIndex(execution_task_id=execution.id, status="INDEXED", artifact_count=0, manifest_json={"seed": True}))
+
+        x_account = db.scalar(select(Account).where(Account.username == "atos_x_demo"))
+        x_posts = [
+            post
+            for post in posts
+            if post.platform_id == platforms["x"].id
+        ][:3]
+        x_statuses = ["WAITING_MANUAL", "WAITING_MANUAL", "CONFIRMED"]
+        for index, post in enumerate(x_posts, start=1):
+            ai_reply = next((item for item in ai_tasks if item[0].post_id == post.id), None)
+            if not x_account or not ai_reply:
+                continue
+            ai_task, reply = ai_reply
+            reply.status = "APPROVED"
+            reply_task = db.scalar(select(ReplyTask).where(ReplyTask.reply_id == reply.id))
+            if not reply_task:
+                reply_task = ReplyTask(
+                    post_id=post.id,
+                    reply_id=reply.id,
+                    platform="x",
+                    account_id=x_account.id,
+                    reply_content=reply.content,
+                    execution_mode="SEMI_AUTO",
+                    status=x_statuses[index - 1],
+                )
+                db.add(reply_task)
+                db.flush()
+            else:
+                reply_task.platform = "x"
+                reply_task.account_id = x_account.id
+                reply_task.reply_content = reply.content
+                reply_task.execution_mode = "SEMI_AUTO"
+                reply_task.status = x_statuses[index - 1]
+            scheduler_task = db.scalar(
+                select(SchedulerTask).where(
+                    SchedulerTask.reply_task_id == reply_task.id,
+                    SchedulerTask.source == "X_ADAPTER_SEED",
+                )
+            )
+            if not scheduler_task:
+                scheduler_task = SchedulerTask(
+                    task_type="REPLY_TASK",
+                    platform_id=platforms["x"].id,
+                    account_id=x_account.id,
+                    post_id=post.id,
+                    ai_task_id=ai_task.id,
+                    reply_id=reply.id,
+                    reply_task_id=reply_task.id,
+                    source="X_ADAPTER_SEED",
+                    priority="HIGH",
+                    scheduled_at=now + timedelta(minutes=90 + index * 10),
+                    payload={
+                        "task_type": "PREPARE_REPLY",
+                        "action_type": "PREPARE_REPLY",
+                        "platform": "x",
+                        "url": post.url,
+                        "post_url": post.url,
+                        "reply_content": reply.content,
+                        "execution_mode": "SEMI_AUTO",
+                        "capability_required": "REPLY",
+                        "metadata": {"reply_id": reply.id, "reply_task_id": reply_task.id, "x_seed": True},
+                    },
+                    status="DISPATCHED" if index <= 2 else "EXECUTED",
+                )
+                db.add(scheduler_task)
+                db.flush()
+            reply_task.scheduler_task_id = scheduler_task.id
+            profile = db.scalar(
+                select(TGEProfile).where(
+                    (TGEProfile.bound_account_id == x_account.id)
+                    | (TGEProfile.account_id == x_account.id)
+                )
+            )
+            execution = db.scalar(select(ExecutionTask).where(ExecutionTask.scheduler_task_id == scheduler_task.id))
+            if not execution:
+                execution = ExecutionTask(
+                    scheduler_task_id=scheduler_task.id,
+                    reply_task_id=reply_task.id,
+                    account_id=x_account.id,
+                    tge_profile_id=profile.id if profile else None,
+                    platform="x",
+                    action_type="PREPARE_REPLY",
+                    strategy=ai_task.strategy,
+                    payload_json={
+                        **(scheduler_task.payload or {}),
+                        "browser_type": "mock",
+                        "fill_status": "REPLY_FILLED" if index <= 2 else "CONFIRMED",
+                        "x_seed": True,
+                    },
+                    status="WAITING_MANUAL" if index <= 2 else "SUCCESS",
+                    queue_status="WAITING_MANUAL" if index <= 2 else "SUCCESS",
+                    precheck_status="SUCCESS",
+                    environment_status="MOCK",
+                )
+                db.add(execution)
+                db.flush()
+                db.add(ReplayFile(execution_task_id=execution.id, after_fill_screenshot_path=f"storage/replay/{execution.uuid}/after_fill.png"))
+                db.add(ReplayIndex(execution_task_id=execution.id, status="INDEXED", artifact_count=1, manifest_json={"seed": True, "platform": "x"}))
+            reply_task.execution_task_id = execution.id
 
         worker = db.scalar(select(WorkerNode).where(WorkerNode.name == "local-worker"))
         if not worker:
@@ -1227,6 +1406,69 @@ def main() -> None:
                 "browser_session_id": existing_submission.browser_session_id,
             }
 
+        x_seed_executions = db.scalars(
+            select(ExecutionTask)
+            .where(ExecutionTask.payload_json["x_seed"].as_boolean().is_(True))
+            .order_by(ExecutionTask.id.asc())
+        ).all()
+        for index, execution in enumerate(x_seed_executions, start=1):
+            reply_task = db.get(ReplyTask, execution.reply_task_id) if execution.reply_task_id else None
+            if not reply_task:
+                continue
+            tab = seeded_tabs[(index - 1) % len(seeded_tabs)] if seeded_tabs else None
+            status = "WAITING_MANUAL" if index <= 2 else "VERIFIED"
+            submission = db.scalar(select(SubmissionTask).where(SubmissionTask.reply_task_id == reply_task.id))
+            if not submission:
+                submission = SubmissionTask(
+                    reply_task_id=reply_task.id,
+                    execution_task_id=execution.id,
+                    platform="x",
+                    account_id=execution.account_id,
+                    worker_id=execution.worker_node_id or worker.id,
+                    browser_session_id=tab.session_id if tab else None,
+                    browser_tab_id=tab.id if tab else None,
+                    execution_mode="SEMI_AUTO",
+                    status=status,
+                    submitted_at=now - timedelta(minutes=3) if status == "VERIFIED" else None,
+                    verified_at=now - timedelta(minutes=1) if status == "VERIFIED" else None,
+                    result_url="https://x.com/mock/status/1" if status == "VERIFIED" else None,
+                    result_external_id="x-mock-reply" if status == "VERIFIED" else None,
+                    manual_confirmed=status == "VERIFIED",
+                    metadata_json={"seed": True, "x_seed": True, "demo_key": f"x-submission-task-{index}"},
+                )
+                db.add(submission)
+                db.flush()
+            else:
+                submission.platform = "x"
+                submission.execution_task_id = execution.id
+                submission.status = status
+                submission.manual_confirmed = status == "VERIFIED"
+                submission.metadata_json = {"seed": True, "x_seed": True, "demo_key": f"x-submission-task-{index}"}
+            log = db.scalar(
+                select(SubmissionLog).where(
+                    SubmissionLog.submission_task_id == submission.id,
+                    SubmissionLog.step == "X_SEED_TIMELINE",
+                )
+            )
+            if not log:
+                db.add(
+                    SubmissionLog(
+                        submission_task_id=submission.id,
+                        step="X_SEED_TIMELINE",
+                        level="INFO",
+                        message=f"X seed submission status: {status}",
+                        metadata_json={"seed": True, "platform": "x", "status": status},
+                        screenshot_path=f"storage/replay/{execution.uuid}/after_fill.png",
+                    )
+                )
+            execution.payload_json = {
+                **(execution.payload_json or {}),
+                "submission_task_id": submission.id,
+                "submission_status": status,
+                "browser_tab_id": submission.browser_tab_id,
+                "browser_session_id": submission.browser_session_id,
+            }
+
         platform_weight_specs = {
             "reddit": (50, "Primary discovery platform"),
             "facebook": (30, "Secondary community platform"),
@@ -1644,12 +1886,12 @@ Community: {{community}}
         db.commit()
         print(
             "ATOS acceptance seed ready: 5 platforms, 2 data sources, "
-            "20 posts, 20 AI tasks, 8 scheduler tasks, 4 accounts, "
+            "27 posts including 10 X posts, 27 AI tasks, 8+ scheduler tasks, 4 accounts, "
             "4 TGE profiles, pipeline statistics, 3 LLM providers, 2 prompt templates, "
             "2 prompt versions, 4 provider routes, 5 platform weights, 2 engagement strategies, "
             "35 execution runtime demo tasks, 3 automation workers, 1 task lock, runtime metrics, "
             "1 automation alert, 4 browser sessions, 15 browser tabs, 5 engagement tasks, "
-            "8 reply tasks, 6 submission tasks, 1 actor mapping, intelligence performance data, "
+            "8+ reply tasks, 6+ submission tasks, 2 actor mappings, X Adapter seed data, intelligence performance data, "
             "recommendations, similarity detection, and 1 experiment."
         )
     finally:

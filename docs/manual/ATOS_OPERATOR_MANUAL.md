@@ -546,7 +546,121 @@ cd /Users/zhangkaikai/Documents/INDEX/ATOS
 
 ---
 
-## 17. 推荐每日检查清单
+## 17. X 平台操作
+
+X 当前支持标准半自动回复链路。
+
+默认模式：
+
+- `SEMI_AUTO`
+
+系统会：
+
+1. 打开 X 帖子。
+2. 定位 Reply 按钮。
+3. 打开回复编辑器。
+4. 填入 AI 回复内容。
+5. 进入 `WAITING_MANUAL`。
+
+系统不会：
+
+- 自动点击 Reply / Post 提交按钮。
+- 自动提交评论。
+- 自动关注。
+- 自动私信。
+
+### 17.1 支持的 X 链接
+
+支持：
+
+- `https://x.com/{username}/status/{tweet_id}`
+- `https://twitter.com/{username}/status/{tweet_id}`
+
+系统内部统一为：
+
+- `https://x.com/{username}/status/{tweet_id}`
+
+### 17.2 如何处理 X 帖子
+
+1. 在 Post Pool 找到平台为 `x` 的帖子。
+2. 进入 AI Workspace 生成回复。
+3. 审核并 Approve Reply。
+4. 加入 Scheduler。
+5. 由 Execution 执行 `PREPARE_REPLY`。
+6. 等待状态变为 `WAITING_MANUAL`。
+
+### 17.3 如何审核 X 回复
+
+重点检查：
+
+- 是否像真实用户。
+- 是否过度营销。
+- 是否提到敏感内容。
+- 是否适合 X 的短文本语境。
+- 是否需要删掉链接或 CTA。
+
+建议：
+
+- X 回复尽量短。
+- 第一目标是自然互动。
+- 不要每条都引流。
+
+### 17.4 如何执行 X 半自动任务
+
+在 Execution 页面：
+
+1. 找到平台为 `x` 的任务。
+2. 点击 `Prepare Reply`。
+3. 系统打开页面并填入回复。
+4. 浏览器中检查内容。
+5. 人工在 X 页面点击提交。
+6. 回到 ATOS 点击 `Mark Submitted`。
+
+在 Submission 页面：
+
+1. 找到对应 Submission Task。
+2. 状态应从 `WAITING_MANUAL` 进入 `VERIFIED`。
+3. 查看 Result URL / Timeline。
+
+### 17.5 常见失败原因
+
+`X_LOGIN_REQUIRED`
+
+- X 页面要求登录。
+- 处理：检查 TGE Profile 是否仍登录。
+
+`X_RATE_LIMITED`
+
+- X 限流。
+- 处理：暂停该账号回复，只保留浏览或冷却。
+
+`X_REPLY_BOX_NOT_FOUND`
+
+- 找不到 Reply 按钮或回复框。
+- 处理：检查 selector 是否失效。
+
+`X_EDITOR_NOT_READY`
+
+- 回复编辑器未加载或无法输入。
+- 处理：重试一次；仍失败则人工处理。
+
+`X_PAGE_LOAD_FAILED`
+
+- 页面打开失败。
+- 处理：检查网络、代理、帖子是否存在。
+
+### 17.6 X 操作红线
+
+不要：
+
+- 开启自动提交。
+- 批量连续回复。
+- 登录状态异常时继续执行。
+- 限流后继续派发 Reply。
+
+---
+
+## 18. 推荐每日检查清单
 
 - Dashboard 无大量红色异常。
 - Data Center 最近采集成功。
@@ -560,7 +674,7 @@ cd /Users/zhangkaikai/Documents/INDEX/ATOS
 
 ---
 
-## 18. 版本边界
+## 19. 版本边界
 
 当前 ATOS 已具备：
 
@@ -573,6 +687,8 @@ cd /Users/zhangkaikai/Documents/INDEX/ATOS
 - Semi-auto reply preparation。
 - Automation Runtime。
 - Intelligence Runtime。
+- Submission Runtime。
+- X Adapter v1 semi-auto flow。
 
 当前 ATOS 尚未实现：
 

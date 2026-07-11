@@ -241,6 +241,19 @@ class SubmissionRuntime:
                 "result_url": task.result_url,
                 "result_external_id": task.result_external_id,
             }
+            execution_log(
+                self.db,
+                execution,
+                "MANUAL_CONFIRMED",
+                new_status="SUCCESS",
+                message="Manual Confirmed",
+                metadata={
+                    "submission_task_id": task.id,
+                    "platform": task.platform,
+                    "result_url": task.result_url,
+                    "result_external_id": task.result_external_id,
+                },
+            )
             set_execution_status(
                 self.db,
                 execution,

@@ -560,5 +560,7 @@ docs/sprints/Sprint-01.md
 docs/sprints/Sprint-02.md
 docs/sprints/Sprint-03.md
 docs/sprints/Sprint-10.md
+docs/sprints/Sprint-11.md
 docs/SUBMISSION_RUNTIME.md
+docs/platforms/X_ADAPTER.md
 ```

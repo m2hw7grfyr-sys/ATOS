@@ -249,21 +249,90 @@ class ReplyPipelineService:
             execution_task_id=execution.id,
         )
         adapter = runtime.adapter_for(platform_key)
-        adapter.open_post(None, url)
+        before_open_screenshot = f"storage/replay/{execution.uuid}/before_open.png"
+        after_open_screenshot = f"storage/replay/{execution.uuid}/after_open.png"
+        before_fill_screenshot = f"storage/replay/{execution.uuid}/before_fill.png"
+        after_fill_screenshot = f"storage/replay/{execution.uuid}/after_fill.png"
+        execution_log(
+            self.db,
+            execution,
+            "OPEN_POST_STARTED",
+            message="Open Post Started",
+            metadata={"platform": platform_key, "url": url, "screenshot_path": before_open_screenshot},
+        )
+        opened = adapter.open_post(None, url)
+        execution_log(
+            self.db,
+            execution,
+            "OPEN_POST_COMPLETED" if opened.get("opened") else "OPEN_POST_FAILED",
+            message="Open Post Completed" if opened.get("opened") else str(opened.get("reason") or opened.get("code")),
+            metadata={**opened, "screenshot_path": after_open_screenshot},
+        )
+        if not opened.get("opened"):
+            reply_task.status = "FAILED"
+            set_execution_status(
+                self.db,
+                execution,
+                "FAILED",
+                "OPEN_POST_FAILED",
+                error_code=str(opened.get("code") or "PAGE_LOAD_FAILED"),
+                error_message=str(opened.get("reason") or "Page load failed"),
+            )
+            return reply_task
         login = adapter.detect_login_required(None)
         limited = adapter.detect_rate_limit(None)
         if login.get("detected") or limited.get("detected"):
             reason = "Login required" if login.get("detected") else "Rate limited"
+            code = f"{platform_key.upper()}_LOGIN_REQUIRED" if login.get("detected") else f"{platform_key.upper()}_RATE_LIMITED"
             reply_task.status = "FAILED"
-            set_execution_status(self.db, execution, "FAILED", "PREPARE_REPLY_BLOCKED", error_code="PLATFORM_BLOCKED", error_message=reason)
+            set_execution_status(self.db, execution, "MANUAL_REQUIRED", "PREPARE_REPLY_BLOCKED", error_code=code, error_message=reason)
             return reply_task
+        execution_log(
+            self.db,
+            execution,
+            "REPLY_BOX_DETECTION_STARTED",
+            message="Reply Box Detection Started",
+            metadata={"platform": platform_key, "screenshot_path": before_fill_screenshot},
+        )
         reply_box = adapter.find_reply_box(None)
         if not reply_box.get("found"):
             reply_task.status = "FAILED"
-            set_execution_status(self.db, execution, "FAILED", "COMMENT_BOX_NOT_FOUND", error_code="COMMENT_BOX_NOT_FOUND", error_message=str(reply_box.get("reason")))
+            set_execution_status(
+                self.db,
+                execution,
+                "FAILED",
+                "REPLY_BOX_NOT_FOUND",
+                error_code=str(reply_box.get("code") or "REPLY_BOX_NOT_FOUND"),
+                error_message=str(reply_box.get("reason")),
+            )
             return reply_task
+        execution_log(
+            self.db,
+            execution,
+            "REPLY_BOX_FOUND",
+            message="Reply Box Found",
+            metadata={"platform": platform_key, "selector_id": reply_box.get("selector_id")},
+        )
         adapter.focus_reply_box(None, reply_box)
-        filled = adapter.fill_reply(None, reply_task.reply_content)
+        execution_log(
+            self.db,
+            execution,
+            "FILL_REPLY_STARTED",
+            message="Fill Reply Started",
+            metadata={"platform": platform_key, "content_length": len(reply_task.reply_content)},
+        )
+        filled = adapter.fill_reply_box(None, reply_box, reply_task.reply_content)
+        if not filled.get("filled"):
+            reply_task.status = "FAILED"
+            set_execution_status(
+                self.db,
+                execution,
+                "FAILED",
+                "FILL_REPLY_FAILED",
+                error_code=str(filled.get("code") or f"{platform_key.upper()}_EDITOR_NOT_READY"),
+                error_message=str(filled.get("reason") or "Reply editor did not accept content"),
+            )
+            return reply_task
         now = utc_now()
         execution.payload_json = {
             **payload,
@@ -275,8 +344,11 @@ class ReplyPipelineService:
             "fill_status": "REPLY_FILLED" if filled.get("filled") else "FILL_FAILED",
             "reply_content": reply_task.reply_content,
             "reply_content_preview": reply_task.reply_content[:240],
-            "before_fill_screenshot": f"storage/replay/{execution.uuid}/before_fill.png",
-            "after_fill_screenshot": f"storage/replay/{execution.uuid}/after_fill.png",
+            "before_open_screenshot": before_open_screenshot,
+            "after_open_screenshot": after_open_screenshot,
+            "before_fill_screenshot": before_fill_screenshot,
+            "after_fill_screenshot": after_fill_screenshot,
+            "manual_waiting_screenshot": f"storage/replay/{execution.uuid}/manual_waiting.png",
             "execution_timeline": ["OPEN_POST", "FIND_REPLY_BOX", "FILL_REPLY", "WAITING_MANUAL"],
             "waiting_manual_message": "Reply prepared. Waiting for manual confirmation.",
         }
@@ -292,7 +364,22 @@ class ReplyPipelineService:
         reply_task.scheduler_task_id = execution.scheduler_task_id or reply_task.scheduler_task_id
         reply_task.status = "WAITING_MANUAL"
         self._queue_status(execution, "WAITING_MANUAL")
-        execution_log(self.db, execution, "WAITING_MANUAL", new_status="WAITING_MANUAL", message="Reply content filled into platform editor.")
+        execution_log(
+            self.db,
+            execution,
+            "REPLY_FILLED",
+            new_status="WAITING_MANUAL",
+            message="Reply Filled",
+            metadata={**filled, "screenshot_path": after_fill_screenshot},
+        )
+        execution_log(
+            self.db,
+            execution,
+            "WAITING_MANUAL",
+            new_status="WAITING_MANUAL",
+            message="Waiting Manual",
+            metadata={"screenshot_path": execution.payload_json["manual_waiting_screenshot"]},
+        )
         SubmissionRuntime(self.db, actor=self.actor, trace_id=self.trace_id).prepare_submission(
             reply_task=reply_task,
             execution=execution,
