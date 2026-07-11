@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models import (
     Account,
     AccountAutoSubmitLimit,
@@ -53,6 +54,8 @@ DEFAULT_SUBMISSION_SETTINGS: dict[str, Any] = {
     "retry_on_browser_disconnect": True,
     "retry_on_worker_offline": True,
     "auto_assisted_real_submit_enabled": False,
+    "audit_enabled": True,
+    "verification_required": True,
 }
 
 SUBMISSION_STATES = {
@@ -308,11 +311,23 @@ class ExecutionPolicyEngine:
 
     def auto_assisted_checks(self, task: SubmissionTask | None, settings: dict[str, Any] | None = None) -> dict[str, Any]:
         settings = settings or get_submission_settings(self.db)
+        app_settings = get_settings()
         reasons: list[str] = []
         if not bool(settings.get("auto_assisted_enabled")):
             reasons.append("Global AUTO_ASSISTED is disabled")
         if not bool(settings.get("auto_assisted_test_mode")) and not bool(settings.get("auto_assisted_real_submit_enabled")):
             reasons.append("Real AUTO_ASSISTED submit is disabled in this build; enable Test Mode to simulate")
+        if app_settings.is_production and app_settings.production_guard_enabled:
+            if not app_settings.worker_api_token:
+                reasons.append("Production guard: WORKER_API_TOKEN is required")
+            if app_settings.debug:
+                reasons.append("Production guard: debug mode must be disabled")
+            if not settings.get("audit_enabled", True):
+                reasons.append("Production guard: audit must be enabled")
+            if not settings.get("verification_required", True):
+                reasons.append("Production guard: verification must be enabled")
+            if not settings.get("screenshot_required", True):
+                reasons.append("Production guard: screenshot evidence is required")
         if not task:
             return {"blocked": bool(reasons), "reason": "; ".join(reasons) or "AUTO_ASSISTED policy passed", "reasons": reasons}
 

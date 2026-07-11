@@ -400,10 +400,11 @@ ATOS/
 ├── docker/
 ├── storage/
 ├── tests/
-└── .github/
+└── docs/ci/
 ```
 
 Historical duplicate placeholder directories were removed during Sprint 00.
+Production CI checks are stored as `docs/ci/production-check.yml.example`; copy it to `.github/workflows/production-check.yml` only with a GitHub token that has workflow scope.
 
 ## Installation
 
@@ -504,6 +505,28 @@ Services:
 
 Backend container runs migration and seed before starting the API.
 
+## Production Docker
+
+Production uses PostgreSQL, Redis persistence, backend, frontend, worker, scheduler, and Nginx.
+
+```bash
+cp .env.production.example .env.production
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Production health:
+
+```bash
+python scripts/smoke_test.py
+```
+
+Backup:
+
+```bash
+scripts/backup/postgres_backup.sh
+scripts/backup/storage_backup.sh
+```
+
 ## Build
 
 ```bash
@@ -564,10 +587,17 @@ docs/sprints/Sprint-11.md
 docs/sprints/Sprint-12.md
 docs/sprints/Sprint-13.md
 docs/sprints/Sprint-14.md
+docs/sprints/Sprint-15.md
 docs/SUBMISSION_RUNTIME.md
 docs/SUBMISSION_HARDENING.md
 docs/AUTO_ASSISTED_MODE.md
 docs/REPLY_TEMPLATE_STRATEGY.md
+docs/DEPLOYMENT_PRODUCTION.md
+docs/PRODUCTION_CHECKLIST.md
+docs/KNOWN_LIMITATIONS.md
+docs/WORKER_TOKEN_SECURITY.md
+docs/manual/ATOS_ADMINISTRATOR_MANUAL.md
+docs/releases/RELEASE_NOTES_v1.0_draft.md
 docs/platforms/X_ADAPTER.md
 ```
 

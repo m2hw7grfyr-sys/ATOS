@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import logging
+import json
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,15 +37,26 @@ def configure_logging() -> None:
     if not log_dir.is_absolute():
         log_dir = Path(__file__).resolve().parents[2] / log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
+    for name in ["backend", "worker", "scheduler", "execution", "submission", "ai", "browser", "error"]:
+        (log_dir / f"{name}.log").touch(exist_ok=True)
     file_handler = RotatingFileHandler(
-        log_dir / "atos-application.log",
+        log_dir / "backend.log",
         maxBytes=settings.log_max_bytes,
         backupCount=settings.log_backup_count,
         encoding="utf-8",
     )
     file_handler.setFormatter(JsonFormatter() if settings.log_format == "json" else logging.Formatter("%(levelname)s %(message)s"))
+    error_handler = RotatingFileHandler(
+        log_dir / "error.log",
+        maxBytes=settings.log_max_bytes,
+        backupCount=settings.log_backup_count,
+        encoding="utf-8",
+    )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(JsonFormatter() if settings.log_format == "json" else logging.Formatter("%(levelname)s %(message)s"))
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(handler)
     root.addHandler(file_handler)
+    root.addHandler(error_handler)
     root.setLevel(level)

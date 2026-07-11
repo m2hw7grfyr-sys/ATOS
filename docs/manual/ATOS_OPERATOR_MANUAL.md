@@ -1063,7 +1063,99 @@ Dashboard 也会显示：
 
 ---
 
-## 21. 推荐每日检查清单
+## 21. 生产环境使用注意事项
+
+生产环境必须通过 HTTPS 访问。
+
+不要把本地开发地址暴露到公网。
+
+### 21.1 Worker Online / Offline
+
+Dashboard 显示 Worker 状态。
+
+如果 Worker Offline：
+
+1. 检查 Windows Worker 服务是否运行。
+2. 检查 `WORKER_API_TOKEN` 是否正确。
+3. 检查网络和 Cloudflare Tunnel。
+4. 等待 Heartbeat 恢复。
+
+### 21.2 AUTO_ASSISTED 注意事项
+
+生产环境 AUTO_ASSISTED 必须满足：
+
+- Global switch
+- Platform switch
+- Account switch
+- Daily limit
+- Time window
+- Worker healthy
+- Audit enabled
+- Screenshot enabled
+- Verification enabled
+
+如果任何条件不满足，系统会阻止 AUTO_ASSISTED。
+
+### 21.3 Emergency Stop
+
+进入 System Settings。
+
+点击：
+
+Emergency Stop
+
+系统会：
+
+- 关闭所有 AUTO_ASSISTED。
+- 将待执行 AUTO_ASSISTED 任务回退到人工。
+- 写入 Audit Log。
+- Dashboard 显示 Emergency Stop 状态。
+
+### 21.4 Backup 状态查看
+
+备份文件默认在：
+
+`storage/backups/`
+
+数据库备份：
+
+`storage/backups/postgres/`
+
+Storage 备份：
+
+`storage/backups/storage/`
+
+恢复前必须停止 backend、worker、scheduler。
+
+### 21.5 常见告警处理
+
+`Worker Offline`
+
+- 检查 Worker 服务和 Token。
+
+`Queue Too Long`
+
+- 暂停新增任务，检查 Worker 容量。
+
+`AI Provider Error`
+
+- 切换 Mock Provider 或备用 Provider。
+
+`Submission Failure Rate High`
+
+- 暂停 AUTO_ASSISTED，检查登录态和 Selector。
+
+`Redis Down`
+
+- 检查 Redis 容器和持久化配置。
+
+`Database Backup Failed`
+
+- 检查磁盘空间和 PostgreSQL 凭据。
+
+---
+
+## 22. 推荐每日检查清单
 
 - Dashboard 无大量红色异常。
 - Data Center 最近采集成功。
@@ -1074,10 +1166,12 @@ Dashboard 也会显示：
 - Execution 无异常堆积。
 - Account Center 无 Critical 账号继续执行。
 - Intelligence 有最新 Recommendations。
+- `/health` 和 `/ready` 正常。
+- 最近一次数据库备份存在。
 
 ---
 
-## 22. 版本边界
+## 23. 版本边界
 
 当前 ATOS 已具备：
 
@@ -1095,6 +1189,7 @@ Dashboard 也会显示：
 - Cross-platform Submission Hardening。
 - AUTO_ASSISTED Test Mode scaffold。
 - Reply Template & Funnel Strategy Layer。
+- Production Release Foundation。
 
 当前 ATOS 尚未实现：
 

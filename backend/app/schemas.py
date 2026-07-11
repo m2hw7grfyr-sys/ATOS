@@ -147,6 +147,8 @@ class SubmissionSettingsUpdate(BaseModel):
     verification_level_default: str = "MANUAL_CONFIRMED"
     retry_on_browser_disconnect: bool = True
     retry_on_worker_offline: bool = True
+    audit_enabled: bool = True
+    verification_required: bool = True
 
 
 class AccountCreate(BaseModel):

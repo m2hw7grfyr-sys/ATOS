@@ -99,6 +99,9 @@ type LLMProviderItem = RecordItem & {
 type DashboardData = {
   overview: {
     posts: number;
+    version?: string;
+    environment?: string;
+    emergency_stop_active?: boolean;
     ai_pending: number;
     scheduler_queue: number;
     scheduler_pending?: number;
@@ -417,6 +420,14 @@ function DashboardPage() {
   const cards = data
     ? [
         { label: "Posts", value: data.overview.posts, icon: Search, tone: "text-cyan" },
+        { label: "Version", value: data.overview.version ?? "—", icon: Settings, tone: "text-blue-700" },
+        { label: "Environment", value: data.overview.environment ?? "—", icon: ShieldCheck, tone: "text-teal" },
+        {
+          label: "Emergency Stop",
+          value: data.overview.emergency_stop_active ? "ACTIVE" : "Clear",
+          icon: ShieldCheck,
+          tone: data.overview.emergency_stop_active ? "text-red-700" : "text-emerald-700",
+        },
         { label: "AI Pending", value: data.overview.ai_pending, icon: Sparkles, tone: "text-teal" },
         {
           label: "Scheduler Queue",
@@ -808,6 +819,11 @@ function DashboardPage() {
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-7">
+        {data?.overview.emergency_stop_active && (
+          <div className="panel border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+            Emergency Stop is active. AUTO_ASSISTED tasks have been moved back to manual review.
+          </div>
+        )}
         <Section
           title="Overview"
           action={
@@ -2641,6 +2657,8 @@ function SettingsPage() {
           verification_level_default: String(submissionForm.verification_level_default ?? "MANUAL_CONFIRMED"),
           retry_on_browser_disconnect: Boolean(submissionForm.retry_on_browser_disconnect),
           retry_on_worker_offline: Boolean(submissionForm.retry_on_worker_offline),
+          audit_enabled: Boolean(submissionForm.audit_enabled ?? true),
+          verification_required: Boolean(submissionForm.verification_required ?? true),
         }),
       });
       setFeedback("Submission Policy 已保存。");
@@ -2945,6 +2963,8 @@ function SettingsPage() {
               ["manual_confirm_required", "Manual Confirm Required"],
               ["retry_on_browser_disconnect", "Retry Browser Disconnect"],
               ["retry_on_worker_offline", "Retry Worker Offline"],
+              ["audit_enabled", "Audit Enabled"],
+              ["verification_required", "Verification Required"],
             ].map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <input type="checkbox" checked={Boolean(submissionForm[key])} onChange={(e) => updateSubmissionField(key, e.target.checked)} />

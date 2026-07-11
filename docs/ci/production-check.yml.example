@@ -1,0 +1,95 @@
+name: Production Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  production-check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: atos
+          POSTGRES_PASSWORD: atos
+          POSTGRES_DB: atos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atos -d atos"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Backend compile and tests
+        run: |
+          PYTHONPYCACHEPREFIX=.pycache python -m compileall backend/app backend/scripts scripts
+          PYTHONPATH=backend python -m unittest discover backend/tests
+
+      - name: Migration check
+        env:
+          DATABASE_URL: postgresql+psycopg://atos:atos@127.0.0.1:5432/atos
+        working-directory: backend
+        run: |
+          PYTHONPATH=. alembic -c alembic.ini upgrade head
+
+      - name: Seed check
+        env:
+          DATABASE_URL: postgresql+psycopg://atos:atos@127.0.0.1:5432/atos
+          PYTHONPATH: backend
+        run: |
+          python scripts/seed.py
+          python scripts/seed.py
+
+      - name: Frontend install, lint, build
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile=false
+          pnpm lint
+          pnpm build
+
+      - name: Docker build check
+        run: |
+          docker build -f backend/Dockerfile -t atos-backend:check .
+          docker build -f frontend/Dockerfile.prod -t atos-frontend:check .
+
+      - name: Smoke test mock mode
+        env:
+          API_BASE_URL: http://127.0.0.1:8000
+          DATABASE_URL: postgresql+psycopg://atos:atos@127.0.0.1:5432/atos
+          REDIS_URL: redis://127.0.0.1:6379/0
+          PLAYWRIGHT_MOCK_MODE: "true"
+        run: |
+          PYTHONPATH=backend uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          sleep 5
+          python scripts/smoke_test.py

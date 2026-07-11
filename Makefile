@@ -1,4 +1,4 @@
-.PHONY: install init-db seed backend frontend build test quality docker-up
+.PHONY: install init-db seed backend frontend build test quality docker-up docker-prod smoke backup-db backup-storage
 
 install:
 	python3 -m venv .venv
@@ -31,3 +31,15 @@ quality:
 
 docker-up:
 	docker compose up --build
+
+docker-prod:
+	docker compose -f docker-compose.prod.yml up -d --build
+
+smoke:
+	.venv/bin/python scripts/smoke_test.py
+
+backup-db:
+	scripts/backup/postgres_backup.sh
+
+backup-storage:
+	scripts/backup/storage_backup.sh

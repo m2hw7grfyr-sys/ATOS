@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
+from app.config import get_settings
 from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, ContentPerformance, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, IntelligenceRecommendation, LLMProvider, Platform, PlatformRegistry, Post, Reply, ReplyScore, ReplyTask, SchedulerTask, StatisticSnapshot, SubmissionTask, SystemAlert, TGEProfile, TimePerformance, WorkerNode
 from app.response import ok
 from app.services.submission_runtime import SubmissionRuntime
@@ -44,10 +45,15 @@ def summary(request: Request, db: Session = Depends(get_db)):
     pipeline_success_rate = round((pipeline_scheduled / max(pipeline_total, 1)) * 100, 2)
     submission_overview = SubmissionRuntime(db).dashboard_counts()
     template_overview = TemplateSelectionEngine(db).dashboard()
+    settings = get_settings()
+    emergency_stop_active = count(SubmissionTask, SubmissionTask.status == "WAITING_MANUAL") > 0 and count(SubmissionTask, SubmissionTask.execution_mode == "AUTO_ASSISTED", SubmissionTask.status == "WAITING_MANUAL") > 0
 
     return ok(
         {
             "overview": {
+                "version": settings.app_version,
+                "environment": settings.app_env,
+                "emergency_stop_active": emergency_stop_active,
                 "posts": count(Post),
                 "ai_pending": count(
                     AITask,

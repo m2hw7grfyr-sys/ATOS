@@ -1,0 +1,50 @@
+[
+  {
+    "alert_type": "Worker Offline",
+    "severity": "warning",
+    "condition": "worker_offline_count > 0",
+    "recommended_action": "Check Windows Worker service, network, and WORKER_API_TOKEN."
+  },
+  {
+    "alert_type": "Queue Too Long",
+    "severity": "warning",
+    "condition": "task_queue_length > 100",
+    "recommended_action": "Pause new scheduling and add worker capacity."
+  },
+  {
+    "alert_type": "AI Provider Error",
+    "severity": "warning",
+    "condition": "ai_provider_error_count > 0",
+    "recommended_action": "Switch to fallback or Mock Provider and inspect provider logs."
+  },
+  {
+    "alert_type": "Submission Failure Rate High",
+    "severity": "critical",
+    "condition": "submission_success_rate < 80",
+    "recommended_action": "Pause AUTO_ASSISTED and inspect login state, selectors, and replay evidence."
+  },
+  {
+    "alert_type": "Database Backup Failed",
+    "severity": "critical",
+    "condition": "latest_postgres_backup_missing_or_failed",
+    "recommended_action": "Run scripts/backup/postgres_backup.sh and check credentials and disk usage."
+  },
+  {
+    "alert_type": "Redis Down",
+    "severity": "critical",
+    "condition": "redis_status != HEALTHY",
+    "recommended_action": "Restart Redis and verify persistence."
+  },
+  {
+    "alert_type": "Disk Usage High",
+    "severity": "warning",
+    "condition": "disk_usage_percent > 85",
+    "recommended_action": "Rotate logs, prune old replay files, and move backups off-host."
+  },
+  {
+    "alert_type": "AUTO_ASSISTED Emergency Stop Triggered",
+    "severity": "critical",
+    "condition": "emergency_stop_active == true",
+    "recommended_action": "Review audit logs and manually confirm waiting tasks."
+  }
+]
