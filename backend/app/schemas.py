@@ -129,6 +129,16 @@ class PlaywrightSettingsUpdate(BaseModel):
     enable_replay_capture: bool = True
 
 
+class SubmissionSettingsUpdate(BaseModel):
+    default_execution_mode: str = "SEMI_AUTO"
+    auto_assisted_enabled: bool = False
+    full_auto_enabled: bool = False
+    max_retry: int = 1
+    verify_timeout_seconds: int = 20
+    capture_screenshot_enabled: bool = True
+    capture_html_enabled: bool = True
+
+
 class AccountCreate(BaseModel):
     platform_id: int
     username: str

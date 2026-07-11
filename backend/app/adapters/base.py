@@ -148,6 +148,32 @@ class PlatformAdapter(ABC):
         detected = self.detect_reply_success(page)
         return {"submitted": bool(detected.get("success")), **detected}
 
+    def detect_submit_button(self, page: Any) -> dict[str, Any]:
+        if self.mock_mode:
+            return {"detected": True, "mock": True}
+        return {"detected": False, "code": "NOT_IMPLEMENTED", "reason": "submit detection is not implemented"}
+
+    def submit_reply(self, page: Any, *, allow_auto_submit: bool = False) -> dict[str, Any]:
+        if not allow_auto_submit:
+            return {"submitted": False, "code": "MANUAL_REQUIRED", "reason": "automatic submission is disabled by policy"}
+        if self.mock_mode:
+            return {"submitted": True, "mock": True}
+        return {"submitted": False, "code": "NOT_IMPLEMENTED", "reason": "submission is not implemented"}
+
+    def verify_reply_success(self, page: Any, reply_content: str | None = None) -> dict[str, Any]:
+        detected = self.detect_reply_success(page)
+        return {"verified": bool(detected.get("success")), **detected}
+
+    def get_submitted_reply_url(self, page: Any) -> dict[str, Any]:
+        if self.mock_mode:
+            return {"url": f"https://example.com/{self.platform}/mock-submission", "mock": True}
+        return {"url": None, "code": "NOT_IMPLEMENTED"}
+
+    def get_submitted_reply_id(self, page: Any) -> dict[str, Any]:
+        if self.mock_mode:
+            return {"external_id": f"{self.platform}-mock-comment", "mock": True}
+        return {"external_id": None, "code": "NOT_IMPLEMENTED"}
+
     def _detect_state(self, page: Any, selector_key: str) -> dict[str, Any]:
         if self.mock_mode:
             return {"detected": False, "mock": True}

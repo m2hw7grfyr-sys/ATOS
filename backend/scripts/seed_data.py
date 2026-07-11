@@ -43,6 +43,8 @@ from app.models import (
     ReplayFile,
     ReplayIndex,
     SchedulerTask,
+    SubmissionLog,
+    SubmissionTask,
     StrategyPerformance,
     StatisticSnapshot,
     RuntimeMetric,
@@ -56,7 +58,7 @@ from app.models import (
 )
 
 
-SEED_VERSION = "sprint-09-intelligence-runtime"
+SEED_VERSION = "sprint-10-submission-runtime"
 
 
 def main() -> None:
@@ -613,6 +615,20 @@ def main() -> None:
                 },
                 False,
             ),
+            (
+                "execution.submission",
+                "EXECUTION",
+                {
+                    "default_execution_mode": "SEMI_AUTO",
+                    "auto_assisted_enabled": False,
+                    "full_auto_enabled": False,
+                    "max_retry": 1,
+                    "verify_timeout_seconds": 20,
+                    "capture_screenshot_enabled": True,
+                    "capture_html_enabled": True,
+                },
+                False,
+            ),
         ]
         for key, category, value, is_secret in setting_specs:
             item = db.scalar(select(SystemSetting).where(SystemSetting.key == key))
@@ -1136,6 +1152,81 @@ def main() -> None:
                     )
                 )
 
+        seeded_tabs = db.scalars(
+            select(BrowserTab)
+            .where(BrowserTab.metadata_json["seed"].as_boolean().is_(True))
+            .order_by(BrowserTab.id.asc())
+        ).all()
+        seeded_executions = db.scalars(
+            select(ExecutionTask)
+            .where(ExecutionTask.reply_task_id.is_not(None))
+            .order_by(ExecutionTask.id.asc())
+            .limit(6)
+        ).all()
+        submission_statuses = ["WAITING_MANUAL", "VERIFIED", "FAILED", "READY", "WAITING_POLICY", "SUBMITTING"]
+        for index, execution in enumerate(seeded_executions, start=1):
+            reply_task = db.get(ReplyTask, execution.reply_task_id) if execution.reply_task_id else None
+            if not reply_task:
+                continue
+            existing_submission = db.scalar(
+                select(SubmissionTask).where(SubmissionTask.reply_task_id == reply_task.id)
+            )
+            tab = seeded_tabs[(index - 1) % len(seeded_tabs)] if seeded_tabs else None
+            status = submission_statuses[index - 1]
+            if not existing_submission:
+                existing_submission = SubmissionTask(
+                    reply_task_id=reply_task.id,
+                    execution_task_id=execution.id,
+                    platform=reply_task.platform or execution.platform,
+                    account_id=reply_task.account_id or execution.account_id,
+                    worker_id=execution.worker_node_id or worker.id,
+                    browser_session_id=tab.session_id if tab else None,
+                    browser_tab_id=tab.id if tab else None,
+                    execution_mode=reply_task.execution_mode or "SEMI_AUTO",
+                    status=status,
+                    submitted_at=now - timedelta(minutes=4) if status in {"VERIFIED", "FAILED"} else None,
+                    verified_at=now - timedelta(minutes=2) if status == "VERIFIED" else None,
+                    result_url="https://www.reddit.com/comments/mock/submission" if status == "VERIFIED" else None,
+                    result_external_id="reddit-mock-comment" if status == "VERIFIED" else None,
+                    failure_reason="VERIFICATION_FAILED" if status == "FAILED" else None,
+                    retry_count=0,
+                    max_retry=1,
+                    manual_confirmed=status == "VERIFIED",
+                    metadata_json={"seed": True, "demo_key": f"submission-task-{index}"},
+                )
+                db.add(existing_submission)
+                db.flush()
+            else:
+                existing_submission.status = status
+                existing_submission.execution_task_id = execution.id
+                existing_submission.browser_session_id = existing_submission.browser_session_id or (tab.session_id if tab else None)
+                existing_submission.browser_tab_id = existing_submission.browser_tab_id or (tab.id if tab else None)
+                existing_submission.metadata_json = {"seed": True, "demo_key": f"submission-task-{index}"}
+            existing_log = db.scalar(
+                select(SubmissionLog).where(
+                    SubmissionLog.submission_task_id == existing_submission.id,
+                    SubmissionLog.step == "SEED_TIMELINE",
+                )
+            )
+            if not existing_log:
+                db.add(
+                    SubmissionLog(
+                        submission_task_id=existing_submission.id,
+                        step="SEED_TIMELINE",
+                        level="INFO" if status != "FAILED" else "ERROR",
+                        message=f"Seed submission task status: {status}",
+                        metadata_json={"seed": True, "status": status},
+                        screenshot_path=f"storage/replay/{execution.uuid}/after_fill.png",
+                    )
+                )
+            execution.payload_json = {
+                **(execution.payload_json or {}),
+                "submission_task_id": existing_submission.id,
+                "submission_status": status,
+                "browser_tab_id": existing_submission.browser_tab_id,
+                "browser_session_id": existing_submission.browser_session_id,
+            }
+
         platform_weight_specs = {
             "reddit": (50, "Primary discovery platform"),
             "facebook": (30, "Secondary community platform"),
@@ -1558,8 +1649,8 @@ Community: {{community}}
             "2 prompt versions, 4 provider routes, 5 platform weights, 2 engagement strategies, "
             "35 execution runtime demo tasks, 3 automation workers, 1 task lock, runtime metrics, "
             "1 automation alert, 4 browser sessions, 15 browser tabs, 5 engagement tasks, "
-            "8 reply tasks, 1 actor mapping, intelligence performance data, recommendations, "
-            "similarity detection, and 1 experiment."
+            "8 reply tasks, 6 submission tasks, 1 actor mapping, intelligence performance data, "
+            "recommendations, similarity detection, and 1 experiment."
         )
     finally:
         db.close()

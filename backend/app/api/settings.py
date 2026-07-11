@@ -14,6 +14,7 @@ from app.schemas import (
     ProviderRoutingUpdate,
     SchedulerSettingsUpdate,
     SettingUpdate,
+    SubmissionSettingsUpdate,
     TgeSettingsUpdate,
 )
 from app.serializers import serialize_model
@@ -25,6 +26,7 @@ from app.services.scheduler import (
 )
 from app.services.tge import get_tge_settings, safe_tge_settings, save_tge_settings
 from app.services.playwright_runner import get_playwright_settings, save_playwright_settings
+from app.services.submission_runtime import get_submission_settings, save_submission_settings
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -157,6 +159,20 @@ def update_playwright_config(
     db: Session = Depends(get_db),
 ):
     return ok(save_playwright_settings(db, payload.model_dump()), request.state.trace_id, "Playwright settings updated")
+
+
+@router.get("/submission")
+def get_submission_config(request: Request, db: Session = Depends(get_db)):
+    return ok(get_submission_settings(db), request.state.trace_id)
+
+
+@router.put("/submission")
+def update_submission_config(
+    payload: SubmissionSettingsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return ok(save_submission_settings(db, payload.model_dump()), request.state.trace_id, "submission settings updated")
 
 
 @router.get("/llm-providers")

@@ -57,3 +57,70 @@ class RedditAdapter(PlatformAdapter):
             return {"filled": False, "reason": reply_box.get("reason", "reply box not found")}
         self.focus_reply_box(page, reply_box)
         return self.fill_reply_box(page, reply_box, text)
+
+    def detect_submit_button(self, page: Any) -> dict[str, Any]:
+        if self.mock_mode:
+            return {"detected": True, "mock": True}
+        selector = self.selector("comment_button", action_type="SUBMIT_REPLY") or self.selector(
+            "comment_button", action_type="PREPARE_REPLY"
+        )
+        if not selector:
+            return {"detected": False, "code": "SUBMIT_BUTTON_NOT_FOUND", "reason": "comment_button selector missing"}
+        try:
+            locator = self._locator(page, selector).first
+            return {"detected": locator.is_visible(timeout=1500), "selector_id": selector.id}
+        except Exception as exc:
+            return {"detected": False, "code": "SUBMIT_BUTTON_NOT_FOUND", "reason": str(exc)}
+
+    def submit_reply(self, page: Any, *, allow_auto_submit: bool = False) -> dict[str, Any]:
+        if not allow_auto_submit:
+            return {"submitted": False, "code": "MANUAL_REQUIRED", "reason": "automatic submission is disabled by policy"}
+        if self.mock_mode:
+            return {"submitted": True, "mock": True}
+        for detector, code in [
+            (self.detect_login_required, "LOGIN_REQUIRED"),
+            (self.detect_rate_limit, "RATE_LIMITED"),
+            (self.detect_comment_disabled, "COMMENT_DISABLED"),
+        ]:
+            result = detector(page)
+            if result.get("detected"):
+                return {
+                    "submitted": False,
+                    "code": "BLOCKED_OR_MANUAL_REQUIRED",
+                    "failure_type": code,
+                    "reason": result.get("reason") or code,
+                }
+        button = self.detect_submit_button(page)
+        if not button.get("detected"):
+            return {"submitted": False, "code": "SUBMIT_BUTTON_NOT_FOUND", "reason": button.get("reason")}
+        selector = self.selector("comment_button", action_type="SUBMIT_REPLY") or self.selector(
+            "comment_button", action_type="PREPARE_REPLY"
+        )
+        try:
+            self._locator(page, selector).first.click(timeout=3000)
+        except Exception as exc:
+            return {"submitted": False, "code": "PLATFORM_ERROR", "reason": str(exc)}
+        return {"submitted": True, "code": "SUBMITTED"}
+
+    def verify_reply_success(self, page: Any, reply_content: str | None = None) -> dict[str, Any]:
+        if self.mock_mode:
+            return {"verified": True, "success": True, "mock": True}
+        if reply_content:
+            try:
+                visible = page.get_by_text(reply_content[:80]).first.is_visible(timeout=5000)
+                if visible:
+                    return {"verified": True, "success": True}
+            except Exception:
+                pass
+        detected = self.detect_reply_success(page)
+        return {"verified": bool(detected.get("success")), **detected}
+
+    def get_submitted_reply_url(self, page: Any) -> dict[str, Any]:
+        if self.mock_mode:
+            return {"url": "https://www.reddit.com/comments/mock/submission", "mock": True}
+        return {"url": getattr(page, "url", None)}
+
+    def get_submitted_reply_id(self, page: Any) -> dict[str, Any]:
+        if self.mock_mode:
+            return {"external_id": "reddit-mock-comment", "mock": True}
+        return {"external_id": None, "code": "UNKNOWN"}

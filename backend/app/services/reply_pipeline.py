@@ -22,6 +22,7 @@ from app.services.browser_runtime import BrowserRuntime
 from app.services.execution import ExecutionRuntime, execution_log, profile_for_account, run_precheck, set_execution_status, utc_now
 from app.services.platform_runtime import PlatformCapabilityError, PlatformRuntime
 from app.services.scheduler import set_status
+from app.services.submission_runtime import SubmissionRuntime
 
 
 EXECUTION_MODE_SEMI_AUTO = "SEMI_AUTO"
@@ -292,6 +293,10 @@ class ReplyPipelineService:
         reply_task.status = "WAITING_MANUAL"
         self._queue_status(execution, "WAITING_MANUAL")
         execution_log(self.db, execution, "WAITING_MANUAL", new_status="WAITING_MANUAL", message="Reply content filled into platform editor.")
+        SubmissionRuntime(self.db, actor=self.actor, trace_id=self.trace_id).prepare_submission(
+            reply_task=reply_task,
+            execution=execution,
+        )
         self._audit("ReplyFilled", reply_task, {"execution_task_id": execution.id, "tab_id": tab.id})
         return reply_task
 
@@ -300,22 +305,11 @@ class ReplyPipelineService:
         execution = self.db.get(ExecutionTask, reply_task.execution_task_id) if reply_task.execution_task_id else None
         scheduler = self.db.get(SchedulerTask, reply_task.scheduler_task_id) if reply_task.scheduler_task_id else None
         reply_task.status = "SUBMITTED"
-        if execution:
-            payload = execution.payload_json or {}
-            adapter = PlatformRuntime(self.db, mock_mode=True).adapter_for(
-                str(payload.get("platform") or reply_task.platform or execution.platform or "unknown")
-            )
-            detected = adapter.detect_reply_success(None)
-            execution.payload_json = {**payload, "manual_confirmed": True, "detect_reply_success": detected}
-            set_execution_status(self.db, execution, "SUCCESS", "MANUAL_CONFIRMED", message="Manual confirmation accepted")
-            execution.queue_status = "SUCCESS"
-            self._queue_status(execution, "SUCCESS")
-            tab_id = (execution.payload_json or {}).get("browser_tab_id")
-            if tab_id:
-                BrowserRuntime(self.db).close_tab(int(tab_id))
-        if scheduler:
-            scheduler.status = "EXECUTED"
-            scheduler.error_message = None
+        SubmissionRuntime(self.db, actor=self.actor, trace_id=self.trace_id).record_manual_result(
+            reply_task=reply_task,
+            execution=execution,
+            scheduler=scheduler,
+        )
         self._update_account_success(reply_task.account_id or (execution.account_id if execution else None))
         reply_task.status = "CONFIRMED"
         self._audit("ManualConfirmed", reply_task, {"execution_task_id": execution.id if execution else None})

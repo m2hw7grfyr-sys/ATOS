@@ -313,6 +313,46 @@ class ReplyTask(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(40), default="CREATED", index=True)
 
 
+class SubmissionTask(Base, TimestampMixin):
+    __tablename__ = "submission_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    reply_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reply_tasks.id"), index=True)
+    execution_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("execution_tasks.id"), index=True)
+    platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
+    worker_id: Mapped[Optional[int]] = mapped_column(ForeignKey("worker_nodes.id"), index=True)
+    browser_session_id: Mapped[Optional[int]] = mapped_column(ForeignKey("browser_sessions.id"), index=True)
+    browser_tab_id: Mapped[Optional[int]] = mapped_column(ForeignKey("browser_tabs.id"), index=True)
+    execution_mode: Mapped[str] = mapped_column(String(40), default="SEMI_AUTO", index=True)
+    status: Mapped[str] = mapped_column(String(40), default="CREATED", index=True)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    result_url: Mapped[Optional[str]] = mapped_column(String(1000))
+    result_external_id: Mapped[Optional[str]] = mapped_column(String(240), index=True)
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retry: Mapped[int] = mapped_column(Integer, default=1)
+    manual_confirmed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class SubmissionLog(Base):
+    __tablename__ = "submission_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    submission_task_id: Mapped[int] = mapped_column(ForeignKey("submission_tasks.id"), index=True)
+    step: Mapped[str] = mapped_column(String(100), index=True)
+    level: Mapped[str] = mapped_column(String(20), default="INFO", index=True)
+    message: Mapped[Optional[str]] = mapped_column(Text)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    screenshot_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    html_snapshot_path: Mapped[Optional[str]] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
 class PromptTemplate(Base, TimestampMixin):
     __tablename__ = "prompt_templates"
 

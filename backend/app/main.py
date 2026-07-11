@@ -26,6 +26,7 @@ from app.api import (
     scheduler,
     settings,
     statistics,
+    submission,
     tge_profiles,
     workers,
 )
@@ -76,6 +77,7 @@ app.include_router(ai.router)
 app.include_router(ai_runtime.router)
 app.include_router(scheduler.router)
 app.include_router(execution.router)
+app.include_router(submission.router)
 app.include_router(automation.router)
 app.include_router(engagement.router)
 app.include_router(accounts.router)

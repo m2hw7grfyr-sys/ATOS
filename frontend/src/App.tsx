@@ -41,6 +41,7 @@ type PageKey =
   | "intelligence"
   | "account-center"
   | "execution"
+  | "submission"
   | "engagement"
   | "statistics"
   | "settings";
@@ -153,6 +154,12 @@ type DashboardData = {
     reply_average_score?: number;
     content_average_score?: number;
     best_time_windows?: number;
+    submission_ready?: number;
+    submission_waiting_manual?: number;
+    submission_submitting?: number;
+    submission_verified?: number;
+    submission_failed?: number;
+    submission_manual_required?: number;
   };
   platform_health: Array<{
     name: string;
@@ -192,6 +199,7 @@ const navigation = [
   { key: "intelligence", label: "Intelligence", icon: Sparkles },
   { key: "account-center", label: "Account Center", icon: Users },
   { key: "execution", label: "Execution", icon: Play },
+  { key: "submission", label: "Submission", icon: CheckCircle2 },
   { key: "engagement", label: "Engagement", icon: Activity },
   { key: "statistics", label: "Statistics", icon: ChartNoAxesCombined },
   { key: "settings", label: "System Settings", icon: Settings },
@@ -208,6 +216,7 @@ const pageRoutes: Record<PageKey, string> = {
   intelligence: "/intelligence",
   "account-center": "/account-center",
   execution: "/execution",
+  submission: "/submission",
   engagement: "/engagement",
   statistics: "/statistics",
   settings: "/settings",
@@ -228,6 +237,7 @@ const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   intelligence: { title: "Intelligence Runtime", subtitle: "表现分析、评分、推荐与策略优化" },
   "account-center": { title: "Account Center", subtitle: "平台账号、健康度与运行限制" },
   execution: { title: "Execution Center", subtitle: "执行运行时占位与环境状态" },
+  submission: { title: "Submission Runtime", subtitle: "半自动提交记录、策略闸门与结果验证" },
   engagement: { title: "Engagement", subtitle: "策略组合与互动任务占位" },
   statistics: { title: "Statistics", subtitle: "事件驱动统计与转化漏斗占位" },
   settings: { title: "System Settings", subtitle: "模型、平台、调度与执行配置" },
@@ -662,6 +672,42 @@ function DashboardPage() {
           label: "Best Time Windows",
           value: data.overview.best_time_windows ?? 0,
           icon: CalendarClock,
+          tone: "text-amber",
+        },
+        {
+          label: "Submission Ready",
+          value: data.overview.submission_ready ?? 0,
+          icon: CheckCircle2,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Waiting Manual",
+          value: data.overview.submission_waiting_manual ?? 0,
+          icon: FileClock,
+          tone: "text-amber",
+        },
+        {
+          label: "Submitting",
+          value: data.overview.submission_submitting ?? 0,
+          icon: Play,
+          tone: "text-blue-700",
+        },
+        {
+          label: "Verified Submit",
+          value: data.overview.submission_verified ?? 0,
+          icon: ShieldCheck,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Submit Failed",
+          value: data.overview.submission_failed ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
+        },
+        {
+          label: "Manual Required",
+          value: data.overview.submission_manual_required ?? 0,
+          icon: Users,
           tone: "text-amber",
         },
       ]
@@ -1964,6 +2010,7 @@ function SettingsPage() {
   const platformWeights = useApiData<RecordItem[]>("/settings/platform-weights");
   const tgeSettings = useApiData<RecordItem>("/settings/tge");
   const playwrightSettings = useApiData<RecordItem>("/settings/playwright");
+  const submissionSettings = useApiData<RecordItem>("/settings/submission");
   const platformSelectors = useApiData<RecordItem[]>("/platform-selectors");
   const [showProviderForm, setShowProviderForm] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
@@ -1984,6 +2031,7 @@ function SettingsPage() {
   const [schedulerForm, setSchedulerForm] = useState<Record<string, unknown>>({});
   const [tgeForm, setTgeForm] = useState<Record<string, unknown>>({});
   const [playwrightForm, setPlaywrightForm] = useState<Record<string, unknown>>({});
+  const [submissionForm, setSubmissionForm] = useState<Record<string, unknown>>({});
   const [selectorForm, setSelectorForm] = useState<Record<string, unknown>>({
     platform: "reddit",
     selector_key: "reply_box",
@@ -2045,6 +2093,12 @@ function SettingsPage() {
       setPlaywrightForm(playwrightSettings.data);
     }
   }, [playwrightSettings.data, playwrightForm]);
+
+  useEffect(() => {
+    if (submissionSettings.data && Object.keys(submissionForm).length === 0) {
+      setSubmissionForm(submissionSettings.data);
+    }
+  }, [submissionSettings.data, submissionForm]);
 
   useEffect(() => {
     if ((platformWeights.data ?? []).length && Object.keys(weightEdits).length === 0) {
@@ -2312,6 +2366,10 @@ function SettingsPage() {
     setPlaywrightForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updateSubmissionField(key: string, value: unknown) {
+    setSubmissionForm((current) => ({ ...current, [key]: value }));
+  }
+
   function updateSelectorField(key: string, value: unknown) {
     setSelectorForm((current) => ({ ...current, [key]: value }));
   }
@@ -2336,6 +2394,27 @@ function SettingsPage() {
       await playwrightSettings.reload();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "保存 Playwright 配置失败");
+    }
+  }
+
+  async function saveSubmissionSettings() {
+    try {
+      await apiRequest("/settings/submission", {
+        method: "PUT",
+        body: JSON.stringify({
+          default_execution_mode: String(submissionForm.default_execution_mode ?? "SEMI_AUTO"),
+          auto_assisted_enabled: Boolean(submissionForm.auto_assisted_enabled),
+          full_auto_enabled: Boolean(submissionForm.full_auto_enabled),
+          max_retry: Number(submissionForm.max_retry ?? 1),
+          verify_timeout_seconds: Number(submissionForm.verify_timeout_seconds ?? 20),
+          capture_screenshot_enabled: Boolean(submissionForm.capture_screenshot_enabled),
+          capture_html_enabled: Boolean(submissionForm.capture_html_enabled),
+        }),
+      });
+      setFeedback("Submission Policy 已保存。");
+      await submissionSettings.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存 Submission Policy 失败");
     }
   }
 
@@ -2474,6 +2553,47 @@ function SettingsPage() {
               Default Wait MS
               <input className="field mt-2" type="number" value={String(playwrightForm.playwright_default_wait_ms ?? 1000)} onChange={(e) => updatePlaywrightField("playwright_default_wait_ms", Number(e.target.value))} />
             </label>
+          </div>
+        </Section>
+        <Section
+          title="Submission Policy"
+          action={<button className="button" onClick={saveSubmissionSettings}><Settings className="h-4 w-4" />保存 Submission</button>}
+        >
+          <div className="panel grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4">
+            <label className="text-xs font-semibold text-gray-600">
+              Default Execution Mode
+              <select
+                className="field mt-2"
+                value={String(submissionForm.default_execution_mode ?? "SEMI_AUTO")}
+                onChange={(e) => updateSubmissionField("default_execution_mode", e.target.value)}
+              >
+                {["SEMI_AUTO", "AUTO_ASSISTED", "FULL_AUTO"].map((mode) => (
+                  <option key={mode} value={mode}>{mode}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Max Retry
+              <input className="field mt-2" type="number" min="0" value={String(submissionForm.max_retry ?? 1)} onChange={(e) => updateSubmissionField("max_retry", Number(e.target.value))} />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Verify Timeout Seconds
+              <input className="field mt-2" type="number" min="1" value={String(submissionForm.verify_timeout_seconds ?? 20)} onChange={(e) => updateSubmissionField("verify_timeout_seconds", Number(e.target.value))} />
+            </label>
+            <div className="rounded border border-line bg-gray-50 p-3 text-xs text-gray-600">
+              默认 SEMI_AUTO。AUTO_ASSISTED / FULL_AUTO 仅保留策略结构，未开启时不会自动点击提交。
+            </div>
+            {[
+              ["auto_assisted_enabled", "Auto Assisted Enabled"],
+              ["full_auto_enabled", "Full Auto Enabled"],
+              ["capture_screenshot_enabled", "Capture Screenshot"],
+              ["capture_html_enabled", "Capture HTML"],
+            ].map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" checked={Boolean(submissionForm[key])} onChange={(e) => updateSubmissionField(key, e.target.checked)} />
+                {label}
+              </label>
+            ))}
           </div>
         </Section>
         <Section
@@ -2902,6 +3022,131 @@ function ExecutionPage() {
             回复内容已填入浏览器，请在平台页面人工确认并点击提交。提交后回到 ATOS 点击 Mark Submitted。
           </div>
         )}
+      </div>
+    </StateView>
+  );
+}
+
+function SubmissionPage() {
+  const { data, error, loading, reload } = useApiData<RecordItem[]>("/submission/tasks");
+  const dashboard = useApiData<RecordItem>("/submission/dashboard");
+  const logs = useApiData<RecordItem[]>("/submission/logs");
+  const [feedback, setFeedback] = useState("");
+
+  async function submissionAction(taskId: unknown, action: "submit" | "record-manual-result" | "cancel") {
+    try {
+      await apiRequest(`/submission/tasks/${String(taskId)}/${action}`, { method: "POST" });
+      setFeedback(
+        action === "submit"
+          ? "Submission policy 已评估。默认 SEMI_AUTO 不会自动提交。"
+          : action === "record-manual-result"
+            ? "人工提交结果已记录。"
+            : "Submission task 已取消。",
+      );
+      await reload();
+      await dashboard.reload();
+      await logs.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Submission 操作失败");
+    }
+  }
+
+  const cards = [
+    ["Ready", dashboard.data?.submission_ready ?? 0, CheckCircle2, "text-emerald-700"],
+    ["Waiting Manual", dashboard.data?.submission_waiting_manual ?? 0, FileClock, "text-amber"],
+    ["Submitting", dashboard.data?.submission_submitting ?? 0, Play, "text-blue-700"],
+    ["Verified", dashboard.data?.submission_verified ?? 0, ShieldCheck, "text-emerald-700"],
+    ["Failed", dashboard.data?.submission_failed ?? 0, CircleAlert, "text-red-700"],
+    ["Manual Required", dashboard.data?.submission_manual_required ?? 0, Users, "text-amber"],
+  ] as const;
+
+  return (
+    <StateView loading={loading} error={error} reload={reload}>
+      <div className="space-y-6">
+        <div className="panel flex items-start gap-4 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-gray-100">
+            <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+          </div>
+          <div>
+            <h2 className="font-bold">Submission Runtime</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Submission 与 Fill Reply 分离。默认 SEMI_AUTO：ATOS 只记录人工确认和验证结果，不自动点击提交。
+            </p>
+          </div>
+        </div>
+        {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          {cards.map(([label, value, Icon, tone]) => (
+            <div key={label} className="panel p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase text-gray-500">{label}</p>
+                <Icon className={`h-5 w-5 ${tone}`} />
+              </div>
+              <p className="mt-4 text-2xl font-bold">{String(value)}</p>
+            </div>
+          ))}
+        </div>
+        <Section title="Submission Tasks">
+          <div className="panel overflow-x-auto">
+            <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                  {["id", "platform", "account", "mode", "status", "reply", "worker", "browser", "result", "failure", "created", "actions"].map((label) => (
+                    <th key={label} className="px-4 py-3 font-semibold">{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(data ?? []).map((task) => (
+                  <tr key={String(task.uuid)} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3 font-mono text-xs">{String(task.id)}</td>
+                    <td className="px-4 py-3 uppercase text-teal">{String(task.platform ?? "—")}</td>
+                    <td className="px-4 py-3">{String(task.account ?? "—")}</td>
+                    <td className="px-4 py-3">{String(task.execution_mode)}</td>
+                    <td className="px-4 py-3"><StatusBadge value={task.status} /></td>
+                    <td className="max-w-sm px-4 py-3 text-xs text-gray-600">{String(task.reply_content_preview ?? "—")}</td>
+                    <td className="px-4 py-3">{String(task.worker ?? task.worker_id ?? "—")}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">S {String(task.browser_session_id ?? "—")} / T {String(task.browser_tab_id ?? "—")}</td>
+                    <td className="max-w-xs px-4 py-3 text-xs text-blue-700">{String(task.result_url ?? "—")}</td>
+                    <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.failure_reason ?? "—")}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{task.created_at ? new Date(String(task.created_at)).toLocaleString() : "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "submit")}>Policy Submit</button>
+                        <button className="button" onClick={() => void submissionAction(task.id, "record-manual-result")}>Manual Confirm</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "cancel")}>Cancel</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+        <Section title="Recent Submission Timeline">
+          <div className="panel overflow-x-auto">
+            <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                  {["task", "step", "level", "message", "created"].map((label) => (
+                    <th key={label} className="px-4 py-3 font-semibold">{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(logs.data ?? []).slice(0, 20).map((log) => (
+                  <tr key={String(log.uuid)} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3 font-mono text-xs">{String(log.submission_task_id)}</td>
+                    <td className="px-4 py-3">{String(log.step)}</td>
+                    <td className="px-4 py-3"><StatusBadge value={log.level} /></td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{String(log.message ?? "—")}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{log.created_at ? new Date(String(log.created_at)).toLocaleString() : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
       </div>
     </StateView>
   );
@@ -3499,6 +3744,8 @@ function PageContent({ page }: { page: PageKey }) {
       return <SettingsPage />;
     case "execution":
       return <ExecutionPage />;
+    case "submission":
+      return <SubmissionPage />;
     case "engagement":
       return <EngagementPage />;
     case "statistics":
