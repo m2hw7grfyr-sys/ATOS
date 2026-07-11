@@ -604,14 +604,22 @@ function HelpCenterPage() {
   const [role, setRole] = useState("Operator");
   const [manualKey, setManualKey] = useState("operator");
   const [keyword, setKeyword] = useState("");
+  const effectiveManualKey = role !== "Administrator" && manualKey === "administrator" ? "operator" : manualKey;
   const manualList = useApiData<ManualListResponse>(`/help/manuals?role=${role}`);
-  const manual = useApiData<ManualDetail>(`/help/manuals/${manualKey}?role=${role}`);
+  const manual = useApiData<ManualDetail>(`/help/manuals/${effectiveManualKey}?role=${role}`);
 
   useEffect(() => {
     if (role !== "Administrator" && manualKey === "administrator") {
       setManualKey("operator");
     }
   }, [manualKey, role]);
+
+  function changeRole(nextRole: string) {
+    if (nextRole !== "Administrator") {
+      setManualKey("operator");
+    }
+    setRole(nextRole);
+  }
 
   const filteredToc = useMemo(() => {
     const toc = manual.data?.toc ?? [];
@@ -629,7 +637,7 @@ function HelpCenterPage() {
         <Section title="Manuals">
           <div className="panel space-y-4 p-4">
             <label className="block text-xs font-semibold uppercase text-gray-500">当前角色</label>
-            <select className="field" value={role} onChange={(event) => setRole(event.target.value)}>
+            <select className="field" value={role} onChange={(event) => changeRole(event.target.value)}>
               {["Operator", "Reviewer", "Viewer", "Administrator"].map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <div className="space-y-2">
@@ -637,7 +645,7 @@ function HelpCenterPage() {
                 <button
                   key={item.key}
                   className={`flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm ${
-                    manualKey === item.key ? "border-teal bg-teal/5 text-ink" : "border-line text-gray-600 hover:bg-gray-50"
+                    effectiveManualKey === item.key ? "border-teal bg-teal/5 text-ink" : "border-line text-gray-600 hover:bg-gray-50"
                   }`}
                   onClick={() => setManualKey(item.key)}
                 >
