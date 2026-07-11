@@ -219,6 +219,47 @@ class BindTGEProfileRequest(BaseModel):
     profile_id: int
 
 
+class GPUWorkerHeartbeat(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=120)
+    worker_name: str = Field(min_length=1, max_length=160)
+    worker_type: str = Field(default="gpu", max_length=60)
+    version: Optional[str] = Field(default=None, max_length=60)
+    status: str = Field(default="idle", max_length=40)
+    gpu: dict[str, Any] = Field(default_factory=dict)
+    ollama: dict[str, Any] = Field(default_factory=dict)
+    current_task_id: Optional[int] = None
+    last_error: Optional[str] = Field(default=None, max_length=2000)
+
+
+class GPUWorkerLeaseRequest(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=120)
+    supported_models: list[str] = Field(default_factory=list, max_length=20)
+
+
+class GPUWorkerTaskStarted(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=120)
+
+
+class GPUWorkerTaskComplete(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=120)
+    result_text: str = Field(max_length=80_000)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+
+
+class GPUWorkerTaskFailed(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=120)
+    error_type: str = Field(default="worker_error", max_length=120)
+    error_message: str = Field(max_length=4000)
+    retryable: bool = True
+
+
+class GPUGenerationTaskCreate(BaseModel):
+    prompt: str = Field(min_length=1, max_length=20_000)
+    system_prompt: Optional[str] = Field(default=None, max_length=8_000)
+    model: str = Field(default="llama3.1:8b", max_length=160)
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
 class AccountLimitUpdate(BaseModel):
     browse_daily_limit: int = 20
     like_daily_limit: int = 8

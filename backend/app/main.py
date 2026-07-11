@@ -15,6 +15,7 @@ from app.api import (
     data_sources,
     engagement,
     execution,
+    gpu_worker,
     help,
     health,
     intelligence,
@@ -32,7 +33,7 @@ from app.api import (
     tge_profiles,
     workers,
 )
-from app.config import get_settings
+from app.config import ensure_gpu_worker_api_key, get_settings
 from app.exception_handlers import (
     database_exception_handler,
     http_exception_handler,
@@ -50,6 +51,13 @@ app = FastAPI(
     version=settings_config.app_version,
     description="ATOS v1.2 local application API",
 )
+
+
+@app.on_event("startup")
+def ensure_runtime_secrets() -> None:
+    ensure_gpu_worker_api_key()
+
+
 app.middleware("http")(trace_middleware)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
@@ -80,6 +88,7 @@ app.include_router(ai.router)
 app.include_router(ai_runtime.router)
 app.include_router(scheduler.router)
 app.include_router(execution.router)
+app.include_router(gpu_worker.router)
 app.include_router(help.router)
 app.include_router(submission.router)
 app.include_router(submission.task_router)

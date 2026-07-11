@@ -206,6 +206,78 @@ custom_http
 
 When no real API key is configured, ATOS automatically falls back to `Mock Provider`, so the full AI flow remains runnable offline.
 
+## GPU Worker Minimal Loop
+
+This stage adds the first Main-to-GPU communication loop:
+
+```text
+ATOS Main
+  ↓ create generation task
+GPU Worker
+  ↓ heartbeat + lease
+Ollama
+  ↓ generate
+GPU Worker
+  ↓ complete / failed
+ATOS Main Dashboard
+```
+
+The GPU Worker actively connects to Main. Main does not call a public GPU endpoint.
+
+Backend configuration:
+
+```env
+MAIN_BIND_HOST=0.0.0.0
+MAIN_PORT=8080
+GPU_WORKER_API_KEY=
+GPU_HEARTBEAT_TIMEOUT_SECONDS=30
+GPU_TASK_LEASE_SECONDS=600
+```
+
+If `GPU_WORKER_API_KEY` is empty, Main generates an `atos_gpu_*` token and stores it in `.env.local`. Real environment files are ignored by Git.
+
+Primary GPU Worker APIs:
+
+```text
+POST /api/gpu-worker/heartbeat
+POST /api/gpu-worker/tasks/lease
+POST /api/gpu-worker/tasks/{task_id}/started
+POST /api/gpu-worker/tasks/{task_id}/complete
+POST /api/gpu-worker/tasks/{task_id}/failed
+GET  /api/gpu-worker/dashboard
+POST /api/gpu-worker/tasks
+GET  /api/gpu-worker/config
+```
+
+GPU-side worker template:
+
+```text
+workers/gpu/
+├── main.py
+├── worker/
+├── config/gpu-worker.env.example
+├── config/supervisor/
+└── scripts/run_worker.sh
+```
+
+On the Vast GPU container, copy the worker to `/workspace/atos-gpu-worker`, copy the example config to `/workspace/config/gpu-worker.env`, then set:
+
+```env
+MAIN_URL=http://<windows-main-host>:8080
+GPU_WORKER_API_KEY=<copied-from-dashboard>
+OLLAMA_URL=http://127.0.0.1:11434
+MODEL_NAME=llama3.1:8b
+```
+
+Manual supervisor start commands:
+
+```bash
+supervisorctl start ollama
+supervisorctl start atos-gpu-worker
+```
+
+Current boundary: this worker only handles AI generation tasks through Ollama. It does not call Vast API, auto-stop instances, open browsers, connect TGE, or run Playwright.
+
 ## Semi-Auto Reply Pipeline
 
 Sprint 05 connects the first complete semi-auto reply loop:

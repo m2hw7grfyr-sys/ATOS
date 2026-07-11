@@ -4319,8 +4319,14 @@ function WorkerCenterPage() {
   const queue = useApiData<RecordItem[]>("/automation/queue");
   const alerts = useApiData<RecordItem[]>("/automation/alerts");
   const metrics = useApiData<RecordItem>("/automation/metrics");
+  const gpu = useApiData<RecordItem>("/api/gpu-worker/dashboard");
   const [claimResult, setClaimResult] = useState<RecordItem | null>(null);
   const [claiming, setClaiming] = useState(false);
+  const [gpuPrompt, setGpuPrompt] = useState("用一句话说明 ATOS GPU Worker 是否在线。");
+  const [gpuSystemPrompt, setGpuSystemPrompt] = useState("你是 ATOS 的本地 AI 生成 Worker。");
+  const [gpuModel, setGpuModel] = useState("llama3.1:8b");
+  const [gpuSubmitting, setGpuSubmitting] = useState(false);
+  const [gpuMessage, setGpuMessage] = useState("");
 
   async function claimNext() {
     setClaiming(true);
@@ -4338,8 +4344,50 @@ function WorkerCenterPage() {
     }
   }
 
+  async function createGpuTask() {
+    setGpuSubmitting(true);
+    setGpuMessage("");
+    try {
+      await apiRequest<RecordItem>("/api/gpu-worker/tasks", {
+        method: "POST",
+        data: {
+          prompt: gpuPrompt,
+          system_prompt: gpuSystemPrompt,
+          model: gpuModel,
+          options: {},
+        },
+      });
+      setGpuMessage("GPU generation task queued.");
+      await gpu.reload();
+    } catch (reason) {
+      setGpuMessage(reason instanceof Error ? reason.message : "Failed to queue GPU task.");
+    } finally {
+      setGpuSubmitting(false);
+    }
+  }
+
+  async function copyGpuApiKey() {
+    try {
+      const config = await apiRequest<RecordItem>("/api/gpu-worker/config");
+      const key = String(config.api_key ?? "");
+      if (!key) {
+        setGpuMessage("GPU Worker API Key is not available.");
+        return;
+      }
+      await navigator.clipboard.writeText(key);
+      setGpuMessage(`GPU Worker API Key copied (${config.api_key_masked ?? "masked"}).`);
+    } catch (reason) {
+      setGpuMessage(reason instanceof Error ? reason.message : "Failed to copy API key.");
+    }
+  }
+
   const overview = runtime.data ?? {};
   const metricData = metrics.data ?? {};
+  const gpuData = gpu.data ?? {};
+  const gpuConfig = (gpuData.config ?? {}) as RecordItem;
+  const gpuWorkers = (gpuData.workers ?? []) as RecordItem[];
+  const gpuTasks = (gpuData.tasks ?? []) as RecordItem[];
+  const primaryGpuWorker = gpuWorkers[0] ?? {};
   const runtimeCards = [
     { label: "Queue", value: overview.task_queue ?? 0, icon: FileClock, tone: "text-amber" },
     { label: "Online Workers", value: overview.online_workers ?? 0, icon: Bot, tone: "text-teal" },
@@ -4354,6 +4402,80 @@ function WorkerCenterPage() {
   return (
     <StateView loading={runtime.loading} error={runtime.error} reload={runtime.reload}>
       <div className="space-y-6">
+        <Section
+          title="GPU Worker Runtime"
+          action={
+            <button className="button-secondary" onClick={copyGpuApiKey}>
+              <Download className="h-4 w-4" />
+              Copy API Key
+            </button>
+          }
+        >
+          <StateView loading={gpu.loading} error={gpu.error} reload={gpu.reload}>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="panel p-4">
+                <p className="text-xs font-semibold uppercase text-gray-500">Worker Status</p>
+                <p className="mt-3 text-2xl font-bold">{String(primaryGpuWorker.status ?? "offline")}</p>
+              </div>
+              <div className="panel p-4">
+                <p className="text-xs font-semibold uppercase text-gray-500">Last Heartbeat</p>
+                <p className="mt-3 text-sm font-semibold">{String(primaryGpuWorker.last_heartbeat_at ?? "none")}</p>
+              </div>
+              <div className="panel p-4">
+                <p className="text-xs font-semibold uppercase text-gray-500">Model</p>
+                <p className="mt-3 text-sm font-semibold">{String(primaryGpuWorker.model_name ?? gpuConfig.default_model ?? "unset")}</p>
+              </div>
+              <div className="panel p-4">
+                <p className="text-xs font-semibold uppercase text-gray-500">API Key</p>
+                <p className="mt-3 text-sm font-semibold">{String(gpuConfig.api_key_masked ?? "not generated")}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+              <div className="panel space-y-3 p-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase text-gray-500">Model</label>
+                  <input className="input mt-1" value={gpuModel} onChange={(event) => setGpuModel(event.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase text-gray-500">System Prompt</label>
+                  <textarea
+                    className="input mt-1 min-h-20"
+                    value={gpuSystemPrompt}
+                    onChange={(event) => setGpuSystemPrompt(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase text-gray-500">Prompt</label>
+                  <textarea
+                    className="input mt-1 min-h-28"
+                    value={gpuPrompt}
+                    onChange={(event) => setGpuPrompt(event.target.value)}
+                  />
+                </div>
+                <button className="button-primary w-full" onClick={createGpuTask} disabled={gpuSubmitting}>
+                  <Sparkles className="h-4 w-4" />
+                  {gpuSubmitting ? "Queueing..." : "Create GPU Test Task"}
+                </button>
+                {gpuMessage && <p className="text-sm text-gray-600">{gpuMessage}</p>}
+              </div>
+              <DataTable
+                rows={gpuTasks}
+                columns={[
+                  { key: "id", label: "Task" },
+                  { key: "status", label: "Status" },
+                  { key: "model", label: "Model" },
+                  { key: "worker_id", label: "Worker" },
+                  { key: "attempt_count", label: "Attempts" },
+                  { key: "created_at", label: "Created" },
+                  { key: "completed_at", label: "Completed" },
+                  { key: "error_message", label: "Error" },
+                ]}
+              />
+            </div>
+          </StateView>
+        </Section>
+
         <Section
           title="Automation Runtime"
           action={

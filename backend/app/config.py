@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import secrets
 from functools import lru_cache
 from pathlib import Path
 
@@ -34,6 +37,11 @@ class Settings(BaseSettings):
     worker_api_token: str = ""
     worker_token_version: str = "v1"
     worker_heartbeat_timeout_seconds: int = 90
+    main_bind_host: str = "0.0.0.0"
+    main_port: int = 8080
+    gpu_worker_api_key: str = ""
+    gpu_heartbeat_timeout_seconds: int = 30
+    gpu_task_lease_seconds: int = 600
     admin_default_password_changed: bool = False
     production_guard_enabled: bool = True
     backup_retention_daily: int = 7
@@ -77,3 +85,28 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def mask_secret(value: str | None) -> str:
+    if not value:
+        return ""
+    if len(value) <= 12:
+        return "****"
+    return f"{value[:8]}...{value[-4:]}"
+
+
+def ensure_gpu_worker_api_key() -> str:
+    settings = get_settings()
+    if settings.gpu_worker_api_key:
+        return settings.gpu_worker_api_key
+
+    token = f"atos_gpu_{secrets.token_urlsafe(32)}"
+    env_path = ROOT_DIR / ".env.local"
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    current = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+    if "GPU_WORKER_API_KEY=" not in current:
+        prefix = "" if not current or current.endswith("\n") else "\n"
+        with env_path.open("a", encoding="utf-8") as f:
+            f.write(f"{prefix}GPU_WORKER_API_KEY={token}\n")
+    settings.gpu_worker_api_key = token
+    return token

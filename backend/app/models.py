@@ -762,6 +762,56 @@ class WorkerLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
 
+class GPUWorkerStatus(Base):
+    __tablename__ = "gpu_worker_statuses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    worker_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    worker_name: Mapped[str] = mapped_column(String(160), index=True)
+    worker_type: Mapped[str] = mapped_column(String(60), default="gpu", index=True)
+    status: Mapped[str] = mapped_column(String(40), default="offline", index=True)
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    version: Mapped[Optional[str]] = mapped_column(String(60))
+    gpu_name: Mapped[Optional[str]] = mapped_column(String(160))
+    gpu_memory_total_mb: Mapped[Optional[int]] = mapped_column(Integer)
+    gpu_memory_free_mb: Mapped[Optional[int]] = mapped_column(Integer)
+    ollama_version: Mapped[Optional[str]] = mapped_column(String(60))
+    ollama_reachable: Mapped[bool] = mapped_column(Boolean, default=False)
+    model_name: Mapped[Optional[str]] = mapped_column(String(160), index=True)
+    current_task_id: Mapped[Optional[int]] = mapped_column(Integer, index=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, index=True
+    )
+
+
+class GPUGenerationTask(Base):
+    __tablename__ = "gpu_generation_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
+    prompt: Mapped[str] = mapped_column(Text)
+    system_prompt: Mapped[Optional[str]] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(160), default="llama3.1:8b", index=True)
+    options_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    result_text: Mapped[Optional[str]] = mapped_column(Text)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    error_type: Mapped[Optional[str]] = mapped_column(String(120), index=True)
+    retryable: Mapped[Optional[bool]] = mapped_column(Boolean)
+    worker_id: Mapped[Optional[str]] = mapped_column(String(120), index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    lease_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    metrics_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, index=True
+    )
+
+
 class ExecutionQueue(Base):
     __tablename__ = "execution_queue"
 
