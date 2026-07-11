@@ -8,10 +8,12 @@ import {
   ChevronRight,
   CircleAlert,
   Database,
+  Download,
   ExternalLink,
   FileClock,
   Gauge,
   HeartPulse,
+  BookOpenText,
   Menu,
   Play,
   Pencil,
@@ -28,7 +30,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { apiGet, apiRequest } from "./api";
+import { API_BASE_URL, apiGet, apiRequest } from "./api";
 
 type PageKey =
   | "dashboard"
@@ -44,6 +46,7 @@ type PageKey =
   | "submission"
   | "engagement"
   | "statistics"
+  | "help"
   | "settings";
 
 type RecordItem = Record<string, unknown>;
@@ -219,6 +222,7 @@ const navigation = [
   { key: "submission", label: "Submission", icon: CheckCircle2 },
   { key: "engagement", label: "Engagement", icon: Activity },
   { key: "statistics", label: "Statistics", icon: ChartNoAxesCombined },
+  { key: "help", label: "帮助中心", icon: BookOpenText },
   { key: "settings", label: "System Settings", icon: Settings },
 ] as const;
 
@@ -236,6 +240,7 @@ const pageRoutes: Record<PageKey, string> = {
   submission: "/submission",
   engagement: "/engagement",
   statistics: "/statistics",
+  help: "/help",
   settings: "/settings",
 };
 
@@ -257,6 +262,7 @@ const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   submission: { title: "Submission Runtime", subtitle: "半自动提交记录、策略闸门与结果验证" },
   engagement: { title: "Engagement", subtitle: "策略组合与互动任务占位" },
   statistics: { title: "Statistics", subtitle: "事件驱动统计与转化漏斗占位" },
+  help: { title: "帮助中心", subtitle: "操作手册、平台流程、模板说明与常见问题" },
   settings: { title: "System Settings", subtitle: "模型、平台、调度与执行配置" },
 };
 
@@ -410,6 +416,299 @@ function DataTable({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+type ManualListItem = {
+  key: string;
+  title: string;
+  admin_only: boolean;
+  source_path: string;
+  pdf_path: string;
+};
+
+type ManualTocItem = {
+  level: number;
+  title: string;
+  anchor: string;
+};
+
+type ManualListResponse = {
+  role: string;
+  manuals: ManualListItem[];
+  topics: string[];
+};
+
+type ManualDetail = {
+  key: string;
+  title: string;
+  admin_only: boolean;
+  markdown: string;
+  toc: ManualTocItem[];
+  source_path: string;
+  pdf_path: string;
+  download_url: string;
+};
+
+function markdownAnchor(text: string) {
+  let value = text.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-");
+  while (value.includes("--")) value = value.replace(/--/g, "-");
+  return value.replace(/^-|-$/g, "") || "section";
+}
+
+function highlightText(text: string, keyword: string) {
+  if (!keyword.trim()) return text;
+  const parts = text.split(new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.toLowerCase() === keyword.toLowerCase() ? (
+          <mark key={`${part}-${index}`} className="bg-amber-100 px-0.5 text-amber-900">
+            {part}
+          </mark>
+        ) : (
+          <span key={`${part}-${index}`}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function renderInlineMarkdown(text: string, keyword: string) {
+  const cleaned = text.replace(/\*\*/g, "").replace(/`([^`]+)`/g, "$1");
+  return highlightText(cleaned, keyword);
+}
+
+function MarkdownViewer({ markdown, keyword }: { markdown: string; keyword: string }) {
+  const elements: React.ReactNode[] = [];
+  const lines = markdown.split("\n");
+  let index = 0;
+  let codeBuffer: string[] = [];
+  let inCode = false;
+
+  function flushCode() {
+    if (!codeBuffer.length) return;
+    elements.push(
+      <pre key={`code-${elements.length}`} className="my-4 overflow-x-auto rounded border border-line bg-gray-950 p-4 text-xs text-gray-100">
+        <code>{codeBuffer.join("\n")}</code>
+      </pre>,
+    );
+    codeBuffer = [];
+  }
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      if (inCode) {
+        inCode = false;
+        flushCode();
+      } else {
+        inCode = true;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (inCode) {
+      codeBuffer.push(line);
+      index += 1;
+      continue;
+    }
+
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith("|") && lines[index + 1]?.trim().startsWith("|")) {
+      const tableLines: string[] = [];
+      while (index < lines.length && lines[index]?.trim().startsWith("|")) {
+        tableLines.push(lines[index]);
+        index += 1;
+      }
+      const rows = tableLines
+        .filter((row) => !/^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(row.trim()))
+        .map((row) => row.split("|").slice(1, -1).map((cell) => cell.trim()));
+      const [head, ...body] = rows;
+      elements.push(
+        <div key={`table-${elements.length}`} className="my-4 overflow-x-auto rounded border border-line">
+          <table className="w-full border-collapse text-left text-sm">
+            {head && (
+              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                <tr>{head.map((cell, cellIndex) => <th key={cellIndex} className="border-b border-line px-3 py-2">{renderInlineMarkdown(cell, keyword)}</th>)}</tr>
+              </thead>
+            )}
+            <tbody>
+              {body.map((row, rowIndex) => (
+                <tr key={rowIndex} className="border-b border-line last:border-0">
+                  {row.map((cell, cellIndex) => <td key={cellIndex} className="px-3 py-2 align-top text-gray-700">{renderInlineMarkdown(cell, keyword)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
+
+    if (trimmed.startsWith("#")) {
+      const level = Math.min(trimmed.match(/^#+/)?.[0].length ?? 1, 4);
+      const title = trimmed.replace(/^#+/, "").trim();
+      const Tag = (`h${level}` as keyof JSX.IntrinsicElements);
+      const className =
+        level === 1
+          ? "mt-2 border-b border-line pb-3 text-2xl font-black"
+          : level === 2
+            ? "mt-8 text-xl font-bold"
+            : level === 3
+              ? "mt-6 text-base font-bold"
+              : "mt-4 text-sm font-bold uppercase text-gray-500";
+      elements.push(
+        <Tag id={markdownAnchor(title)} key={`heading-${elements.length}`} className={`${className} scroll-mt-24`}>
+          {renderInlineMarkdown(title, keyword)}
+        </Tag>,
+      );
+      index += 1;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (index < lines.length && (/^[-*]\s+/.test(lines[index].trim()) || /^\d+\.\s+/.test(lines[index].trim()))) {
+        items.push(lines[index].trim().replace(/^[-*]\s+/, "").replace(/^\d+\.\s+/, ""));
+        index += 1;
+      }
+      elements.push(
+        <ul key={`list-${elements.length}`} className="my-3 list-disc space-y-1 pl-6 text-sm leading-7 text-gray-700">
+          {items.map((item, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(item, keyword)}</li>)}
+        </ul>,
+      );
+      continue;
+    }
+
+    elements.push(
+      <p key={`p-${elements.length}`} className="my-3 text-sm leading-7 text-gray-700">
+        {renderInlineMarkdown(trimmed, keyword)}
+      </p>,
+    );
+    index += 1;
+  }
+  flushCode();
+  return <div className="manual-content">{elements}</div>;
+}
+
+function HelpCenterPage() {
+  const [role, setRole] = useState("Operator");
+  const [manualKey, setManualKey] = useState("operator");
+  const [keyword, setKeyword] = useState("");
+  const manualList = useApiData<ManualListResponse>(`/help/manuals?role=${role}`);
+  const manual = useApiData<ManualDetail>(`/help/manuals/${manualKey}?role=${role}`);
+
+  useEffect(() => {
+    if (role !== "Administrator" && manualKey === "administrator") {
+      setManualKey("operator");
+    }
+  }, [manualKey, role]);
+
+  const filteredToc = useMemo(() => {
+    const toc = manual.data?.toc ?? [];
+    if (!keyword.trim()) return toc;
+    return toc.filter((item) => item.title.toLowerCase().includes(keyword.toLowerCase()));
+  }, [keyword, manual.data?.toc]);
+
+  const downloadUrl = manual.data
+    ? `${API_BASE_URL}${manual.data.download_url}?role=${encodeURIComponent(role)}`
+    : "#";
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="space-y-4">
+        <Section title="Manuals">
+          <div className="panel space-y-4 p-4">
+            <label className="block text-xs font-semibold uppercase text-gray-500">当前角色</label>
+            <select className="field" value={role} onChange={(event) => setRole(event.target.value)}>
+              {["Operator", "Reviewer", "Viewer", "Administrator"].map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <div className="space-y-2">
+              {(manualList.data?.manuals ?? []).map((item) => (
+                <button
+                  key={item.key}
+                  className={`flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm ${
+                    manualKey === item.key ? "border-teal bg-teal/5 text-ink" : "border-line text-gray-600 hover:bg-gray-50"
+                  }`}
+                  onClick={() => setManualKey(item.key)}
+                >
+                  <span>{item.title}</span>
+                  {item.admin_only && <ShieldCheck className="h-4 w-4 text-amber-600" />}
+                </button>
+              ))}
+            </div>
+            {role !== "Administrator" && (
+              <p className="rounded border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                管理员手册入口仅 Administrator 可见。Worker Token、备份恢复、生产密钥和安全设置章节不会对普通角色开放。
+              </p>
+            )}
+          </div>
+        </Section>
+
+        <Section title="Topics">
+          <div className="panel space-y-2 p-4 text-sm">
+            {(manualList.data?.topics ?? []).map((topic) => (
+              <a key={topic} href={`#${markdownAnchor(topic)}`} className="block rounded px-2 py-1 text-gray-600 hover:bg-gray-50 hover:text-ink">
+                {topic}
+              </a>
+            ))}
+            {role === "Administrator" && (
+              <button className="mt-2 flex w-full items-center gap-2 rounded border border-line px-2 py-2 text-left text-sm text-gray-700" onClick={() => setManualKey("administrator")}>
+                <ShieldCheck className="h-4 w-4 text-amber-600" />
+                管理员手册入口
+              </button>
+            )}
+          </div>
+        </Section>
+      </div>
+
+      <StateView loading={manual.loading || manualList.loading} error={manual.error || manualList.error} reload={() => { manual.reload(); manualList.reload(); }}>
+        <div className="space-y-4">
+          <div className="panel flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <p className="text-xs uppercase text-gray-500">{manual.data?.source_path}</p>
+              <h2 className="mt-1 text-xl font-bold">{manual.data?.title}</h2>
+            </div>
+            <a className="button" href={downloadUrl} target="_blank" rel="noreferrer">
+              <Download className="h-4 w-4" />
+              Download PDF
+            </a>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
+            <aside className="panel max-h-[calc(100vh-11rem)] overflow-auto p-4">
+              <div className="relative mb-3">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input className="field pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索关键词" />
+              </div>
+              <div className="space-y-1">
+                {filteredToc.map((item) => (
+                  <a
+                    key={`${item.anchor}-${item.title}`}
+                    href={`#${item.anchor}`}
+                    className="block rounded px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 hover:text-ink"
+                    style={{ paddingLeft: `${Math.max(item.level - 1, 0) * 12 + 8}px` }}
+                  >
+                    {item.title}
+                  </a>
+                ))}
+              </div>
+            </aside>
+            <article className="panel min-w-0 p-6">
+              {manual.data && <MarkdownViewer markdown={manual.data.markdown} keyword={keyword} />}
+            </article>
+          </div>
+        </div>
+      </StateView>
     </div>
   );
 }
@@ -4301,6 +4600,8 @@ function PageContent({ page }: { page: PageKey }) {
       return <EngagementPage />;
     case "statistics":
       return <StatisticsPage />;
+    case "help":
+      return <HelpCenterPage />;
   }
 }
 

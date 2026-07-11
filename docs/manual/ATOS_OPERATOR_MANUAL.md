@@ -14,12 +14,53 @@ Audience: Operator / Reviewer / Administrator
 
 ATOS 当前是一个 Human-in-the-loop AI Traffic Operating System。
 
+### 1.0 系统介绍
+
+ATOS 把外部平台内容、AI 分析、回复模板、人工审核、调度、执行运行时、浏览器运行时、平台适配器、提交确认和统计分析串成一条可追踪的运营链路。
+
+普通操作人员主要关注：
+
+- 哪些帖子值得处理。
+- AI 生成的回复是否安全、自然、符合平台语境。
+- 哪些任务正在等待人工确认。
+- 哪些任务失败后需要 Mark Failed、Retry 或 Cancel。
+- Worker、账号、平台和 Emergency Stop 是否处于正常状态。
+
 当前版本的核心原则：
 
 - 系统可以采集、分析、评分、排队、生成建议。
 - 系统可以准备半自动回复流程。
 - 系统不自动提交评论。
 - 最终平台提交动作必须由人工完成。
+
+---
+
+## 1.1 用户角色与阅读路径
+
+ATOS 面向四类角色：
+
+- `Viewer`：只查看 Dashboard、Statistics 和公开运行状态。
+- `Reviewer`：审核帖子、回复草稿、模板风险和 Waiting Manual 任务。
+- `Operator`：执行日常运营动作，包括 Post Pool、AI Workspace、Scheduler、Execution、Submission、Retry、Cancel、Mark Failed。
+- `Administrator`：管理系统配置、Worker Token、备份恢复、生产环境密钥、安全设置和 AUTO_ASSISTED 全局开关。
+
+普通操作人员建议阅读路径：
+
+1. Dashboard 使用。
+2. Post Pool 使用。
+3. AI Workspace 使用。
+4. 五类中文回复模板。
+5. Reddit 操作流程。
+6. X 操作流程。
+7. SEMI_AUTO 使用。
+8. AUTO_ASSISTED 使用。
+9. Waiting Manual 处理。
+10. Mark Failed / Retry / Cancel。
+11. Emergency Stop。
+12. Statistics 查看。
+13. Worker 状态说明。
+14. 每日运营 SOP。
+15. 风险与注意事项。
 
 ---
 
@@ -1155,7 +1196,7 @@ Storage 备份：
 
 ---
 
-## 22. 推荐每日检查清单
+## 22. 每日运营 SOP 与推荐检查清单
 
 - Dashboard 无大量红色异常。
 - Data Center 最近采集成功。

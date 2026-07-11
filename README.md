@@ -573,6 +573,28 @@ See:
 docs/DEVELOPMENT.md
 ```
 
+## Documentation
+
+Operator and administrator manuals are maintained as Markdown source files and can be viewed from the ATOS Console Help Center.
+
+- Operator manual source: `docs/manual/ATOS_OPERATOR_MANUAL.md`
+- Administrator manual source: `docs/manual/ATOS_ADMINISTRATOR_MANUAL.md`
+- Dashboard Help Center: `/help`
+- Operator PDF: `docs/manual/pdf/ATOS_OPERATOR_MANUAL_v1.0.pdf`
+- Administrator PDF: `docs/manual/pdf/ATOS_ADMINISTRATOR_MANUAL_v1.0.pdf`
+
+Build or refresh manual PDFs:
+
+```bash
+PYTHONPATH=backend .venv/bin/python scripts/build_manual_pdf.py
+```
+
+Permission model:
+
+- Viewer / Reviewer / Operator can view the operator manual.
+- Administrator can view both operator and administrator manuals.
+- Sensitive administrator sections such as Worker Token, Backup / Restore, production secrets, and security settings are not shown to non-admin roles.
+
 ## Sprint Report
 
 See:

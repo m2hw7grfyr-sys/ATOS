@@ -15,6 +15,7 @@ from app.api import (
     data_sources,
     engagement,
     execution,
+    help,
     health,
     intelligence,
     platform_selectors,
@@ -79,6 +80,7 @@ app.include_router(ai.router)
 app.include_router(ai_runtime.router)
 app.include_router(scheduler.router)
 app.include_router(execution.router)
+app.include_router(help.router)
 app.include_router(submission.router)
 app.include_router(submission.task_router)
 app.include_router(submission.stats_router)

@@ -32,6 +32,10 @@ Branch: `release/v1.0.0`
 - Dashboard version card now displays `ATOS v1.0.0-rc.1`.
 - Known limitations were frozen for v1.0 scope.
 - Final release reports and release notes were added.
+- Help Center added to Dashboard navigation at `/help`.
+- Operator Manual Access added for Viewer / Reviewer / Operator / Administrator roles.
+- Administrator manual entry restricted to Administrator role.
+- Manual PDF Export added for operator and administrator manuals.
 
 ## Known Issues
 
@@ -48,4 +52,3 @@ Reason: Sprint 16 requires all tests to pass before creating `v1.0.0-rc.1`; Dock
 ## Next Step
 
 Run Docker/fresh-install validation on a Docker-enabled staging host. If it passes, create and push tag `v1.0.0-rc.1`.
-
