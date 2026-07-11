@@ -1,8 +1,8 @@
 # ATOS Operator Manual
 
-Version: 0.1
+Version: 1.0.0-rc.1
 
-Status: Draft
+Status: v1.0 Release Candidate
 
 Audience: Operator / Reviewer / Administrator
 

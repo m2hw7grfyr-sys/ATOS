@@ -420,7 +420,7 @@ function DashboardPage() {
   const cards = data
     ? [
         { label: "Posts", value: data.overview.posts, icon: Search, tone: "text-cyan" },
-        { label: "Version", value: data.overview.version ?? "—", icon: Settings, tone: "text-blue-700" },
+        { label: "Version", value: data.overview.version ? `ATOS v${data.overview.version}` : "—", icon: Settings, tone: "text-blue-700" },
         { label: "Environment", value: data.overview.environment ?? "—", icon: ShieldCheck, tone: "text-teal" },
         {
           label: "Emergency Stop",

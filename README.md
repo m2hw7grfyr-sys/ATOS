@@ -588,6 +588,7 @@ docs/sprints/Sprint-12.md
 docs/sprints/Sprint-13.md
 docs/sprints/Sprint-14.md
 docs/sprints/Sprint-15.md
+docs/sprints/Sprint-16.md
 docs/SUBMISSION_RUNTIME.md
 docs/SUBMISSION_HARDENING.md
 docs/AUTO_ASSISTED_MODE.md
@@ -597,7 +598,9 @@ docs/PRODUCTION_CHECKLIST.md
 docs/KNOWN_LIMITATIONS.md
 docs/WORKER_TOKEN_SECURITY.md
 docs/manual/ATOS_ADMINISTRATOR_MANUAL.md
-docs/releases/RELEASE_NOTES_v1.0_draft.md
+docs/releases/RELEASE_NOTES_v1.0.md
+docs/releases/v1.0/FINAL_QA_REPORT.md
+docs/ROADMAP_v1.1.md
 docs/platforms/X_ADAPTER.md
 ```
 

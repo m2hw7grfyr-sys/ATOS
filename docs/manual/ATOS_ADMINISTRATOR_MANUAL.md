@@ -1,6 +1,8 @@
 # ATOS Administrator Manual
 
-Status: Sprint 15
+Status: v1.0 Release Candidate
+
+Version: 1.0.0-rc.1
 
 ## 1. System Configuration
 

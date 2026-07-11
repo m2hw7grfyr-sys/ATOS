@@ -11,7 +11,7 @@ ROOT_DIR = BACKEND_DIR.parent
 
 class Settings(BaseSettings):
     app_name: str = "ATOS API"
-    app_version: str = "0.15.0-production-foundation"
+    app_version: str = "1.0.0-rc.1"
     app_env: str = "development"
     debug: bool = False
     database_url: str = f"sqlite:///{BACKEND_DIR / 'atos.db'}"

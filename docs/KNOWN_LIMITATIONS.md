@@ -1,8 +1,10 @@
 # ATOS Known Limitations
 
-## Reddit / X Current Scope
+## v1.0 Supported Platforms
 
-Reddit and X support semi-auto reply preparation flows and adapter scaffolds.
+ATOS v1.0 supports Reddit and X as the release platforms.
+
+Reddit and X support semi-auto reply preparation flows and adapter-backed test mode.
 
 The system can prepare, schedule, and track reply tasks. Real platform behavior depends on login state, selectors, and browser profile health.
 
@@ -30,13 +32,15 @@ FULL_AUTO is not open for production operation.
 
 ## Reserved Platforms
 
-Facebook, Instagram, and TikTok currently have scaffold adapters only.
+Facebook, Instagram, and TikTok currently have scaffold adapters only. They are not v1.0 supported production platforms.
 
 ## Platform Page Changes
 
 External platform DOM and UI changes may break selectors.
 
 Platform adapters and selector registries must be maintained continuously.
+
+ATOS v1.0 does not guarantee that third-party platform pages remain stable over time.
 
 ## Login State
 
@@ -46,6 +50,8 @@ Real production runs require manual validation of:
 - proxy health
 - TGE profile health
 - browser session stability
+
+Real platform login state must be maintained by the operator.
 
 ## Backup Adapters
 
