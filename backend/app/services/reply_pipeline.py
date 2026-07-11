@@ -21,6 +21,7 @@ from app.services.audit import write_audit
 from app.services.browser_runtime import BrowserRuntime
 from app.services.execution import ExecutionRuntime, execution_log, profile_for_account, run_precheck, set_execution_status, utc_now
 from app.services.platform_runtime import PlatformCapabilityError, PlatformRuntime
+from app.services.reply_template_strategy import TemplateSelectionEngine
 from app.services.scheduler import set_status
 from app.services.submission_runtime import SubmissionRuntime
 
@@ -48,6 +49,7 @@ class ReplyPipelineService:
         account_id: int | None = None,
         execution_mode: str = EXECUTION_MODE_SEMI_AUTO,
         status: str = "CREATED",
+        reply_template_id: int | None = None,
     ) -> ReplyTask:
         execution_mode = execution_mode.upper()
         if execution_mode not in ALLOWED_EXECUTION_MODES:
@@ -61,6 +63,13 @@ class ReplyPipelineService:
         if not post:
             raise ValueError("post not found")
         platform = self.db.get(Platform, post.platform_id) if post.platform_id else None
+        platform_key = platform.slug if platform else None
+        selection = TemplateSelectionEngine(self.db, actor=self.actor, trace_id=self.trace_id).select(
+            platform=platform_key or "reddit",
+            post_score=70,
+            risk_score=0,
+            operator_preference=reply_template_id,
+        )
         existing = self.db.scalar(
             select(ReplyTask).where(
                 ReplyTask.reply_id == reply.id,
@@ -74,19 +83,21 @@ class ReplyPipelineService:
                 existing.account_id = account_id
             existing.reply_content = reply.content
             existing.execution_mode = execution_mode
+            TemplateSelectionEngine(self.db, actor=self.actor, trace_id=self.trace_id).apply_to_reply_task(existing, selection)
             return existing
         task = ReplyTask(
             post_id=post.id,
             reply_id=reply.id,
-            platform=platform.slug if platform else None,
+            platform=platform_key,
             account_id=account_id,
             reply_content=reply.content,
             execution_mode=execution_mode,
             status=status,
         )
+        TemplateSelectionEngine(self.db, actor=self.actor, trace_id=self.trace_id).apply_to_reply_task(task, selection)
         self.db.add(task)
         self.db.flush()
-        self._audit("ReplyTaskCreated", task, {"reply_id": reply.id, "post_id": post.id})
+        self._audit("ReplyTaskCreated", task, {"reply_id": reply.id, "post_id": post.id, "reply_template_id": task.reply_template_id})
         return task
 
     def approve_reply(
@@ -95,6 +106,7 @@ class ReplyPipelineService:
         reply_id: int,
         account_id: int | None = None,
         execution_mode: str = EXECUTION_MODE_SEMI_AUTO,
+        reply_template_id: int | None = None,
     ) -> ReplyTask:
         reply = self.db.get(Reply, reply_id)
         if not reply:
@@ -109,10 +121,16 @@ class ReplyPipelineService:
             account_id=account_id,
             execution_mode=execution_mode,
             status="APPROVED",
+            reply_template_id=reply_template_id,
         )
+        allowed, reason = TemplateSelectionEngine(self.db, actor=self.actor, trace_id=self.trace_id).validate_approval(task)
+        if not allowed:
+            self._audit("Platform Rule Blocked", task, {"reason": reason, "reply_template_id": task.reply_template_id})
+            raise ValueError(reason)
         task.status = "APPROVED"
         task.reply_content = reply.content
-        self._audit("ReplyApproved", task, {"reply_id": reply.id, "execution_mode": execution_mode})
+        TemplateSelectionEngine(self.db, actor=self.actor, trace_id=self.trace_id).record_performance(task, "approved_count")
+        self._audit("ReplyApproved", task, {"reply_id": reply.id, "execution_mode": execution_mode, "reply_template_id": task.reply_template_id})
         return task
 
     def schedule_reply_task(
@@ -421,6 +439,10 @@ class ReplyPipelineService:
             "tge_profile_id": profile.id if profile else None,
             "reply_content": reply_task.reply_content,
             "execution_mode": reply_task.execution_mode,
+            "reply_template_id": reply_task.reply_template_id,
+            "funnel_intent": reply_task.funnel_intent,
+            "cta_strength": reply_task.cta_strength,
+            "template_selection_reason": reply_task.template_selection_reason,
             "capability_required": "REPLY",
             "metadata": metadata or {},
         }

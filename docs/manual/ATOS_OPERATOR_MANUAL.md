@@ -931,7 +931,139 @@ Run AUTO_ASSISTED Now
 
 ---
 
-## 20. 推荐每日检查清单
+## 20. 回复模板与漏斗策略
+
+ATOS 当前内置五类中文回复模板：
+
+1. `纯帮助，不引流`
+2. `软引导主页`
+3. `引导到大号`
+4. `直接外链`
+5. `不引导，信任建设`
+
+### 20.1 五类模板含义
+
+`纯帮助，不引流`
+
+- 只回答问题。
+- 不提主页。
+- 不提链接。
+- 不提产品。
+- 不引导私信。
+
+`软引导主页`
+
+- 先完整回答。
+- 结尾只允许轻提示主页或置顶内容。
+- 不直接放外链。
+
+`引导到大号`
+
+- 更适合 X。
+- 可以自然提到主账号或 thread。
+- 不要过度营销。
+
+`直接外链`
+
+- 属于高风险模板。
+- 只在平台规则允许时使用。
+- 默认不适合 Reddit。
+
+`不引导，信任建设`
+
+- 只做真实互动。
+- 重点是共情、经验和补充信息。
+
+### 20.2 Reddit 推荐模板
+
+Reddit 默认推荐：
+
+- `纯帮助，不引流`
+- `不引导，信任建设`
+- 少量 `软引导主页`
+
+Reddit 默认阻止：
+
+- `直接外链`
+
+### 20.3 X 推荐模板
+
+X 默认允许：
+
+- `纯帮助，不引流`
+- `软引导主页`
+- `引导到大号`
+- 限量 `直接外链`
+
+直接外链仍然是高风险模板，不默认进入 AUTO_ASSISTED。
+
+### 20.4 如何切换模板
+
+进入 AI Workspace。
+
+在顶部选择：
+
+Reply Template
+
+可以选择：
+
+- 系统推荐模板
+- 指定某个中文模板
+
+生成或重新生成回复时，系统会把模板指令传给 AI Runtime。
+
+### 20.5 审核时看什么
+
+审核 Reply Task 时重点检查：
+
+- 模板类型
+- Funnel Intent
+- CTA Strength
+- 平台是否允许
+- 风险等级
+- 推荐理由
+
+如果模板被平台规则禁止，Approve 会失败。
+
+### 20.6 高风险模板提示
+
+高风险模板包括：
+
+- `直接外链`
+
+遇到高风险模板：
+
+- 优先保留 SEMI_AUTO。
+- 不要默认开启 AUTO_ASSISTED。
+- 检查平台规则和账号状态。
+
+### 20.7 模板效果统计
+
+进入 System Settings。
+
+查看：
+
+Reply Templates
+
+Platform Template Rules
+
+Template Performance
+
+Dashboard 也会显示：
+
+- 今日模板生成数
+- 今日模板验证数
+- 模板成功率
+- 高风险模板使用次数
+- 涉及平台数量
+
+详细架构见：
+
+`docs/REPLY_TEMPLATE_STRATEGY.md`
+
+---
+
+## 21. 推荐每日检查清单
 
 - Dashboard 无大量红色异常。
 - Data Center 最近采集成功。
@@ -945,7 +1077,7 @@ Run AUTO_ASSISTED Now
 
 ---
 
-## 21. 版本边界
+## 22. 版本边界
 
 当前 ATOS 已具备：
 
@@ -962,6 +1094,7 @@ Run AUTO_ASSISTED Now
 - X Adapter v1 semi-auto flow。
 - Cross-platform Submission Hardening。
 - AUTO_ASSISTED Test Mode scaffold。
+- Reply Template & Funnel Strategy Layer。
 
 当前 ATOS 尚未实现：
 

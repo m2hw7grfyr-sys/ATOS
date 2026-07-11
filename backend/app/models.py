@@ -297,6 +297,61 @@ class Reply(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="GENERATED", index=True)
 
 
+class ReplyTemplate(Base, TimestampMixin):
+    __tablename__ = "reply_templates"
+    __table_args__ = (UniqueConstraint("funnel_intent", name="uq_reply_template_funnel_intent"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    name_cn: Mapped[str] = mapped_column(String(120), index=True)
+    name_en: Mapped[str] = mapped_column(String(120), index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    funnel_intent: Mapped[str] = mapped_column(String(60), index=True)
+    cta_strength: Mapped[str] = mapped_column(String(30), default="NONE", index=True)
+    default_platforms: Mapped[list] = mapped_column(JSON, default=list)
+    risk_level: Mapped[str] = mapped_column(String(40), default="LOW", index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class PlatformTemplateRule(Base, TimestampMixin):
+    __tablename__ = "platform_template_rules"
+    __table_args__ = (UniqueConstraint("platform", "template_id", name="uq_platform_template_rule"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("reply_templates.id"), index=True)
+    allowed: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    default_enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    max_daily_ratio: Mapped[float] = mapped_column(Float, default=1.0)
+    risk_level: Mapped[str] = mapped_column(String(40), default="LOW", index=True)
+    allow_auto_assisted: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
+class ReplyTemplatePerformance(Base, TimestampMixin):
+    __tablename__ = "reply_template_performance"
+    __table_args__ = (UniqueConstraint("template_id", "platform", "date", name="uq_template_performance_day"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=new_uuid, unique=True, index=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("reply_templates.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(80), index=True)
+    date: Mapped[str] = mapped_column(String(10), index=True)
+    generated_count: Mapped[int] = mapped_column(Integer, default=0)
+    approved_count: Mapped[int] = mapped_column(Integer, default=0)
+    submitted_count: Mapped[int] = mapped_column(Integer, default=0)
+    verified_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    engagement_count: Mapped[int] = mapped_column(Integer, default=0)
+    conversion_count: Mapped[int] = mapped_column(Integer, default=0)
+    success_rate: Mapped[float] = mapped_column(Float, default=0)
+    failure_rate: Mapped[float] = mapped_column(Float, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
+
+
 class ReplyTask(Base, TimestampMixin):
     __tablename__ = "reply_tasks"
 
@@ -309,6 +364,14 @@ class ReplyTask(Base, TimestampMixin):
     platform: Mapped[Optional[str]] = mapped_column(String(80), index=True)
     account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), index=True)
     reply_content: Mapped[str] = mapped_column(Text)
+    reply_template_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reply_templates.id"), index=True)
+    funnel_intent: Mapped[Optional[str]] = mapped_column(String(60), index=True)
+    cta_strength: Mapped[Optional[str]] = mapped_column(String(30), index=True)
+    template_selection_reason: Mapped[Optional[str]] = mapped_column(Text)
+    link_allowed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    profile_redirect_allowed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    main_account_redirect_allowed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    direct_link_allowed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     execution_mode: Mapped[str] = mapped_column(String(40), default="SEMI_AUTO", index=True)
     status: Mapped[str] = mapped_column(String(40), default="CREATED", index=True)
 

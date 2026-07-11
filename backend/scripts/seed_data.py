@@ -42,6 +42,7 @@ from app.models import (
     ReplyScore,
     ReplySimilarity,
     ReplyTask,
+    ReplyTemplatePerformance,
     ReplayFile,
     ReplayIndex,
     SchedulerTask,
@@ -58,9 +59,10 @@ from app.models import (
     WorkerLog,
     WorkerNode,
 )
+from app.services.reply_template_strategy import TemplateSelectionEngine, ensure_reply_template_seed
 
 
-SEED_VERSION = "sprint-13-auto-assisted-stabilization"
+SEED_VERSION = "sprint-14-reply-template-strategy"
 
 
 def main() -> None:
@@ -224,6 +226,7 @@ def main() -> None:
             )
 
         now = datetime.now(timezone.utc)
+        ensure_reply_template_seed(db)
         post_specs = [
             ("reddit", 0, "ADHD", "focus_builder", "How do you keep a routine when every day feels different?", "I have tried several planners but stop using them after a week.", ["routine", "question"], "WAITING_REVIEW"),
             ("reddit", 0, "productivity", "workflow_notes", "Looking for a calmer way to manage recurring tasks", "Most tools feel too complicated for my small team.", ["workflow", "purchase_intent"], "SCHEDULED"),
@@ -571,6 +574,16 @@ def main() -> None:
                 reply_task.account_id = reply_task.account_id or account.id
                 reply_task.reply_content = reply.content
                 reply_task.execution_mode = reply_task.execution_mode or "SEMI_AUTO"
+            template_engine = TemplateSelectionEngine(db, actor="seed")
+            selection = template_engine.select(
+                platform=reply_task.platform or "reddit",
+                post_score=75 if index % 3 == 0 else 60,
+                risk_score=10 if index < 4 else 30,
+            )
+            template_engine.apply_to_reply_task(reply_task, selection)
+            template_engine.record_performance(reply_task, "generated_count")
+            if reply_task.status in {"APPROVED", "SCHEDULED", "EXECUTING", "WAITING_MANUAL", "CONFIRMED"}:
+                template_engine.record_performance(reply_task, "approved_count")
             item = db.scalar(
                 select(SchedulerTask).where(
                     SchedulerTask.task_type == task_type,
@@ -979,6 +992,15 @@ def main() -> None:
                 reply_task.reply_content = reply.content
                 reply_task.execution_mode = "SEMI_AUTO"
                 reply_task.status = x_statuses[index - 1]
+            template_engine = TemplateSelectionEngine(db, actor="seed")
+            selection = template_engine.select(
+                platform="x",
+                post_score=82,
+                risk_score=8,
+            )
+            template_engine.apply_to_reply_task(reply_task, selection)
+            template_engine.record_performance(reply_task, "generated_count")
+            template_engine.record_performance(reply_task, "approved_count")
             scheduler_task = db.scalar(
                 select(SchedulerTask).where(
                     SchedulerTask.reply_task_id == reply_task.id,
@@ -1045,6 +1067,15 @@ def main() -> None:
                 db.add(ReplayFile(execution_task_id=execution.id, after_fill_screenshot_path=f"storage/replay/{execution.uuid}/after_fill.png"))
                 db.add(ReplayIndex(execution_task_id=execution.id, status="INDEXED", artifact_count=1, manifest_json={"seed": True, "platform": "x"}))
             reply_task.execution_task_id = execution.id
+
+        template_engine = TemplateSelectionEngine(db, actor="seed")
+        for reply_task in db.scalars(select(ReplyTask).where(ReplyTask.reply_template_id.is_not(None))).all():
+            if reply_task.status in {"EXECUTING", "WAITING_MANUAL", "CONFIRMED"}:
+                template_engine.record_performance(reply_task, "submitted_count")
+            if reply_task.status == "CONFIRMED":
+                template_engine.record_performance(reply_task, "verified_count")
+            if reply_task.status == "FAILED":
+                template_engine.record_performance(reply_task, "failed_count")
 
         worker = db.scalar(select(WorkerNode).where(WorkerNode.name == "local-worker"))
         if not worker:

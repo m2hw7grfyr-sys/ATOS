@@ -1,10 +1,11 @@
 import unittest
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Account, AutoAssistedPlatformConfig, BrowserSession, ExecutionTask, Platform, PlatformRegistry, Post, Reply, ReplyTask, SchedulerTask, SubmissionTask, WorkerNode
+from app.models import Account, AutoAssistedPlatformConfig, BrowserSession, ExecutionTask, Platform, PlatformRegistry, Post, Reply, ReplyTask, ReplyTemplate, SchedulerTask, SubmissionTask, WorkerNode
+from app.services.reply_template_strategy import ensure_reply_template_seed
 from app.services.submission_runtime import SubmissionRuntime, get_submission_settings, save_submission_settings
 
 
@@ -17,6 +18,8 @@ class SubmissionRuntimeTest(unittest.TestCase):
         self.platform = Platform(name="Reddit", slug="reddit", adapter_key="reddit")
         self.db.add(self.platform)
         self.db.flush()
+        ensure_reply_template_seed(self.db)
+        self.safe_template = self.db.scalar(select(ReplyTemplate).where(ReplyTemplate.funnel_intent == "NO_CTA"))
         self.registry = PlatformRegistry(
             platform_name="reddit",
             adapter_name="RedditAdapter",
@@ -69,6 +72,9 @@ class SubmissionRuntimeTest(unittest.TestCase):
             reply_content=self.reply.content,
             execution_mode="SEMI_AUTO",
             status="WAITING_MANUAL",
+            reply_template_id=self.safe_template.id if self.safe_template else None,
+            funnel_intent="NO_CTA",
+            cta_strength="NONE",
         )
         self.db.add(self.reply_task)
         self.db.flush()

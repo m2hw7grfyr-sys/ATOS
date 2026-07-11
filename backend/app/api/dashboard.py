@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models import AIGenerationLog, AITask, Account, BrowserSession, BrowserTab, ContentPerformance, DataSource, EngagementTask, ExecutionQueue, ExecutionTask, IntelligenceRecommendation, LLMProvider, Platform, PlatformRegistry, Post, Reply, ReplyScore, ReplyTask, SchedulerTask, StatisticSnapshot, SubmissionTask, SystemAlert, TGEProfile, TimePerformance, WorkerNode
 from app.response import ok
 from app.services.submission_runtime import SubmissionRuntime
+from app.services.reply_template_strategy import TemplateSelectionEngine
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -42,6 +43,7 @@ def summary(request: Request, db: Session = Depends(get_db)):
     pipeline_total = count(Post)
     pipeline_success_rate = round((pipeline_scheduled / max(pipeline_total, 1)) * 100, 2)
     submission_overview = SubmissionRuntime(db).dashboard_counts()
+    template_overview = TemplateSelectionEngine(db).dashboard()
 
     return ok(
         {
@@ -142,6 +144,7 @@ def summary(request: Request, db: Session = Depends(get_db)):
                     SubmissionTask, SubmissionTask.status == "MANUAL_REQUIRED"
                 ),
                 **submission_overview,
+                **template_overview,
                 "active_platforms": count(PlatformRegistry, PlatformRegistry.enabled.is_(True)),
                 "healthy_platforms": count(PlatformRegistry, PlatformRegistry.status.in_(["HEALTHY", "UNKNOWN"])),
                 "failed_adapters": count(PlatformRegistry, PlatformRegistry.status.in_(["ERROR", "FAILED"])),

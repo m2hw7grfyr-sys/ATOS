@@ -248,6 +248,7 @@ class ReplyGenerateRequest(BaseModel):
     strategy: str = "EDUCATION"
     tone: str = "supportive"
     variables: dict[str, Any] = Field(default_factory=dict)
+    reply_template_id: Optional[int] = None
 
 
 class ReplyUpdate(BaseModel):
@@ -309,6 +310,7 @@ class PromptPreviewRequest(BaseModel):
     strategy: str = "PURE_HELP"
     tone: str = "supportive"
     variables: dict[str, Any] = Field(default_factory=dict)
+    reply_template_id: Optional[int] = None
 
 
 class PlatformSelectorCreate(BaseModel):

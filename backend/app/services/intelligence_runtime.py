@@ -24,6 +24,8 @@ from app.models import (
     ReplyTask,
     ReplyScore,
     ReplySimilarity,
+    ReplyTemplate,
+    ReplyTemplatePerformance,
     SchedulerTask,
     StrategyPerformance,
     TimePerformance,
@@ -309,6 +311,22 @@ class IntelligenceRuntime:
                     priority="HIGH",
                 )
             )
+        best_template = self.db.scalar(
+            select(ReplyTemplatePerformance)
+            .where(ReplyTemplatePerformance.submitted_count > 0)
+            .order_by(ReplyTemplatePerformance.success_rate.desc(), ReplyTemplatePerformance.verified_count.desc())
+        )
+        if best_template:
+            template = self.db.get(ReplyTemplate, best_template.template_id)
+            recommendations.append(
+                self.upsert_recommendation(
+                    "TEMPLATE_STRATEGY",
+                    "Best reply template by platform",
+                    f"{best_template.platform} currently performs best with {template.name_cn if template else best_template.template_id}.",
+                    best_template.success_rate,
+                    {"template_id": best_template.template_id, "platform": best_template.platform},
+                )
+            )
         return recommendations
 
     def dashboard(self) -> dict[str, Any]:
@@ -318,6 +336,7 @@ class IntelligenceRuntime:
             "best_accounts": [self.serialize(item) for item in self.db.scalars(select(AccountPerformance).order_by(AccountPerformance.average_score.desc()).limit(5)).all()],
             "best_time": [self.serialize(item) for item in self.db.scalars(select(TimePerformance).order_by(TimePerformance.success_rate.desc()).limit(5)).all()],
             "platform_ranking": [self.serialize(item) for item in self.db.scalars(select(PlatformPerformance).order_by(PlatformPerformance.average_score.desc()).limit(5)).all()],
+            "template_performance": self.template_performance(),
             "funnel": self.funnel(),
         }
 
@@ -328,7 +347,25 @@ class IntelligenceRuntime:
             "account": [self.serialize(item) for item in self.db.scalars(select(AccountPerformance).order_by(AccountPerformance.average_score.desc())).all()],
             "platform": [self.serialize(item) for item in self.db.scalars(select(PlatformPerformance).order_by(PlatformPerformance.average_score.desc())).all()],
             "time": [self.serialize(item) for item in self.db.scalars(select(TimePerformance).order_by(TimePerformance.success_rate.desc()).limit(24)).all()],
+            "templates": self.template_performance(),
         }
+
+    def template_performance(self) -> list[dict[str, Any]]:
+        rows = self.db.scalars(
+            select(ReplyTemplatePerformance).order_by(
+                ReplyTemplatePerformance.success_rate.desc(),
+                ReplyTemplatePerformance.verified_count.desc(),
+            )
+        ).all()
+        result = []
+        for row in rows:
+            item = self.serialize(row)
+            template = self.db.get(ReplyTemplate, row.template_id)
+            item["template_name_cn"] = template.name_cn if template else None
+            item["funnel_intent"] = template.funnel_intent if template else None
+            item["risk_level"] = template.risk_level if template else None
+            result.append(item)
+        return result
 
     def funnel(self) -> dict[str, int]:
         return {

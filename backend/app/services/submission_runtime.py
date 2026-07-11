@@ -31,6 +31,7 @@ from app.services.audit import write_audit
 from app.services.browser_runtime import BrowserRuntime
 from app.services.execution import execution_log, set_execution_status
 from app.services.platform_runtime import PlatformRuntime
+from app.services.reply_template_strategy import TemplateSelectionEngine
 
 
 SUBMISSION_SETTING_KEY = "execution.submission"
@@ -321,6 +322,12 @@ class ExecutionPolicyEngine:
             reasons.append("No approved reply task is linked")
         elif reply_task.status not in {"APPROVED", "SCHEDULED", "EXECUTING", "WAITING_MANUAL", "SUBMITTED", "CONFIRMED"}:
             reasons.append(f"Reply task is not approved: {reply_task.status}")
+        elif reply_task.reply_template_id:
+            allowed, reason = TemplateSelectionEngine(self.db).auto_assisted_allowed(reply_task)
+            if not allowed:
+                reasons.append(reason)
+        else:
+            reasons.append("Reply task has no template; AUTO_ASSISTED requires template risk check")
         platform_config = self.db.scalar(
             select(AutoAssistedPlatformConfig).where(AutoAssistedPlatformConfig.platform == platform)
         )
@@ -569,6 +576,7 @@ class SubmissionRuntime:
         if task.status == "VERIFIED":
             self.set_status(task, "COMPLETED", reason="AUTO_ASSISTED submit verified and completed.")
             self._increment_auto_submit(task)
+            self._record_template_result(task, submitted=True, verified=True)
         self._audit("SubmissionSubmitted", task, {"old_status": old_status, "new_status": task.status})
         return task
 
@@ -619,6 +627,7 @@ class SubmissionRuntime:
         else:
             task.verification_level = task.verification_level or "MANUAL_CONFIRMED"
             task.verification_status = task.verification_status or task.verification_level
+        self._record_template_result(task, submitted=True, verified=task.status in {"VERIFIED", "COMPLETED"})
         if execution:
             payload = execution.payload_json or {}
             execution.payload_json = {
@@ -711,6 +720,7 @@ class SubmissionRuntime:
             screenshot_path=self.screenshot_path(task, "failure"),
             html_snapshot_path=self.html_snapshot_path(task, normalized),
         )
+        self._record_template_result(task, failed=True)
 
     def mark_failed(self, task_id: int, failure_reason: str) -> SubmissionTask:
         if not failure_reason:
@@ -1064,6 +1074,18 @@ class SubmissionRuntime:
             limit.last_reset_at = utc_now()
         limit.auto_submitted_today += 1
         self.log(task, "AUTO_SUBMIT_LIMIT_UPDATED", "Account daily AUTO_ASSISTED counter incremented.", metadata={"auto_submitted_today": limit.auto_submitted_today})
+
+    def _record_template_result(self, task: SubmissionTask, *, submitted: bool = False, verified: bool = False, failed: bool = False) -> None:
+        reply_task = self.db.get(ReplyTask, task.reply_task_id) if task.reply_task_id else None
+        if not reply_task:
+            return
+        engine = TemplateSelectionEngine(self.db)
+        if submitted:
+            engine.record_performance(reply_task, "submitted_count")
+        if verified:
+            engine.record_performance(reply_task, "verified_count")
+        if failed:
+            engine.record_performance(reply_task, "failed_count")
 
     def _task(self, task_id: int) -> SubmissionTask:
         task = self.db.get(SubmissionTask, task_id)

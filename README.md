@@ -563,8 +563,22 @@ docs/sprints/Sprint-10.md
 docs/sprints/Sprint-11.md
 docs/sprints/Sprint-12.md
 docs/sprints/Sprint-13.md
+docs/sprints/Sprint-14.md
 docs/SUBMISSION_RUNTIME.md
 docs/SUBMISSION_HARDENING.md
 docs/AUTO_ASSISTED_MODE.md
+docs/REPLY_TEMPLATE_STRATEGY.md
 docs/platforms/X_ADAPTER.md
 ```
+
+## Reply Template Strategy
+
+Sprint 14 adds five built-in Chinese reply templates and platform rules:
+
+- `纯帮助，不引流`
+- `软引导主页`
+- `引导到大号`
+- `直接外链`
+- `不引导，信任建设`
+
+Use AI Workspace to select a template before generating or approving a reply. Use System Settings -> Reply Templates to manage template risk, platform rules, daily ratios, and AUTO_ASSISTED eligibility.

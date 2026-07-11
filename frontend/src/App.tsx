@@ -169,6 +169,11 @@ type DashboardData = {
     x_failed?: number;
     manual_confirmed_today?: number;
     retry_pending?: number;
+    template_generated_today?: number;
+    template_verified_today?: number;
+    template_success_rate?: number;
+    high_risk_template_usage?: number;
+    template_platforms?: number;
   };
   platform_health: Array<{
     name: string;
@@ -766,6 +771,36 @@ function DashboardPage() {
           value: data.overview.retry_pending ?? 0,
           icon: RefreshCw,
           tone: "text-blue-700",
+        },
+        {
+          label: "Template Generated",
+          value: data.overview.template_generated_today ?? 0,
+          icon: Sparkles,
+          tone: "text-teal",
+        },
+        {
+          label: "Template Verified",
+          value: data.overview.template_verified_today ?? 0,
+          icon: ShieldCheck,
+          tone: "text-emerald-700",
+        },
+        {
+          label: "Template Success",
+          value: `${data.overview.template_success_rate ?? 0}%`,
+          icon: ChartNoAxesCombined,
+          tone: "text-blue-700",
+        },
+        {
+          label: "High Risk Templates",
+          value: data.overview.high_risk_template_usage ?? 0,
+          icon: CircleAlert,
+          tone: "text-red-700",
+        },
+        {
+          label: "Template Platforms",
+          value: data.overview.template_platforms ?? 0,
+          icon: SlidersHorizontal,
+          tone: "text-cyan",
         },
       ]
     : [];
@@ -1370,9 +1405,11 @@ function PostPoolPage() {
 function AIWorkspacePage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/ai/tasks");
   const posts = useApiData<PagedRecords>("/posts?page_size=100");
+  const replyTemplates = useApiData<RecordItem[]>("/reply-templates");
   const [postId, setPostId] = useState("1");
   const [strategy, setStrategy] = useState("PURE_HELP");
   const [tone, setTone] = useState("supportive");
+  const [templateId, setTemplateId] = useState("");
   const [feedback, setFeedback] = useState("");
   const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
   const [promptPreview, setPromptPreview] = useState<RecordItem | null>(null);
@@ -1393,7 +1430,12 @@ function AIWorkspacePage() {
     try {
       await apiRequest(`/ai/tasks/${Number(postId)}/generate-reply`, {
         method: "POST",
-        body: JSON.stringify({ strategy, tone, variables: {} }),
+        body: JSON.stringify({
+          strategy,
+          tone,
+          variables: {},
+          reply_template_id: templateId ? Number(templateId) : undefined,
+        }),
       });
       setFeedback("回复草稿已生成，等待人工审核。");
       await reload();
@@ -1406,7 +1448,12 @@ function AIWorkspacePage() {
     try {
       await apiRequest(`/ai/tasks/${String(task.id)}/regenerate`, {
         method: "POST",
-        body: JSON.stringify({ strategy: String(task.strategy ?? strategy), tone, variables: {} }),
+        body: JSON.stringify({
+          strategy: String(task.strategy ?? strategy),
+          tone,
+          variables: {},
+          reply_template_id: templateId ? Number(templateId) : (task.reply_task as RecordItem | undefined)?.reply_template_id,
+        }),
       });
       setFeedback("已重新生成回复草稿。");
       await reload();
@@ -1431,7 +1478,10 @@ function AIWorkspacePage() {
 
   async function approve(taskId: unknown) {
     try {
-      await apiRequest(`/ai/tasks/${String(taskId)}/approve`, { method: "POST" });
+      await apiRequest(`/ai/tasks/${String(taskId)}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ reply_template_id: templateId ? Number(templateId) : undefined }),
+      });
       setFeedback("任务已批准，可进入 Scheduler。");
       await reload();
     } catch (reason) {
@@ -1466,7 +1516,12 @@ function AIWorkspacePage() {
     try {
       const result = await apiRequest<RecordItem>(`/ai/tasks/${String(task.id)}/preview-prompt`, {
         method: "POST",
-        body: JSON.stringify({ strategy: String(task.strategy ?? strategy), tone, variables: {} }),
+        body: JSON.stringify({
+          strategy: String(task.strategy ?? strategy),
+          tone,
+          variables: {},
+          reply_template_id: templateId ? Number(templateId) : (task.reply_task as RecordItem | undefined)?.reply_template_id,
+        }),
       });
       setPromptPreview(result);
       setFeedback("Prompt Preview 已生成。");
@@ -1498,7 +1553,7 @@ function AIWorkspacePage() {
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-5">
-        <div className="panel grid gap-3 p-4 lg:grid-cols-[1fr_160px_160px_auto_auto]">
+        <div className="panel grid gap-3 p-4 lg:grid-cols-[1fr_170px_170px_220px_auto_auto]">
           <label className="min-w-64 flex-1 text-xs font-semibold text-gray-600">
             选择帖子
             <select className="field mt-2" value={postId} onChange={(e) => setPostId(e.target.value)}>
@@ -1524,6 +1579,17 @@ function AIWorkspacePage() {
               <option value="professional">Professional</option>
             </select>
           </label>
+          <label className="text-xs font-semibold text-gray-600">
+            回复模板
+            <select className="field mt-2" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+              <option value="">系统推荐模板</option>
+              {(replyTemplates.data ?? []).map((template) => (
+                <option key={String(template.id)} value={String(template.id)}>
+                  {String(template.name_cn)} · {String(template.risk_level)}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="button-secondary self-end" onClick={analyzeSelected}><BrainCircuit className="h-4 w-4" />Analyze</button>
           <button className="button self-end" onClick={generateSelected}><Sparkles className="h-4 w-4" />Generate</button>
         </div>
@@ -1547,6 +1613,22 @@ function AIWorkspacePage() {
                     <p className="mt-1 text-xs text-gray-500">
                       {String(task.provider)} · Commercial {String(task.commercial_score)} · Risk {String(task.risk_score)}
                     </p>
+                    {Boolean(task.reply_task || task.reply_template) && (
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded bg-gray-100 px-2 py-1 text-gray-700">
+                          模板：{String((task.reply_template as RecordItem | undefined)?.name_cn ?? (task.reply_task as RecordItem | undefined)?.funnel_intent ?? "系统推荐")}
+                        </span>
+                        <span className="rounded bg-gray-100 px-2 py-1 text-gray-700">
+                          意图：{String((task.reply_task as RecordItem | undefined)?.funnel_intent ?? "—")}
+                        </span>
+                        <span className="rounded bg-gray-100 px-2 py-1 text-gray-700">
+                          CTA：{String((task.reply_task as RecordItem | undefined)?.cta_strength ?? (task.reply_template as RecordItem | undefined)?.cta_strength ?? "—")}
+                        </span>
+                        <span className="rounded bg-gray-100 px-2 py-1 text-gray-700">
+                          风险：{String((task.reply_template as RecordItem | undefined)?.risk_level ?? "—")}
+                        </span>
+                      </div>
+                    )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1589,6 +1671,21 @@ function AIWorkspacePage() {
                       <p className="text-xs font-semibold uppercase text-gray-500">Summary</p>
                       <p className="mt-1 text-sm text-gray-700">{String((task.analysis as RecordItem).summary ?? "—")}</p>
                     </div>
+                  </div>
+                )}
+                {Boolean(task.reply_task) && (
+                  <div className="mt-4 grid gap-3 border-t border-line pt-3 md:grid-cols-4">
+                    {[
+                      ["Profile Allowed", (task.reply_task as RecordItem).profile_redirect_allowed],
+                      ["Main Account Allowed", (task.reply_task as RecordItem).main_account_redirect_allowed],
+                      ["Direct Link Allowed", (task.reply_task as RecordItem).direct_link_allowed],
+                      ["Reason", (task.reply_task as RecordItem).template_selection_reason],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded border border-line p-3">
+                        <p className="text-xs font-semibold uppercase text-gray-500">{String(label)}</p>
+                        <p className="mt-1 text-sm text-gray-700">{String(value ?? "—")}</p>
+                      </div>
+                    ))}
                   </div>
                 )}
                 {Boolean(task.reply) && (
@@ -2072,6 +2169,9 @@ function SettingsPage() {
   const { data, error, loading, reload } = useApiData<RecordItem[]>("/settings");
   const providers = useApiData<LLMProviderItem[]>("/settings/llm-providers");
   const providerRoutes = useApiData<RecordItem[]>("/settings/provider-routing");
+  const replyTemplates = useApiData<RecordItem[]>("/reply-templates");
+  const platformTemplateRules = useApiData<RecordItem[]>("/platform-template-rules");
+  const templatePerformance = useApiData<RecordItem[]>("/template-performance");
   const promptTemplates = useApiData<RecordItem[]>("/prompt-templates");
   const promptVersions = useApiData<RecordItem[]>("/prompt-versions");
   const schedulerSettings = useApiData<RecordItem>("/settings/scheduler");
@@ -2102,6 +2202,8 @@ function SettingsPage() {
   const [playwrightForm, setPlaywrightForm] = useState<Record<string, unknown>>({});
   const [submissionForm, setSubmissionForm] = useState<Record<string, unknown>>({});
   const [autoAssistedEdits, setAutoAssistedEdits] = useState<Record<string, Record<string, unknown>>>({});
+  const [replyTemplateEdits, setReplyTemplateEdits] = useState<Record<string, Record<string, unknown>>>({});
+  const [platformTemplateRuleEdits, setPlatformTemplateRuleEdits] = useState<Record<string, Record<string, unknown>>>({});
   const [selectorForm, setSelectorForm] = useState<Record<string, unknown>>({
     platform: "reddit",
     selector_key: "reply_box",
@@ -2468,6 +2570,28 @@ function SettingsPage() {
     }));
   }
 
+  function updateReplyTemplateEdit(template: RecordItem, key: string, value: unknown) {
+    const id = String(template.id);
+    setReplyTemplateEdits((current) => ({
+      ...current,
+      [id]: {
+        ...(current[id] ?? template),
+        [key]: value,
+      },
+    }));
+  }
+
+  function updatePlatformTemplateRuleEdit(rule: RecordItem, key: string, value: unknown) {
+    const id = String(rule.id);
+    setPlatformTemplateRuleEdits((current) => ({
+      ...current,
+      [id]: {
+        ...(current[id] ?? rule),
+        [key]: value,
+      },
+    }));
+  }
+
   function updateSelectorField(key: string, value: unknown) {
     setSelectorForm((current) => ({ ...current, [key]: value }));
   }
@@ -2551,6 +2675,58 @@ function SettingsPage() {
       await autoAssistedPlatforms.reload();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "保存平台 AUTO_ASSISTED 失败");
+    }
+  }
+
+  async function saveReplyTemplate(template: RecordItem) {
+    const id = String(template.id);
+    const edit = replyTemplateEdits[id] ?? template;
+    try {
+      await apiRequest(`/reply-templates/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          description: String(edit.description ?? ""),
+          risk_level: String(edit.risk_level ?? template.risk_level ?? "LOW"),
+          enabled: Boolean(edit.enabled),
+        }),
+      });
+      setFeedback("Reply Template 已保存。");
+      setReplyTemplateEdits((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      await replyTemplates.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存 Reply Template 失败");
+    }
+  }
+
+  async function savePlatformTemplateRule(rule: RecordItem) {
+    const id = String(rule.id);
+    const edit = platformTemplateRuleEdits[id] ?? rule;
+    try {
+      await apiRequest(`/platform-template-rules/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          allowed: Boolean(edit.allowed),
+          default_enabled: Boolean(edit.default_enabled),
+          allow_auto_assisted: Boolean(edit.allow_auto_assisted),
+          max_daily_ratio: Number(edit.max_daily_ratio ?? 0),
+          risk_level: String(edit.risk_level ?? "LOW"),
+          notes: String(edit.notes ?? ""),
+        }),
+      });
+      setFeedback("Platform Template Rule 已保存。");
+      setPlatformTemplateRuleEdits((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      await platformTemplateRules.reload();
+      await templatePerformance.reload();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "保存 Platform Rule 失败");
     }
   }
 
@@ -2917,6 +3093,81 @@ function SettingsPage() {
               })}</tbody>
             </table>
           </div>
+        </Section>
+        <Section title="Reply Templates">
+          <div className="panel overflow-x-auto">
+            <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["中文名称", "Intent", "CTA", "Risk", "Enabled", "Description", "Rules", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(replyTemplates.data ?? []).map((template) => {
+                const edit = replyTemplateEdits[String(template.id)] ?? template;
+                return (
+                  <tr key={String(template.id)} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3 font-semibold">{String(template.name_cn)}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{String(template.funnel_intent)}</td>
+                    <td className="px-4 py-3">{String(template.cta_strength)}</td>
+                    <td className="px-4 py-3">
+                      <select className="field min-w-32" value={String(edit.risk_level ?? "LOW")} onChange={(e) => updateReplyTemplateEdit(template, "risk_level", e.target.value)}>
+                        {["LOW", "LOW_MEDIUM", "MEDIUM", "HIGH", "CRITICAL"].map((level) => <option key={level} value={level}>{level}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3"><input type="checkbox" checked={Boolean(edit.enabled)} onChange={(e) => updateReplyTemplateEdit(template, "enabled", e.target.checked)} /></td>
+                    <td className="px-4 py-3"><input className="field min-w-80" value={String(edit.description ?? "")} onChange={(e) => updateReplyTemplateEdit(template, "description", e.target.value)} /></td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{Array.isArray(template.platform_rules) ? template.platform_rules.length : 0}</td>
+                    <td className="px-4 py-3"><button className="button-secondary" onClick={() => void saveReplyTemplate(template)}>保存</button></td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        </Section>
+        <Section title="Platform Template Rules">
+          <div className="panel overflow-x-auto">
+            <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
+                {["Platform", "Template", "Allowed", "Default", "AUTO_ASSISTED", "Daily Ratio", "Risk", "Notes", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+              </tr></thead>
+              <tbody>{(platformTemplateRules.data ?? []).map((rule) => {
+                const edit = platformTemplateRuleEdits[String(rule.id)] ?? rule;
+                return (
+                  <tr key={String(rule.id)} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3 uppercase text-teal">{String(rule.platform)}</td>
+                    <td className="px-4 py-3"><p className="font-semibold">{String(rule.template_name_cn)}</p><p className="text-xs text-gray-500">{String(rule.funnel_intent)}</p></td>
+                    <td className="px-4 py-3"><input type="checkbox" checked={Boolean(edit.allowed)} onChange={(e) => updatePlatformTemplateRuleEdit(rule, "allowed", e.target.checked)} /></td>
+                    <td className="px-4 py-3"><input type="checkbox" checked={Boolean(edit.default_enabled)} onChange={(e) => updatePlatformTemplateRuleEdit(rule, "default_enabled", e.target.checked)} /></td>
+                    <td className="px-4 py-3"><input type="checkbox" checked={Boolean(edit.allow_auto_assisted)} onChange={(e) => updatePlatformTemplateRuleEdit(rule, "allow_auto_assisted", e.target.checked)} /></td>
+                    <td className="px-4 py-3"><input className="field w-28" type="number" min="0" max="1" step="0.05" value={String(edit.max_daily_ratio ?? 0)} onChange={(e) => updatePlatformTemplateRuleEdit(rule, "max_daily_ratio", Number(e.target.value))} /></td>
+                    <td className="px-4 py-3">
+                      <select className="field min-w-32" value={String(edit.risk_level ?? "LOW")} onChange={(e) => updatePlatformTemplateRuleEdit(rule, "risk_level", e.target.value)}>
+                        {["LOW", "LOW_MEDIUM", "MEDIUM", "HIGH", "CRITICAL"].map((level) => <option key={level} value={level}>{level}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3"><input className="field min-w-72" value={String(edit.notes ?? "")} onChange={(e) => updatePlatformTemplateRuleEdit(rule, "notes", e.target.value)} /></td>
+                    <td className="px-4 py-3"><button className="button-secondary" onClick={() => void savePlatformTemplateRule(rule)}>保存</button></td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        </Section>
+        <Section title="Template Performance">
+          <DataTable
+            rows={templatePerformance.data ?? []}
+            columns={[
+              { key: "date", label: "Date" },
+              { key: "platform", label: "Platform" },
+              { key: "template_name_cn", label: "Template" },
+              { key: "funnel_intent", label: "Intent" },
+              { key: "generated_count", label: "Generated" },
+              { key: "approved_count", label: "Approved" },
+              { key: "submitted_count", label: "Submitted" },
+              { key: "verified_count", label: "Verified" },
+              { key: "failed_count", label: "Failed" },
+              { key: "success_rate", label: "Success %" },
+              { key: "failure_rate", label: "Failure %" },
+            ]}
+          />
         </Section>
         <Section
           title="LLM Providers"

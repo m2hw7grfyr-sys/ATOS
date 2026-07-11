@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from __future__ import annotations
+
+from typing import Optional
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import AIAnalysisResult, AITask, Post, Reply
+from app.models import AIAnalysisResult, AITask, Post, Reply, ReplyTask, ReplyTemplate
 from app.response import ok
 from app.schemas import AIBatchRequest, MockAIGenerateRequest, PromptPreviewRequest, ReplyGenerateRequest, ReplyUpdate
 from app.serializers import serialize_model
@@ -34,6 +38,18 @@ def serialize_task(task: AITask, db: Session) -> dict:
     serialized["reply"] = serialize_model(reply) if reply else None
     serialized["analysis"] = serialize_model(analysis) if analysis else None
     serialized["post"] = serialize_model(post) if post else None
+    reply_task = (
+        db.scalar(
+            select(ReplyTask)
+            .where(ReplyTask.reply_id == reply.id)
+            .order_by(ReplyTask.id.desc())
+        )
+        if reply
+        else None
+    )
+    template = db.get(ReplyTemplate, reply_task.reply_template_id) if reply_task and reply_task.reply_template_id else None
+    serialized["reply_task"] = serialize_model(reply_task) if reply_task else None
+    serialized["reply_template"] = serialize_model(template) if template else None
     return serialized
 
 
@@ -67,6 +83,7 @@ def generate_reply(
             strategy=payload.strategy,
             tone=payload.tone,
             variables=payload.variables,
+            reply_template_id=payload.reply_template_id,
         )
     except AIProviderError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -90,6 +107,7 @@ def regenerate_task(
         tone=payload.tone,
         variables=payload.variables,
         task_id=task.id,
+        reply_template_id=payload.reply_template_id,
     )
     return ok(serialize_task(result["task"], db), request.state.trace_id, "reply regenerated")
 
@@ -108,6 +126,7 @@ def preview_task_prompt(
             strategy=payload.strategy,
             tone=payload.tone,
             variables=payload.variables,
+            reply_template_id=payload.reply_template_id,
         )
     except AIProviderError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -131,7 +150,7 @@ def generate_mock(
 
 
 @router.post("/tasks/{task_id}/approve")
-def approve_task(task_id: int, request: Request, db: Session = Depends(get_db)):
+def approve_task(task_id: int, request: Request, payload: Optional[dict] = Body(default=None), db: Session = Depends(get_db)):
     task = db.get(AITask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="AI task not found")
@@ -143,7 +162,7 @@ def approve_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     if not reply:
         raise HTTPException(status_code=409, detail="AI task has no reply")
     reply_pipeline = ReplyPipelineService(db, actor="operator", trace_id=request.state.trace_id)
-    reply_task = reply_pipeline.approve_reply(reply_id=reply.id)
+    reply_task = reply_pipeline.approve_reply(reply_id=reply.id, reply_template_id=(payload or {}).get("reply_template_id"))
     task.status = "APPROVED"
     post = db.get(Post, task.post_id)
     if post:

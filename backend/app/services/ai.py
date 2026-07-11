@@ -5,6 +5,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import select
@@ -587,7 +588,10 @@ def preview_prompt(
     strategy: str = "PURE_HELP",
     tone: str = "supportive",
     variables: dict[str, Any] | None = None,
+    reply_template_id: int | None = None,
 ) -> dict[str, Any]:
+    from app.services.reply_template_strategy import TemplateSelectionEngine, template_instruction
+
     task = db.get(AITask, task_id)
     if not task:
         raise AIProviderError("AI task not found")
@@ -595,6 +599,12 @@ def preview_prompt(
     if not post:
         raise AIProviderError("post not found")
     platform = get_platform_slug(db, post)
+    selection = TemplateSelectionEngine(db, actor="ai-preview").select(
+        platform=platform or "reddit",
+        post_score=70,
+        risk_score=0,
+        operator_preference=reply_template_id,
+    )
     template = get_prompt_template(
         db,
         template_type="reply_prompt",
@@ -607,14 +617,29 @@ def preview_prompt(
     rendered_variables = {
         "strategy": strategy,
         "tone": tone,
+        "role_prompt": template_instruction(selection.template),
+        "reply_template_id": selection.template.id,
+        "reply_template_name_cn": selection.template.name_cn,
+        "funnel_intent": selection.template.funnel_intent,
+        "cta_strength": selection.template.cta_strength,
+        "platform_rule_allowed": selection.cta_allowed,
         "variables": json.dumps(variables or {}, ensure_ascii=False),
     }
     final_prompt = render_prompt(content, post, **rendered_variables)
     return {
         "system_prompt": "You are an ATOS AI workspace provider. Return concise, useful output.",
         "platform_prompt": f"Platform: {platform or 'generic'}",
-        "strategy_prompt": f"Strategy: {strategy}",
+        "strategy_prompt": f"Strategy: {strategy}\n{template_instruction(selection.template)}",
         "variables": rendered_variables,
+        "reply_template": {
+            "id": selection.template.id,
+            "name_cn": selection.template.name_cn,
+            "funnel_intent": selection.template.funnel_intent,
+            "cta_strength": selection.template.cta_strength,
+            "risk_level": selection.template.risk_level,
+            "selection_reason": selection.reason,
+            "platform_rule_allowed": selection.cta_allowed,
+        },
         "prompt_template_id": template.id if template else None,
         "prompt_version_id": version.id if version else None,
         "prompt_version": version.version if version else (template.version if template else "fallback"),
@@ -717,12 +742,22 @@ class ReplyGenerationService:
         tone: str = "supportive",
         variables: dict[str, Any] | None = None,
         task_id: int | None = None,
+        reply_template_id: int | None = None,
     ) -> dict[str, Any]:
         from app.services.ai_runtime import AIRequest, AIRuntime, PromptContext, TASK_TYPE_REPLY
+        from app.services.reply_template_strategy import TemplateSelectionEngine, template_instruction
 
         post = db.get(Post, post_id)
         if not post:
             raise AIProviderError("post not found")
+        platform = get_platform_slug(db, post) or "reddit"
+        engine = TemplateSelectionEngine(db, actor="ai-runtime")
+        selection = engine.select(
+            platform=platform,
+            post_score=70,
+            risk_score=0,
+            operator_preference=reply_template_id,
+        )
         task = db.get(AITask, task_id) if task_id else None
         if not task:
             task = db.scalar(select(AITask).where(AITask.post_id == post.id).order_by(AITask.id.desc()))
@@ -742,9 +777,21 @@ class ReplyGenerationService:
                 request_id=f"reply-{post.id}-{int(time.time())}",
                 task_type=TASK_TYPE_REPLY,
                 post_id=post.id,
-                platform=get_platform_slug(db, post),
+                platform=platform,
                 strategy=strategy,
-                prompt_context=PromptContext(strategy=strategy, tone=tone, variables=variables or {}),
+                prompt_context=PromptContext(
+                    strategy=strategy,
+                    tone=tone,
+                    variables={
+                        **(variables or {}),
+                        "reply_template_id": selection.template.id,
+                        "reply_template_name_cn": selection.template.name_cn,
+                        "funnel_intent": selection.template.funnel_intent,
+                        "cta_strength": selection.template.cta_strength,
+                        "platform_rule_allowed": selection.cta_allowed,
+                    },
+                    role_prompt=template_instruction(selection.template),
+                ),
                 ai_task_id=task.id,
             )
         )
@@ -763,6 +810,10 @@ class ReplyGenerationService:
             status="GENERATED",
         )
         db.add(reply)
+        engine.record_performance(
+            SimpleNamespace(reply_template_id=selection.template.id, platform=platform),
+            "generated_count",
+        )
         task.provider = response.provider_used or "Mock Provider"
         task.model = response.model_used or "mock-v0.3"
         task.prompt_version_id = response.prompt_version_id
