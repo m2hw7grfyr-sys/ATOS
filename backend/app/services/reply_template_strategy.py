@@ -359,7 +359,7 @@ class TemplateSelectionEngine:
             return True
         if rule.max_daily_ratio <= 0:
             return False
-        today = utc_now().date().isoformat()
+        today = utc_now().date()
         total = self.db.scalar(
             select(func.count()).select_from(ReplyTask).where(
                 ReplyTask.platform == platform,
