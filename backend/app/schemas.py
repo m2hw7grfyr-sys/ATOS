@@ -219,6 +219,37 @@ class BindTGEProfileRequest(BaseModel):
     profile_id: int
 
 
+class StudioContentItemRead(BaseModel):
+    atos_post_id: str
+    atos_post_uuid: str
+    source_platform: str
+    source_post_id: Optional[str] = None
+    source_url: str
+    title: str
+    body: str
+    author: Optional[str] = None
+    published_at: Optional[datetime] = None
+    collected_at: Optional[datetime] = None
+    score: Optional[int] = None
+    comment_count: Optional[int] = None
+    risk_level: Optional[str] = None
+    tags: list[Any] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StudioContentItemListResponse(BaseModel):
+    items: list[StudioContentItemRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class StudioApiHealthResponse(BaseModel):
+    service: str = "atos-studio-api"
+    status: str = "ok"
+    api_version: str = "1"
+
+
 class GPUWorkerHeartbeat(BaseModel):
     worker_id: str = Field(min_length=1, max_length=120)
     worker_name: str = Field(min_length=1, max_length=160)

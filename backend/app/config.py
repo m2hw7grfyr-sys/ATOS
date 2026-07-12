@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     worker_api_token: str = ""
     worker_token_version: str = "v1"
     worker_heartbeat_timeout_seconds: int = 90
+    atos_studio_auth_enabled: bool = True
+    atos_studio_api_token: str = ""
     main_bind_host: str = "0.0.0.0"
     main_port: int = 8080
     gpu_worker_api_key: str = ""

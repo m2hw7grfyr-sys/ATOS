@@ -29,6 +29,7 @@ from app.api import (
     scheduler,
     settings,
     statistics,
+    studio,
     submission,
     tge_profiles,
     workers,
@@ -100,3 +101,4 @@ app.include_router(tge_profiles.router)
 app.include_router(settings.router)
 app.include_router(statistics.router)
 app.include_router(workers.router)
+app.include_router(studio.router)
