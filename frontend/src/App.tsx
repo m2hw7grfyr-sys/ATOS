@@ -1550,6 +1550,15 @@ function PostPoolPage() {
   const [busyPostId, setBusyPostId] = useState<number | null>(null);
   const [rawPost, setRawPost] = useState<RecordItem | null>(null);
   const [timeline, setTimeline] = useState<RecordItem[] | null>(null);
+  const [studioStatuses, setStudioStatuses] = useState<Record<string, RecordItem>>({});
+  const [studioModalOpen, setStudioModalOpen] = useState(false);
+  const [studioTargetIds, setStudioTargetIds] = useState<number[]>([]);
+  const [studioContentType, setStudioContentType] = useState("video");
+  const [studioTargetPlatforms, setStudioTargetPlatforms] = useState<string[]>(["tiktok"]);
+  const [studioNote, setStudioNote] = useState("");
+  const [studioBusy, setStudioBusy] = useState(false);
+  const [studioResult, setStudioResult] = useState<RecordItem | null>(null);
+  const [studioStatusRefreshKey, setStudioStatusRefreshKey] = useState(0);
   const sources = useApiData<DataSourceItem[]>("/data-sources");
   const query = new URLSearchParams();
   if (platform) query.set("platform", platform);
@@ -1564,6 +1573,40 @@ function PostPoolPage() {
   );
   const posts = listFromResponse(data);
   const pagination = data?.pagination;
+  const postIdsKey = posts.map((post) => String(post.id)).join(",");
+
+  useEffect(() => {
+    if (!postIdsKey) {
+      setStudioStatuses({});
+      return;
+    }
+    let cancelled = false;
+    const ids = posts.map((post) => String(post.id)).filter(Boolean);
+    apiRequest<RecordItem>("/api/studio/status-batch", {
+      method: "POST",
+      body: JSON.stringify({ atos_post_ids: ids }),
+    })
+      .then((result) => {
+        if (cancelled) return;
+        const next: Record<string, RecordItem> = {};
+        ((result.items ?? []) as RecordItem[]).forEach((item) => {
+          const id = String(item.atos_post_id ?? "");
+          if (id) next[id] = item;
+        });
+        setStudioStatuses(next);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const next: Record<string, RecordItem> = {};
+        ids.forEach((id) => {
+          next[id] = { atos_post_id: id, exists: false, status: "studio_unavailable" };
+        });
+        setStudioStatuses(next);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [postIdsKey, studioStatusRefreshKey]);
 
   async function runPostAction(post: RecordItem, action: "analyze" | "reply" | "workspace") {
     const postId = Number(post.id);
@@ -1636,6 +1679,77 @@ function PostPoolPage() {
     }
   }
 
+  function openStudioModal(ids: number[]) {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (!uniqueIds.length) {
+      setFeedback("请先选择要送入 Studio 的帖子。");
+      return;
+    }
+    setStudioTargetIds(uniqueIds);
+    setStudioResult(null);
+    setStudioContentType("video");
+    setStudioTargetPlatforms(["tiktok"]);
+    setStudioNote("");
+    setStudioModalOpen(true);
+  }
+
+  function toggleStudioPlatform(value: string) {
+    setStudioTargetPlatforms((current) =>
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
+    );
+  }
+
+  function studioStatusLabel(postId: unknown) {
+    const item = studioStatuses[String(postId)] ?? {};
+    const status = String(item.status ?? (item.exists ? "unknown" : "not_pushed"));
+    const labels: Record<string, string> = {
+      pending_review: "待审核",
+      approved: "已批准",
+      rejected: "已拒绝",
+      archived: "已归档",
+      studio_unavailable: "Studio不可达",
+      unknown: "状态未知",
+      not_pushed: "未送入",
+    };
+    return labels[status] ?? status;
+  }
+
+  async function submitStudioPush() {
+    if (!studioTargetIds.length) return;
+    setStudioBusy(true);
+    setStudioResult(null);
+    setFeedback("");
+    try {
+      const payload = {
+        requested_content_type: studioContentType,
+        target_platforms: studioTargetPlatforms,
+        operator_note: studioNote,
+      };
+      const result =
+        studioTargetIds.length === 1
+          ? await apiRequest<RecordItem>("/api/studio/push", {
+              method: "POST",
+              body: JSON.stringify({ ...payload, atos_post_id: String(studioTargetIds[0]) }),
+            })
+          : await apiRequest<RecordItem>("/api/studio/push-batch", {
+              method: "POST",
+              body: JSON.stringify({ ...payload, atos_post_ids: studioTargetIds.map(String) }),
+            });
+      setStudioResult(result);
+      if (studioTargetIds.length === 1) {
+        setFeedback(Boolean(result.duplicate) ? "该帖子已在Studio中，未重复创建" : "已送入Studio内容池");
+      } else {
+        setFeedback(`批量处理完成：新建 ${String(result.created ?? 0)}，已存在 ${String(result.duplicates ?? 0)}，失败 ${String(result.failed ?? 0)}。`);
+      }
+      await reload();
+      setStudioStatusRefreshKey((current) => current + 1);
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "送入Studio失败");
+    } finally {
+      setStudioBusy(false);
+    }
+  }
+
   return (
     <StateView loading={loading} error={error} reload={reload}>
       <div className="space-y-4">
@@ -1646,25 +1760,80 @@ function PostPoolPage() {
           <label className="text-xs font-semibold text-gray-600">Keyword<input className="field mt-2 min-w-44" value={keyword} onChange={(e) => { setKeyword(e.target.value); setPage(1); }} placeholder="title / author" /></label>
           <label className="text-xs font-semibold text-gray-600">Community<input className="field mt-2 min-w-40" value={community} onChange={(e) => { setCommunity(e.target.value); setPage(1); }} placeholder="ADHD" /></label>
 	          <label className="text-xs font-semibold text-gray-600">Status<select className="field mt-2 min-w-44" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}><option value="">All</option><option value="NEW">NEW</option><option value="NORMALIZED">NORMALIZED</option><option value="READY_FOR_AI">READY_FOR_AI</option><option value="ANALYZING">ANALYZING</option><option value="AI_COMPLETED">AI_COMPLETED</option><option value="WAITING_REVIEW">WAITING_REVIEW</option><option value="APPROVED">APPROVED</option><option value="SCHEDULED">SCHEDULED</option><option value="ARCHIVED">ARCHIVED</option><option value="INCOMPLETE">INCOMPLETE</option></select></label>
-          <button className="icon-button mb-0.5" title="刷新" onClick={reload}><RefreshCw className="h-4 w-4" /></button>
+          <button className="icon-button mb-0.5" title="刷新" onClick={() => { void reload(); setStudioStatusRefreshKey((current) => current + 1); }}><RefreshCw className="h-4 w-4" /></button>
           <button className="button-secondary mb-0.5" onClick={() => void handleBatch("ANALYZE")}><BrainCircuit className="h-4 w-4" />Analyze</button>
           <button className="button-secondary mb-0.5" onClick={() => void handleBatch("APPROVE")}><CheckCircle2 className="h-4 w-4" />Approve</button>
           <button className="button-secondary mb-0.5" onClick={() => void handleBatch("REJECT")}>Reject</button>
           <button className="button-secondary mb-0.5" onClick={() => void handleBatch("ARCHIVE")}>Archive</button>
           <button className="button mb-0.5" onClick={bulkAddToScheduler}><CalendarClock className="h-4 w-4" />批量加入 Scheduler</button>
+          <button className="button mb-0.5" onClick={() => openStudioModal(selectedPostIds)}><Sparkles className="h-4 w-4" />批量送入 Studio</button>
+          <button className="button-secondary mb-0.5" onClick={() => setSelectedPostIds(posts.map((post) => Number(post.id)).filter(Boolean))}>当前页全选</button>
+          <button className="button-secondary mb-0.5" onClick={() => setSelectedPostIds([])}>取消选择</button>
+          <span className="mb-2 text-xs font-semibold text-gray-500">已选择 {selectedPostIds.length} 条</span>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
+        {studioModalOpen && (
+          <section className="panel space-y-4 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold uppercase text-gray-500">送入 Studio</h2>
+                <p className="mt-1 text-sm text-gray-600">将 {studioTargetIds.length} 条帖子送入 Studio 内容池。</p>
+              </div>
+              <button className="button-secondary" onClick={() => setStudioModalOpen(false)} disabled={studioBusy}>取消</button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="text-xs font-semibold text-gray-600">内容类型
+                <select className="field mt-2 w-full" value={studioContentType} onChange={(e) => setStudioContentType(e.target.value)}>
+                  <option value="video">视频</option>
+                  <option value="image_text">图文</option>
+                  <option value="seo_article">SEO文章</option>
+                  <option value="unspecified">暂不指定</option>
+                </select>
+              </label>
+              <div className="md:col-span-2">
+                <p className="text-xs font-semibold text-gray-600">目标平台</p>
+                <div className="mt-2 flex flex-wrap gap-3 text-sm">
+                  {[
+                    ["tiktok", "TikTok"],
+                    ["youtube_shorts", "YouTube Shorts"],
+                    ["instagram_reels", "Instagram Reels"],
+                    ["facebook_reels", "Facebook Reels"],
+                    ["x", "X"],
+                  ].map(([value, label]) => (
+                    <label key={value} className="flex items-center gap-2">
+                      <input type="checkbox" checked={studioTargetPlatforms.includes(value)} onChange={() => toggleStudioPlatform(value)} />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <label className="text-xs font-semibold text-gray-600 md:col-span-3">备注
+                <textarea className="field mt-2 min-h-24 w-full" maxLength={500} value={studioNote} onChange={(e) => setStudioNote(e.target.value)} />
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button className="button" onClick={() => void submitStudioPush()} disabled={studioBusy}>
+                {studioBusy ? "处理中..." : "确认送入 Studio"}
+              </button>
+              <button className="button-secondary" onClick={() => setStudioModalOpen(false)} disabled={studioBusy}>取消</button>
+            </div>
+            {studioResult && (
+              <pre className="max-h-80 overflow-auto rounded border border-line bg-gray-50 p-3 text-xs text-gray-600">{JSON.stringify(studioResult, null, 2)}</pre>
+            )}
+          </section>
+        )}
         <Section title={`Unified Post Pool · ${pagination?.total ?? posts.length}`}>
           <div className="panel overflow-x-auto">
-            <table className="w-full min-w-[1480px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1600px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-	                {["Select", "Platform", "Status", "Title", "Author", "Community", "Score", "Comments", "Source", "Actor", "Mapping", "URL", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+	                {["Select", "Platform", "Status", "Studio", "Title", "Author", "Community", "Score", "Comments", "Source", "Actor", "Mapping", "URL", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
               </tr></thead>
               <tbody>{posts.map((post, index) => (
                 <tr key={String(post.uuid ?? index)} className="border-b border-line last:border-0">
                     <td className="px-4 py-3"><input type="checkbox" checked={selectedPostIds.includes(Number(post.id))} onChange={(event) => setSelectedPostIds((current) => event.target.checked ? [...current, Number(post.id)] : current.filter((id) => id !== Number(post.id)))} /></td>
 	                  <td className="px-4 py-3 font-semibold uppercase text-teal">{String(post.platform ?? "—")}</td>
 	                  <td className="px-4 py-3"><StatusBadge value={post.status ?? "—"} /></td>
+	                  <td className="px-4 py-3"><StatusBadge value={studioStatusLabel(post.id)} /></td>
 	                  <td className="max-w-sm px-4 py-3"><p className="line-clamp-2 font-medium">{String(post.title || "(Untitled)")}</p></td>
 	                  <td className="px-4 py-3 text-gray-600">{String(post.author ?? "—")}</td>
 	                  <td className="px-4 py-3 text-gray-600">{String(post.community ?? "—")}</td>
@@ -1679,6 +1848,7 @@ function PostPoolPage() {
                       <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "analyze")}>Analyze</button>
 	                      <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "reply")}>Generate Reply</button>
 	                      <button className="button" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "workspace")}><BrainCircuit className="h-4 w-4" />Send</button>
+                        <button className="button-secondary" disabled={studioBusy} onClick={() => openStudioModal([Number(post.id)])}>送入Studio</button>
                         <button className="button-secondary" onClick={() => void showTimeline(post)}>Timeline</button>
 	                      <button className="button-secondary" onClick={() => setRawPost(post)}>Raw JSON</button>
 	                    </div>

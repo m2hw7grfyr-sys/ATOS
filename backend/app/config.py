@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     worker_heartbeat_timeout_seconds: int = 90
     atos_studio_auth_enabled: bool = True
     atos_studio_api_token: str = ""
+    studio_base_url: str = "http://127.0.0.1:8502"
+    studio_push_api_token: str = ""
+    studio_request_timeout_seconds: float = 10
     main_bind_host: str = "0.0.0.0"
     main_port: int = 8080
     gpu_worker_api_key: str = ""

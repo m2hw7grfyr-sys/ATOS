@@ -250,6 +250,26 @@ class StudioApiHealthResponse(BaseModel):
     api_version: str = "1"
 
 
+class StudioPushContext(BaseModel):
+    requested_content_type: str = "video"
+    target_platforms: list[str] = Field(default_factory=list)
+    operator_note: str = Field(default="", max_length=500)
+
+
+class StudioPushRequest(BaseModel):
+    atos_post_id: str
+    requested_content_type: str = "video"
+    target_platforms: list[str] = Field(default_factory=list)
+    operator_note: str = Field(default="", max_length=500)
+
+
+class StudioPushBatchRequest(BaseModel):
+    atos_post_ids: list[str] = Field(min_length=1, max_length=50)
+    requested_content_type: str = "video"
+    target_platforms: list[str] = Field(default_factory=list)
+    operator_note: str = Field(default="", max_length=500)
+
+
 class GPUWorkerHeartbeat(BaseModel):
     worker_id: str = Field(min_length=1, max_length=120)
     worker_name: str = Field(min_length=1, max_length=160)
