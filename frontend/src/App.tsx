@@ -209,21 +209,21 @@ function listFromResponse(value: RecordItem[] | PagedRecords | null): RecordItem
 }
 
 const navigation = [
-  { key: "dashboard", label: "Dashboard", icon: Gauge },
-  { key: "data-center", label: "Data Center", icon: Database },
-  { key: "post-pool", label: "Post Pool", icon: Search },
-  { key: "ai-workspace", label: "AI Workspace", icon: BrainCircuit },
-  { key: "scheduler", label: "Scheduler", icon: CalendarClock },
-  { key: "platform-center", label: "Platform Center", icon: SlidersHorizontal },
-  { key: "worker-center", label: "Worker Center", icon: Bot },
-  { key: "intelligence", label: "Intelligence", icon: Sparkles },
-  { key: "account-center", label: "Account Center", icon: Users },
-  { key: "execution", label: "Execution", icon: Play },
-  { key: "submission", label: "Submission", icon: CheckCircle2 },
-  { key: "engagement", label: "Engagement", icon: Activity },
-  { key: "statistics", label: "Statistics", icon: ChartNoAxesCombined },
+  { key: "dashboard", label: "运行总览", icon: Gauge },
+  { key: "data-center", label: "数据中心", icon: Database },
+  { key: "post-pool", label: "帖子池", icon: Search },
+  { key: "ai-workspace", label: "AI 工作台", icon: BrainCircuit },
+  { key: "scheduler", label: "调度中心", icon: CalendarClock },
+  { key: "platform-center", label: "平台中心", icon: SlidersHorizontal },
+  { key: "worker-center", label: "Worker 中心", icon: Bot },
+  { key: "intelligence", label: "智能分析", icon: Sparkles },
+  { key: "account-center", label: "账号中心", icon: Users },
+  { key: "execution", label: "执行中心", icon: Play },
+  { key: "submission", label: "提交中心", icon: CheckCircle2 },
+  { key: "engagement", label: "互动中心", icon: Activity },
+  { key: "statistics", label: "统计中心", icon: ChartNoAxesCombined },
   { key: "help", label: "帮助中心", icon: BookOpenText },
-  { key: "settings", label: "System Settings", icon: Settings },
+  { key: "settings", label: "系统设置", icon: Settings },
 ] as const;
 
 const pageRoutes: Record<PageKey, string> = {
@@ -250,20 +250,20 @@ const routePages = Object.fromEntries(
 
 const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "运行总览", subtitle: "系统状态、队列与关键运营指标" },
-  "data-center": { title: "Data Center", subtitle: "管理可插拔数据源与采集配置" },
-  "post-pool": { title: "Post Pool", subtitle: "所有平台内容进入系统后的统一池" },
-  "ai-workspace": { title: "AI Workspace", subtitle: "分析、评分、策略与人工审核" },
-  scheduler: { title: "Scheduler", subtitle: "进入 Execution 前的唯一任务队列" },
-  "platform-center": { title: "Platform Center", subtitle: "平台 Adapter、能力与健康状态" },
-  "worker-center": { title: "Worker Center", subtitle: "Automation Runtime、Worker Pool 与任务 Claim" },
-  intelligence: { title: "Intelligence Runtime", subtitle: "表现分析、评分、推荐与策略优化" },
-  "account-center": { title: "Account Center", subtitle: "平台账号、健康度与运行限制" },
-  execution: { title: "Execution Center", subtitle: "执行运行时占位与环境状态" },
-  submission: { title: "Submission Runtime", subtitle: "半自动提交记录、策略闸门与结果验证" },
-  engagement: { title: "Engagement", subtitle: "策略组合与互动任务占位" },
-  statistics: { title: "Statistics", subtitle: "事件驱动统计与转化漏斗占位" },
+  "data-center": { title: "数据中心", subtitle: "管理可插拔数据源与采集配置" },
+  "post-pool": { title: "帖子池", subtitle: "所有平台内容进入系统后的统一池" },
+  "ai-workspace": { title: "AI 工作台", subtitle: "分析、评分、策略与人工审核" },
+  scheduler: { title: "调度中心", subtitle: "进入执行中心前的唯一任务队列" },
+  "platform-center": { title: "平台中心", subtitle: "平台适配器、能力与健康状态" },
+  "worker-center": { title: "Worker 中心", subtitle: "自动化运行时、Worker 池与任务领取" },
+  intelligence: { title: "智能分析", subtitle: "表现分析、评分、推荐与策略优化" },
+  "account-center": { title: "账号中心", subtitle: "平台账号、健康度与运行限制" },
+  execution: { title: "执行中心", subtitle: "执行运行时与环境状态" },
+  submission: { title: "提交中心", subtitle: "半自动提交记录、策略闸门与结果验证" },
+  engagement: { title: "互动中心", subtitle: "策略组合与互动任务管理" },
+  statistics: { title: "统计中心", subtitle: "事件驱动统计与转化漏斗" },
   help: { title: "帮助中心", subtitle: "操作手册、平台流程、模板说明与常见问题" },
-  settings: { title: "System Settings", subtitle: "模型、平台、调度与执行配置" },
+  settings: { title: "系统设置", subtitle: "模型、平台、调度与执行配置" },
 };
 
 function useApiData<T>(path: string) {
@@ -290,6 +290,258 @@ function useApiData<T>(path: string) {
   return { data, error, loading, reload: load };
 }
 
+const UI_LABELS: Record<string, string> = {
+  Posts: "帖子总数",
+  Version: "版本",
+  Environment: "环境",
+  "Emergency Stop": "紧急停止",
+  "AI Pending": "AI 待处理",
+  "Scheduler Queue": "调度队列",
+  "Scheduler Ready": "调度就绪",
+  "Scheduler Delayed": "延迟调度",
+  "No Account": "无可用账号",
+  "Active Accounts": "活跃账号",
+  "Cooling Accounts": "冷却账号",
+  "High Risk": "高风险",
+  "Active TGE": "活跃 TGE",
+  "No TGE Binding": "未绑定 TGE",
+  "Execution Received": "执行已接收",
+  "Execution Queue": "执行队列",
+  "Workers Online": "在线 Worker",
+  "Execution Running": "执行中",
+  "Execution Success": "执行成功",
+  "Running Browser": "运行浏览器",
+  "Running Tabs": "打开标签页",
+  "Dead Sessions": "失效会话",
+  "Env Ready": "环境就绪",
+  "TGE Running": "TGE 运行中",
+  "Data Sources": "数据源",
+  "Configured Sources": "已配置数据源",
+  "Recent Runs": "最近运行",
+  "Actor Mapping": "Actor 映射",
+  "Raw Item JSON": "原始 Item JSON",
+  "Unified Post Pool": "统一帖子池",
+  "Raw JSON Viewer": "原始 JSON 查看器",
+  "Post Timeline": "帖子时间线",
+  "Review Queue": "审核队列",
+  "Prompt Preview": "Prompt 预览",
+  "Batch Review": "批量审核",
+  Manuals: "手册",
+  Topics: "主题",
+  "Scheduler Logs": "调度日志",
+  "Account Assets": "账号资产",
+  "TGE Configuration": "TGE 配置",
+  "Playwright Configuration": "Playwright 配置",
+  "Submission Policy": "提交策略",
+  "AUTO_ASSISTED Platform Controls": "AUTO_ASSISTED 平台控制",
+  "Platform Selector Registry": "平台选择器注册表",
+  "Scheduler Defaults": "调度默认配置",
+  "Platform Weights": "平台权重",
+  "Reply Templates": "回复模板",
+  "Platform Template Rules": "平台模板规则",
+  "Template Performance": "模板表现",
+  "LLM Providers": "LLM Provider",
+  "Provider Routing": "Provider 路由",
+  "Prompt Templates": "Prompt 模板",
+  "Prompt Versions": "Prompt 版本",
+  "Configuration Service": "配置服务",
+  "Submission Tasks": "提交任务",
+  "Submission Statistics": "提交统计",
+  "Recent Submission Timeline": "最近提交时间线",
+  "Create Strategy": "创建策略",
+  "Create Engagement Task": "创建互动任务",
+  "Engagement Queue": "互动队列",
+  "Engagement Statistics": "互动统计",
+  "Adapter Discovery": "适配器发现",
+  "Platform Registry": "平台注册表",
+  "Capability Check": "能力检查",
+  "Platform Statistics": "平台统计",
+  "GPU Worker Runtime": "GPU Worker 运行时",
+  "Automation Runtime": "自动化运行时",
+  "Worker Pool": "Worker 池",
+  Alerts: "告警",
+  "Runtime Metrics": "运行指标",
+  "Intelligence Overview": "智能分析总览",
+  "Top Strategies": "最佳策略",
+  "Top Replies": "最佳回复",
+  "Best Accounts": "最佳账号",
+  "Best Time": "最佳时间",
+  "Platform Ranking": "平台排名",
+  "Duplicate Reply Detection": "重复回复检测",
+  "Performance Detail": "表现详情",
+  Intent: "意图",
+  "Pain Point": "痛点",
+  Summary: "摘要",
+  "Profile Allowed": "允许导向主页",
+  "Main Account Allowed": "允许导向主账号",
+  "Direct Link Allowed": "允许直接链接",
+  Reason: "原因",
+  "Final Prompt": "最终 Prompt",
+  "System Prompt": "系统 Prompt",
+  system_prompt: "系统 Prompt",
+  platform_prompt: "平台 Prompt",
+  strategy_prompt: "策略 Prompt",
+  variables: "变量",
+  Prompt: "Prompt",
+  "API Key": "API Key",
+  "Worker Status": "Worker 状态",
+  "Last Heartbeat": "最近心跳",
+  "Prompt Template": "Prompt 模板",
+  "Preferred Provider": "首选 Provider",
+  "Fallback Provider": "Fallback Provider",
+  "Today's Browse": "今日浏览",
+  "Today's Like": "今日点赞",
+  "Profile Visit": "主页访问",
+  "Warm-up Tasks": "预热任务",
+  "Engage Success": "互动成功率",
+  "LLM Health": "模型健康",
+  "Fallback Rate": "Fallback 率",
+  "AI Latency": "AI 延迟",
+  "AI Cost": "AI 成本",
+  "Pipeline Imported": "管道导入",
+  "Pipeline AI": "AI 处理",
+  "Pipeline Approved": "已批准",
+  "Pipeline Scheduled": "已调度",
+  "Pipeline Success": "管道成功率",
+  "Active Platforms": "启用平台",
+  "Healthy Platforms": "健康平台",
+  "Failed Adapters": "失败适配器",
+  "Worker Capacity": "Worker 容量",
+  "Automation Queue": "自动化队列",
+  "Retry Pending": "待重试",
+  "Open Alerts": "未处理告警",
+  Recommendations: "建议",
+  "Reply Score": "回复评分",
+  "Content Score": "内容评分",
+  "Best Time Windows": "最佳时段",
+  "Submission Ready": "提交就绪",
+  "Waiting Manual": "等待人工",
+  Submitting: "提交中",
+  "Verified Submit": "已验证提交",
+  "Submit Failed": "提交失败",
+  "Manual Required": "需要人工",
+  "Auto Completed": "自动完成",
+  "Manual Review": "人工审核",
+  "Reddit Waiting": "Reddit 等待",
+  "X Waiting": "X 等待",
+  "Reddit Failed": "Reddit 失败",
+  "X Failed": "X 失败",
+  "Manual Confirmed": "人工确认",
+  "Template Generated": "模板生成",
+  "Template Verified": "模板验证",
+  "Template Success": "模板成功率",
+  "High Risk Templates": "高风险模板",
+  "Template Platforms": "模板平台",
+  Source: "数据源",
+  Platform: "平台",
+  Actor: "Actor",
+  Token: "Token",
+  Status: "状态",
+  "Last Run": "最近运行",
+  Result: "结果",
+  Actions: "操作",
+  Started: "开始时间",
+  Total: "总数",
+  Inserted: "新增",
+  Duplicate: "重复",
+  Errors: "错误",
+  Message: "消息",
+  "Not set": "未设置",
+  Never: "从未",
+  Draft: "草稿",
+  name: "名称",
+  platform: "平台",
+  actor: "Actor",
+  title: "标题",
+  url: "链接",
+  enabled: "启用",
+  Select: "选择",
+  Studio: "Studio",
+  Title: "标题",
+  Author: "作者",
+  Community: "社区",
+  Score: "评分",
+  Comments: "评论",
+  Mapping: "映射",
+  URL: "链接",
+  Time: "时间",
+  Event: "事件",
+  Old: "旧状态",
+  New: "新状态",
+  Strategy: "策略",
+  Model: "模型",
+  Provider: "Provider",
+  Priority: "优先级",
+  Worker: "Worker",
+  Type: "类型",
+  Health: "健康度",
+  Runtime: "运行时",
+  Current: "当前",
+  Max: "上限",
+  Region: "地区",
+  Queue: "队列",
+  Capability: "能力",
+  Lock: "锁",
+  Severity: "级别",
+  Created: "创建时间",
+  Account: "账号",
+  "Action Type": "动作类型",
+  "Created At": "创建时间",
+  "Updated At": "更新时间",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  UNKNOWN: "未知",
+  ACTIVE: "活跃",
+  READY: "就绪",
+  HEALTHY: "健康",
+  APPROVED: "已批准",
+  QUALIFIED: "合格",
+  LOW: "低风险",
+  MEDIUM: "中风险",
+  HIGH: "高风险",
+  CRITICAL: "严重",
+  QUEUED: "已排队",
+  REVIEWING: "审核中",
+  NEW: "新建",
+  NORMALIZED: "已标准化",
+  READY_FOR_AI: "待 AI 处理",
+  ANALYZING: "分析中",
+  AI_COMPLETED: "AI 已完成",
+  WAITING_REVIEW: "等待审核",
+  SCHEDULED: "已调度",
+  ARCHIVED: "已归档",
+  INCOMPLETE: "不完整",
+  PLANNED: "已计划",
+  PLACEHOLDER: "占位",
+  FAILED: "失败",
+  ERROR: "错误",
+  PAUSED: "已暂停",
+  DISABLED: "已禁用",
+  RUNNING: "运行中",
+  SUCCESS: "成功",
+  PENDING: "待处理",
+  WAITING_MANUAL: "等待人工",
+  PENDING_REVIEW: "待审核",
+  pending_review: "待审核",
+  approved: "已批准",
+  rejected: "已拒绝",
+  archived: "已归档",
+  idle: "空闲",
+  working: "工作中",
+  offline: "离线",
+  online: "在线",
+};
+
+function uiLabel(value: string): string {
+  return UI_LABELS[value] ?? value;
+}
+
+function statusLabel(value: unknown): string {
+  const raw = String(value ?? "UNKNOWN");
+  return STATUS_LABELS[raw] ?? STATUS_LABELS[raw.toUpperCase()] ?? raw;
+}
+
 function StatusBadge({ value }: { value: unknown }) {
   const label = String(value ?? "UNKNOWN");
   const good = ["ACTIVE", "READY", "HEALTHY", "APPROVED", "QUALIFIED", "LOW"].includes(
@@ -311,7 +563,7 @@ function StatusBadge({ value }: { value: unknown }) {
           good ? "bg-emerald-500" : warning ? "bg-amber-500" : "bg-red-500"
         }`}
       />
-      {label}
+      {statusLabel(label)}
     </span>
   );
 }
@@ -366,7 +618,7 @@ function Section({
   return (
     <section>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-bold uppercase text-gray-500">{title}</h2>
+        <h2 className="text-sm font-bold uppercase text-gray-500">{uiLabel(title)}</h2>
         {action}
       </div>
       {children}
@@ -388,7 +640,7 @@ function DataTable({
           <tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
             {columns.map((column) => (
               <th key={column.key} className="px-4 py-3 font-semibold">
-                {column.label}
+                {uiLabel(column.label)}
               </th>
             ))}
           </tr>
@@ -688,7 +940,7 @@ function HelpCenterPage() {
             </div>
             <a className="button" href={downloadUrl} target="_blank" rel="noreferrer">
               <Download className="h-4 w-4" />
-              Download PDF
+              下载 PDF
             </a>
           </div>
 
@@ -731,7 +983,7 @@ function DashboardPage() {
         { label: "Environment", value: data.overview.environment ?? "—", icon: ShieldCheck, tone: "text-teal" },
         {
           label: "Emergency Stop",
-          value: data.overview.emergency_stop_active ? "ACTIVE" : "Clear",
+          value: data.overview.emergency_stop_active ? "已启用" : "正常",
           icon: ShieldCheck,
           tone: data.overview.emergency_stop_active ? "text-red-700" : "text-emerald-700",
         },
@@ -1128,11 +1380,11 @@ function DashboardPage() {
       <div className="space-y-7">
         {data?.overview.emergency_stop_active && (
           <div className="panel border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-            Emergency Stop is active. AUTO_ASSISTED tasks have been moved back to manual review.
+            紧急停止已启用，AUTO_ASSISTED 任务已退回人工审核。
           </div>
         )}
         <Section
-          title="Overview"
+          title="总览"
           action={
             <button className="icon-button" title="刷新" onClick={reload}>
               <RefreshCw className="h-4 w-4" />
@@ -1144,17 +1396,17 @@ function DashboardPage() {
               <div key={card.label} className="panel min-h-28 p-4">
                 <div className="flex items-start justify-between">
                   <span className="text-xs font-semibold uppercase text-gray-500">
-                    {card.label}
+                    {uiLabel(card.label)}
                   </span>
                   <card.icon className={`h-5 w-5 ${card.tone}`} />
                 </div>
-                <p className="mt-5 text-3xl font-bold">{card.value}</p>
+                <p className="mt-5 text-3xl font-bold">{String(card.value)}</p>
               </div>
             ))}
           </div>
         </Section>
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <Section title="Platform Health">
+          <Section title="平台健康">
             <div className="panel divide-y divide-line">
               {data?.platform_health.map((platform) => (
                 <div
@@ -1173,7 +1425,7 @@ function DashboardPage() {
               ))}
             </div>
           </Section>
-          <Section title="System Health">
+          <Section title="系统健康">
             <div className="panel divide-y divide-line">
               {data?.system_health.map((service) => (
                 <div
@@ -1215,7 +1467,7 @@ function DataCenterPage() {
     data_source_id: "",
     actor_id: "demo/reddit-discovery",
     platform: "reddit",
-    mapping_name: "Default Reddit Mapping",
+    mapping_name: "默认 Reddit 映射",
     title_path: "title",
     content_path: "selftext",
     url_path: "url",
@@ -1236,7 +1488,7 @@ function DataCenterPage() {
 
   function resetForm() {
     setEditingId(null);
-    setName("Apify Source");
+    setName("Apify 数据源");
     setActorId("");
     setActorName("");
     setPlatformId(String(platforms.data?.[0]?.id ?? 1));
@@ -1405,7 +1657,7 @@ function DataCenterPage() {
               <input className="field mt-2" value={actorName} onChange={(e) => setActorName(e.target.value)} placeholder="便于识别的名称" />
             </label>
             <label className="text-xs font-semibold text-gray-600">
-              Platform
+              平台
               <select className="field mt-2" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
                 {(platforms.data ?? []).map((platform) => (
                   <option key={platform.id} value={platform.id}>{platform.name}</option>
@@ -1417,20 +1669,20 @@ function DataCenterPage() {
               <input className="field mt-2" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={editingId ? "留空则保持现有 Token" : "可留空并使用 .env"} autoComplete="new-password" />
             </label>
             <label className="text-xs font-semibold text-gray-600">
-              Max Items
+              最大条数
               <input className="field mt-2" type="number" min="1" max="1000" value={maxItems} onChange={(e) => setMaxItems(e.target.value)} required />
             </label>
             <label className="text-xs font-semibold text-gray-600 md:col-span-2">
-              Remark
+              备注
               <input className="field mt-2" value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="用途、Owner 或注意事项" />
             </label>
             <label className="text-xs font-semibold text-gray-600 md:col-span-2 xl:col-span-4">
-              Actor Input JSON
+              Actor 输入 JSON
               <textarea className="field mt-2 min-h-36 font-mono text-xs" value={inputJson} onChange={(e) => setInputJson(e.target.value)} spellCheck={false} />
             </label>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 md:col-span-2 xl:col-span-4">
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-              Enabled
+              启用
             </label>
             <div className="flex gap-2 md:col-span-2 xl:col-span-4">
               <button className="button" type="submit"><CheckCircle2 className="h-4 w-4" />{editingId ? "保存修改" : "创建数据源"}</button>
@@ -1451,7 +1703,7 @@ function DataCenterPage() {
           <div className="panel overflow-x-auto">
             <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                {["Source", "Platform", "Actor", "Token", "Status", "Last Run", "Result", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+                {["Source", "Platform", "Actor", "Token", "Status", "Last Run", "Result", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{uiLabel(label)}</th>)}
               </tr></thead>
               <tbody>
                 {(data ?? []).map((source) => {
@@ -1461,9 +1713,9 @@ function DataCenterPage() {
                       <td className="px-4 py-3"><p className="font-semibold">{source.name}</p><p className="mt-1 max-w-52 truncate text-xs text-gray-500">{source.config.remark || "—"}</p></td>
                       <td className="px-4 py-3 text-gray-600">{source.platform || "—"}</td>
                       <td className="px-4 py-3"><p className="font-medium">{source.config.actor_name || "—"}</p><p className="text-xs text-gray-500">{source.config.actor_id || "—"}</p></td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">{source.config.token_masked || (source.config.token_configured ? "********" : "Not set")}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-500">{source.config.token_masked || (source.config.token_configured ? "********" : "未设置")}</td>
                       <td className="px-4 py-3"><StatusBadge value={source.enabled ? source.status : "DISABLED"} /></td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{source.last_run_at ? new Date(String(source.last_run_at)).toLocaleString() : "Never"}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{source.last_run_at ? new Date(String(source.last_run_at)).toLocaleString() : "从未"}</td>
                       <td className="px-4 py-3 text-xs text-gray-600">{latest.status ? `${String(latest.status)} · +${String(latest.inserted_count ?? 0)} / dup ${String(latest.duplicate_count ?? 0)}` : "—"}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
@@ -1482,7 +1734,7 @@ function DataCenterPage() {
           </div>
         </Section>
         {logSource && (
-          <Section title={`${logSource} · Recent Runs`} action={<button className="button-secondary" onClick={() => setLogSource("")}>关闭</button>}>
+          <Section title={`${logSource} · 最近运行`} action={<button className="button-secondary" onClick={() => setLogSource("")}>关闭</button>}>
             <DataTable columns={[
               { key: "status", label: "Status" },
               { key: "started_at", label: "Started" },
@@ -1507,10 +1759,10 @@ function DataCenterPage() {
               {["title_path", "content_path", "url_path", "author_path", "community_path", "source_post_id_path", "published_at_path", "score_path", "comment_count_path"].map((key) => (
                 <input key={key} className="field" value={String(mappingForm[key] ?? "")} onChange={(e) => updateMappingField(key, e.target.value)} placeholder={key} />
               ))}
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(mappingForm.enabled)} onChange={(e) => updateMappingField("enabled", e.target.checked)} />Enabled</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(mappingForm.enabled)} onChange={(e) => updateMappingField("enabled", e.target.checked)} />启用</label>
             </div>
             <div className="panel p-4">
-              <p className="text-xs font-semibold uppercase text-gray-500">Raw Item JSON</p>
+              <p className="text-xs font-semibold uppercase text-gray-500">原始 Item JSON</p>
               <textarea className="field mt-2 min-h-40 font-mono text-xs" value={mappingRawJson} onChange={(e) => setMappingRawJson(e.target.value)} />
               <pre className="mt-3 max-h-56 overflow-auto rounded bg-gray-50 p-3 text-xs text-gray-600">{JSON.stringify(mappingPreview ?? {}, null, 2)}</pre>
             </div>
@@ -1518,7 +1770,7 @@ function DataCenterPage() {
           <div className="panel mt-4 overflow-x-auto">
             <table className="w-full min-w-[900px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-                {["name", "platform", "actor", "title", "url", "enabled"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+                {["name", "platform", "actor", "title", "url", "enabled"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{uiLabel(label)}</th>)}
               </tr></thead>
               <tbody>{(mappings.data ?? []).map((mapping) => (
                 <tr key={String(mapping.id)} className="border-b border-line last:border-0">
@@ -1755,16 +2007,16 @@ function PostPoolPage() {
       <div className="space-y-4">
         <div className="panel flex flex-wrap items-end gap-3 p-4">
           <SlidersHorizontal className="mb-2 h-5 w-5 text-gray-500" />
-          <label className="text-xs font-semibold text-gray-600">Platform<select className="field mt-2 min-w-36" value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="">All</option>{Array.from(new Set((sources.data ?? []).map((item) => item.platform).filter(Boolean))).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          <label className="text-xs font-semibold text-gray-600">Source<select className="field mt-2 min-w-48" value={sourceId} onChange={(e) => setSourceId(e.target.value)}><option value="">All</option>{(sources.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label className="text-xs font-semibold text-gray-600">Keyword<input className="field mt-2 min-w-44" value={keyword} onChange={(e) => { setKeyword(e.target.value); setPage(1); }} placeholder="title / author" /></label>
-          <label className="text-xs font-semibold text-gray-600">Community<input className="field mt-2 min-w-40" value={community} onChange={(e) => { setCommunity(e.target.value); setPage(1); }} placeholder="ADHD" /></label>
-	          <label className="text-xs font-semibold text-gray-600">Status<select className="field mt-2 min-w-44" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}><option value="">All</option><option value="NEW">NEW</option><option value="NORMALIZED">NORMALIZED</option><option value="READY_FOR_AI">READY_FOR_AI</option><option value="ANALYZING">ANALYZING</option><option value="AI_COMPLETED">AI_COMPLETED</option><option value="WAITING_REVIEW">WAITING_REVIEW</option><option value="APPROVED">APPROVED</option><option value="SCHEDULED">SCHEDULED</option><option value="ARCHIVED">ARCHIVED</option><option value="INCOMPLETE">INCOMPLETE</option></select></label>
+          <label className="text-xs font-semibold text-gray-600">平台<select className="field mt-2 min-w-36" value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="">全部</option>{Array.from(new Set((sources.data ?? []).map((item) => item.platform).filter(Boolean))).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          <label className="text-xs font-semibold text-gray-600">数据源<select className="field mt-2 min-w-48" value={sourceId} onChange={(e) => setSourceId(e.target.value)}><option value="">全部</option>{(sources.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="text-xs font-semibold text-gray-600">关键词<input className="field mt-2 min-w-44" value={keyword} onChange={(e) => { setKeyword(e.target.value); setPage(1); }} placeholder="标题 / 作者" /></label>
+          <label className="text-xs font-semibold text-gray-600">社区<input className="field mt-2 min-w-40" value={community} onChange={(e) => { setCommunity(e.target.value); setPage(1); }} placeholder="ADHD" /></label>
+	          <label className="text-xs font-semibold text-gray-600">状态<select className="field mt-2 min-w-44" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}><option value="">全部</option><option value="NEW">{statusLabel("NEW")}</option><option value="NORMALIZED">{statusLabel("NORMALIZED")}</option><option value="READY_FOR_AI">{statusLabel("READY_FOR_AI")}</option><option value="ANALYZING">{statusLabel("ANALYZING")}</option><option value="AI_COMPLETED">{statusLabel("AI_COMPLETED")}</option><option value="WAITING_REVIEW">{statusLabel("WAITING_REVIEW")}</option><option value="APPROVED">{statusLabel("APPROVED")}</option><option value="SCHEDULED">{statusLabel("SCHEDULED")}</option><option value="ARCHIVED">{statusLabel("ARCHIVED")}</option><option value="INCOMPLETE">{statusLabel("INCOMPLETE")}</option></select></label>
           <button className="icon-button mb-0.5" title="刷新" onClick={() => { void reload(); setStudioStatusRefreshKey((current) => current + 1); }}><RefreshCw className="h-4 w-4" /></button>
-          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("ANALYZE")}><BrainCircuit className="h-4 w-4" />Analyze</button>
-          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("APPROVE")}><CheckCircle2 className="h-4 w-4" />Approve</button>
-          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("REJECT")}>Reject</button>
-          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("ARCHIVE")}>Archive</button>
+          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("ANALYZE")}><BrainCircuit className="h-4 w-4" />分析</button>
+          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("APPROVE")}><CheckCircle2 className="h-4 w-4" />批准</button>
+          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("REJECT")}>拒绝</button>
+          <button className="button-secondary mb-0.5" onClick={() => void handleBatch("ARCHIVE")}>归档</button>
           <button className="button mb-0.5" onClick={bulkAddToScheduler}><CalendarClock className="h-4 w-4" />批量加入 Scheduler</button>
           <button className="button mb-0.5" onClick={() => openStudioModal(selectedPostIds)}><Sparkles className="h-4 w-4" />批量送入 Studio</button>
           <button className="button-secondary mb-0.5" onClick={() => setSelectedPostIds(posts.map((post) => Number(post.id)).filter(Boolean))}>当前页全选</button>
@@ -1822,11 +2074,11 @@ function PostPoolPage() {
             )}
           </section>
         )}
-        <Section title={`Unified Post Pool · ${pagination?.total ?? posts.length}`}>
+        <Section title={`统一帖子池 · ${pagination?.total ?? posts.length}`}>
           <div className="panel overflow-x-auto">
             <table className="w-full min-w-[1600px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">
-	                {["Select", "Platform", "Status", "Studio", "Title", "Author", "Community", "Score", "Comments", "Source", "Actor", "Mapping", "URL", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}
+	                {["Select", "Platform", "Status", "Studio", "Title", "Author", "Community", "Score", "Comments", "Source", "Actor", "Mapping", "URL", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-semibold">{uiLabel(label)}</th>)}
               </tr></thead>
               <tbody>{posts.map((post, index) => (
                 <tr key={String(post.uuid ?? index)} className="border-b border-line last:border-0">
@@ -1834,23 +2086,23 @@ function PostPoolPage() {
 	                  <td className="px-4 py-3 font-semibold uppercase text-teal">{String(post.platform ?? "—")}</td>
 	                  <td className="px-4 py-3"><StatusBadge value={post.status ?? "—"} /></td>
 	                  <td className="px-4 py-3"><StatusBadge value={studioStatusLabel(post.id)} /></td>
-	                  <td className="max-w-sm px-4 py-3"><p className="line-clamp-2 font-medium">{String(post.title || "(Untitled)")}</p></td>
+	                  <td className="max-w-sm px-4 py-3"><p className="line-clamp-2 font-medium">{String(post.title || "(无标题)")}</p></td>
 	                  <td className="px-4 py-3 text-gray-600">{String(post.author ?? "—")}</td>
 	                  <td className="px-4 py-3 text-gray-600">{String(post.community ?? "—")}</td>
 	                  <td className="px-4 py-3 text-gray-600">{String(post.score ?? 0)}</td>
 	                  <td className="px-4 py-3 text-gray-600">{String(post.comment_count ?? 0)}</td>
-	                  <td className="px-4 py-3 text-gray-600">{String(post.source_name ?? post.source ?? "Seed / Manual")}</td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.source_name ?? post.source ?? "种子 / 手动")}</td>
 	                  <td className="px-4 py-3 text-gray-600">{String(post.actor_name ?? "—")}</td>
-	                  <td className="px-4 py-3 text-gray-600">{String(post.mapping_name ?? "fallback")}</td>
-	                  <td className="px-4 py-3">{post.url ? <a className="inline-flex items-center gap-1 text-cyan hover:underline" href={String(post.url)} target="_blank" rel="noreferrer">Open<ExternalLink className="h-3.5 w-3.5" /></a> : "—"}</td>
+	                  <td className="px-4 py-3 text-gray-600">{String(post.mapping_name ?? "默认映射")}</td>
+	                  <td className="px-4 py-3">{post.url ? <a className="inline-flex items-center gap-1 text-cyan hover:underline" href={String(post.url)} target="_blank" rel="noreferrer">打开<ExternalLink className="h-3.5 w-3.5" /></a> : "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
-                      <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "analyze")}>Analyze</button>
-	                      <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "reply")}>Generate Reply</button>
-	                      <button className="button" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "workspace")}><BrainCircuit className="h-4 w-4" />Send</button>
+                      <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "analyze")}>分析</button>
+	                      <button className="button-secondary" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "reply")}>生成回复</button>
+	                      <button className="button" disabled={busyPostId === post.id} onClick={() => void runPostAction(post, "workspace")}><BrainCircuit className="h-4 w-4" />发送</button>
                         <button className="button-secondary" disabled={studioBusy} onClick={() => openStudioModal([Number(post.id)])}>送入Studio</button>
-                        <button className="button-secondary" onClick={() => void showTimeline(post)}>Timeline</button>
-	                      <button className="button-secondary" onClick={() => setRawPost(post)}>Raw JSON</button>
+                        <button className="button-secondary" onClick={() => void showTimeline(post)}>时间线</button>
+	                      <button className="button-secondary" onClick={() => setRawPost(post)}>原始 JSON</button>
 	                    </div>
 	                  </td>
                 </tr>
@@ -1860,10 +2112,10 @@ function PostPoolPage() {
 	        </Section>
         {pagination && (
           <div className="panel flex items-center justify-between p-3 text-sm text-gray-600">
-            <span>Page {pagination.page} / {pagination.pages || 1} · {pagination.total} records</span>
+            <span>第 {pagination.page} / {pagination.pages || 1} 页 · 共 {pagination.total} 条</span>
             <div className="flex gap-2">
-              <button className="button-secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
-              <button className="button-secondary" disabled={page >= (pagination.pages || 1)} onClick={() => setPage((current) => current + 1)}>Next</button>
+              <button className="button-secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>上一页</button>
+              <button className="button-secondary" disabled={page >= (pagination.pages || 1)} onClick={() => setPage((current) => current + 1)}>下一页</button>
             </div>
           </div>
         )}
@@ -1876,7 +2128,7 @@ function PostPoolPage() {
           <Section title="Post Timeline" action={<button className="button-secondary" onClick={() => setTimeline(null)}>关闭</button>}>
             <div className="panel overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
-                <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">{["Time", "Event", "Old", "New", "Actor"].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead>
+                <thead><tr className="border-b border-line bg-gray-50 text-xs uppercase text-gray-500">{["Time", "Event", "Old", "New", "Actor"].map((label) => <th key={label} className="px-4 py-3">{uiLabel(label)}</th>)}</tr></thead>
                 <tbody>{timeline.map((item) => (
                   <tr key={String(item.uuid)} className="border-b border-line last:border-0">
                     <td className="px-4 py-3">{String(item.created_at ?? "—")}</td>
@@ -2056,20 +2308,20 @@ function AIWorkspacePage() {
             </select>
           </label>
           <label className="text-xs font-semibold text-gray-600">
-            Strategy
+            策略
             <select className="field mt-2" value={strategy} onChange={(e) => setStrategy(e.target.value)}>
-              <option value="PURE_HELP">Pure Help</option>
-              <option value="EXPERIENCE_SHARE">Experience</option>
-              <option value="EDUCATION">Education</option>
-              <option value="WARM_UP">Warm-up</option>
+              <option value="PURE_HELP">纯帮助</option>
+              <option value="EXPERIENCE_SHARE">经验分享</option>
+              <option value="EDUCATION">科普教育</option>
+              <option value="WARM_UP">预热</option>
             </select>
           </label>
           <label className="text-xs font-semibold text-gray-600">
-            Tone
+            语气
             <select className="field mt-2" value={tone} onChange={(e) => setTone(e.target.value)}>
-              <option value="supportive">Supportive</option>
-              <option value="concise">Concise</option>
-              <option value="professional">Professional</option>
+              <option value="supportive">支持型</option>
+              <option value="concise">简洁</option>
+              <option value="professional">专业</option>
             </select>
           </label>
           <label className="text-xs font-semibold text-gray-600">
@@ -2083,12 +2335,12 @@ function AIWorkspacePage() {
               ))}
             </select>
           </label>
-          <button className="button-secondary self-end" onClick={analyzeSelected}><BrainCircuit className="h-4 w-4" />Analyze</button>
-          <button className="button self-end" onClick={generateSelected}><Sparkles className="h-4 w-4" />Generate</button>
+          <button className="button-secondary self-end" onClick={analyzeSelected}><BrainCircuit className="h-4 w-4" />分析</button>
+          <button className="button self-end" onClick={generateSelected}><Sparkles className="h-4 w-4" />生成</button>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
         <div className="panel flex flex-wrap items-center gap-2 p-3">
-          <span className="text-xs font-semibold uppercase text-gray-500">Batch Review</span>
+          <span className="text-xs font-semibold uppercase text-gray-500">批量审核</span>
           <button className="button-secondary" onClick={() => void batchAI("GENERATE")}><Sparkles className="h-4 w-4" />批量生成</button>
           <button className="button-secondary" onClick={() => void batchAI("APPROVE")}><CheckCircle2 className="h-4 w-4" />批量批准</button>
           <button className="button-secondary" onClick={() => void batchAI("REJECT")}>批量拒绝</button>
@@ -2104,7 +2356,7 @@ function AIWorkspacePage() {
                     <div>
                     <p className="font-semibold">{String(task.strategy)} · {String(task.model)}</p>
                     <p className="mt-1 text-xs text-gray-500">
-                      {String(task.provider)} · Commercial {String(task.commercial_score)} · Risk {String(task.risk_score)}
+                      {String(task.provider)} · 商业分 {String(task.commercial_score)} · 风险分 {String(task.risk_score)}
                     </p>
                     {Boolean(task.reply_task || task.reply_template) && (
                       <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -2127,12 +2379,12 @@ function AIWorkspacePage() {
                   <div className="flex items-center gap-2">
                     <StatusBadge value={task.status} />
                     {task.status === "APPROVED" && (
-                      <button className="button-secondary" onClick={() => addToScheduler(task.id)}>Add to Scheduler</button>
+                      <button className="button-secondary" onClick={() => addToScheduler(task.id)}>加入调度</button>
                     )}
                     {task.status !== "APPROVED" && (
                       <>
                         <button className="button-secondary" onClick={() => void regenerate(task)}>重新生成</button>
-                        <button className="button-secondary" onClick={() => void previewPromptForTask(task)}>Preview Prompt</button>
+                        <button className="button-secondary" onClick={() => void previewPromptForTask(task)}>预览 Prompt</button>
                         <button className="button-secondary" onClick={() => reject(task.id)}>拒绝</button>
                         <button className="button" onClick={() => approve(task.id)}>批准</button>
                       </>
@@ -2156,12 +2408,12 @@ function AIWorkspacePage() {
                       ["Model", (task.analysis as RecordItem).model_used],
                     ].map(([label, value]) => (
                       <div key={String(label)} className="rounded border border-line p-3">
-                        <p className="text-xs font-semibold uppercase text-gray-500">{String(label)}</p>
+                        <p className="text-xs font-semibold uppercase text-gray-500">{uiLabel(String(label))}</p>
                         <p className="mt-1 text-sm text-gray-700">{String(value ?? "—")}</p>
                       </div>
                     ))}
                     <div className="rounded border border-line p-3 md:col-span-3">
-                      <p className="text-xs font-semibold uppercase text-gray-500">Summary</p>
+                      <p className="text-xs font-semibold uppercase text-gray-500">摘要</p>
                       <p className="mt-1 text-sm text-gray-700">{String((task.analysis as RecordItem).summary ?? "—")}</p>
                     </div>
                   </div>
@@ -2175,7 +2427,7 @@ function AIWorkspacePage() {
                       ["Reason", (task.reply_task as RecordItem).template_selection_reason],
                     ].map(([label, value]) => (
                       <div key={String(label)} className="rounded border border-line p-3">
-                        <p className="text-xs font-semibold uppercase text-gray-500">{String(label)}</p>
+                        <p className="text-xs font-semibold uppercase text-gray-500">{uiLabel(String(label))}</p>
                         <p className="mt-1 text-sm text-gray-700">{String(value ?? "—")}</p>
                       </div>
                     ))}
@@ -2185,7 +2437,7 @@ function AIWorkspacePage() {
                   <div className="mt-4 border-t border-line pt-3">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <p className="text-xs font-semibold uppercase text-gray-500">
-                        Draft · {String((task.reply as RecordItem).source ?? "UNKNOWN")}
+                        草稿 · {statusLabel((task.reply as RecordItem).source ?? "UNKNOWN")}
                       </p>
                       <button className="button-secondary" onClick={() => void saveReply(task.reply as RecordItem)}>保存编辑</button>
                     </div>
@@ -2213,12 +2465,12 @@ function AIWorkspacePage() {
             <div className="panel grid gap-4 p-4 lg:grid-cols-2">
               {["system_prompt", "platform_prompt", "strategy_prompt", "variables"].map((key) => (
                 <div key={key}>
-                  <p className="text-xs font-semibold uppercase text-gray-500">{key}</p>
+                  <p className="text-xs font-semibold uppercase text-gray-500">{uiLabel(key)}</p>
                   <pre className="mt-2 overflow-x-auto rounded border border-line bg-gray-50 p-3 text-xs text-gray-600">{typeof promptPreview[key] === "object" ? JSON.stringify(promptPreview[key], null, 2) : String(promptPreview[key] ?? "—")}</pre>
                 </div>
               ))}
               <div className="lg:col-span-2">
-                <p className="text-xs font-semibold uppercase text-gray-500">Final Prompt · {String(promptPreview.prompt_version ?? "fallback")}</p>
+                <p className="text-xs font-semibold uppercase text-gray-500">最终 Prompt · {String(promptPreview.prompt_version ?? "fallback")}</p>
                 <pre className="mt-2 max-h-[420px] overflow-auto rounded border border-line bg-gray-50 p-3 text-xs text-gray-600">{String(promptPreview.final_prompt ?? "")}</pre>
               </div>
             </div>
@@ -2306,7 +2558,7 @@ function SchedulerPage() {
             {(accounts.data ?? []).map((account) => <option key={String(account.id)} value={String(account.id)}>{String(account.username)}</option>)}
           </select>
           <button className="button" disabled={!aiTaskId} onClick={queueTask}><CalendarClock className="h-4 w-4" />加入队列</button>
-          <button className="button-secondary" onClick={runOnce}><Play className="h-4 w-4" />Run Once</button>
+          <button className="button-secondary" onClick={runOnce}><Play className="h-4 w-4" />运行一次</button>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
         {taskGroups.map(([title, statuses]) => {
@@ -2598,7 +2850,7 @@ function AccountCenterPage() {
                     <button className="button-secondary" onClick={() => setSelectedAccount(account)}>详情</button>
                     <button className="button-secondary" onClick={() => startEditAccount(account)}>编辑</button>
                     <button className="button-secondary" onClick={() => void accountAction(account, account.status === "ACTIVE" ? "pause" : "resume")}>{account.status === "ACTIVE" ? "暂停" : "启用"}</button>
-                    <button className="button-secondary" onClick={() => void accountAction(account, "recalculate-health")}>Health</button>
+                    <button className="button-secondary" onClick={() => void accountAction(account, "recalculate-health")}>重算健康度</button>
                   </div></td>
                 </tr>
               ))}</tbody>
@@ -2636,18 +2888,18 @@ function AccountCenterPage() {
                 </div>
                 {Boolean(selectedAccount.tge_profile) && (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "test-connection")}>Test Connection</button>
-                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "status")}>Check Status</button>
-                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "sync-status")}>Sync Status</button>
+                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "test-connection")}>测试连接</button>
+                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "status")}>检查状态</button>
+                    <button className="button-secondary" onClick={() => void tgeProfileAction((selectedAccount.tge_profile as RecordItem).id, "sync-status")}>同步状态</button>
                   </div>
                 )}
               </div>
               <div className="panel p-4">
-                <p className="font-semibold">Daily Limits / Usage Today</p>
+                <p className="font-semibold">每日限额 / 今日用量</p>
                 <pre className="mt-3 overflow-x-auto text-xs text-gray-600">{JSON.stringify(selectedAccount.limits ?? {}, null, 2)}</pre>
               </div>
               <div className="panel p-4">
-                <p className="font-semibold">Working Windows</p>
+                <p className="font-semibold">工作时间窗口</p>
                 <pre className="mt-3 overflow-x-auto text-xs text-gray-600">{JSON.stringify(selectedAccount.working_windows ?? [], null, 2)}</pre>
               </div>
             </div>
@@ -3299,9 +3551,9 @@ function SettingsPage() {
               <input className="field mt-2" value={remark} onChange={(e) => setRemark(e.target.value)} />
             </label>
             <div className="flex flex-wrap gap-4 text-sm font-medium text-gray-700 md:col-span-2 xl:col-span-4">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={providerEnabled} onChange={(e) => setProviderEnabled(e.target.checked)} />Enabled</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={useAnalysis} onChange={(e) => setUseAnalysis(e.target.checked)} />Analysis</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={useReply} onChange={(e) => setUseReply(e.target.checked)} />Reply</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={providerEnabled} onChange={(e) => setProviderEnabled(e.target.checked)} />启用</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={useAnalysis} onChange={(e) => setUseAnalysis(e.target.checked)} />分析</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={useReply} onChange={(e) => setUseReply(e.target.checked)} />回复</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={useEmbedding} onChange={(e) => setUseEmbedding(e.target.checked)} />Embedding</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={isMock} onChange={(e) => setIsMock(e.target.checked)} />Mock</label>
             </div>
@@ -3379,7 +3631,7 @@ function SettingsPage() {
           title="Submission Policy"
           action={
             <div className="flex flex-wrap gap-2">
-              <button className="button-secondary" onClick={emergencyStopAutoAssisted}><ShieldCheck className="h-4 w-4" />Emergency Stop</button>
+              <button className="button-secondary" onClick={emergencyStopAutoAssisted}><ShieldCheck className="h-4 w-4" />紧急停止</button>
               <button className="button" onClick={saveSubmissionSettings}><Settings className="h-4 w-4" />保存 Submission</button>
             </div>
           }
@@ -3512,7 +3764,7 @@ function SettingsPage() {
             <select className="field" value={String(selectorForm.selector_type ?? "css")} onChange={(e) => updateSelectorField("selector_type", e.target.value)}>
               {["css", "xpath", "text"].map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(selectorForm.enabled)} onChange={(e) => updateSelectorField("enabled", e.target.checked)} />Enabled</label>
+            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(selectorForm.enabled)} onChange={(e) => updateSelectorField("enabled", e.target.checked)} />启用</label>
           </div>
           <div className="panel mt-3 overflow-x-auto">
             <table className="w-full min-w-[920px] border-collapse text-left text-sm">
@@ -3720,7 +3972,7 @@ function SettingsPage() {
             </select>
             <input className="field" value={String(routeForm.strategy ?? "")} onChange={(e) => updateRouteField("strategy", e.target.value)} placeholder="strategy or empty" />
             <select className="field" value={String(routeForm.preferred_provider_id ?? "")} onChange={(e) => updateRouteField("preferred_provider_id", e.target.value)}>
-              <option value="">Preferred Provider</option>
+              <option value="">首选 Provider</option>
               {(providers.data ?? []).map((provider) => <option key={provider.id} value={provider.id}>{provider.provider_name}</option>)}
             </select>
             <select className="field" value={String(routeForm.fallback_provider_id ?? "")} onChange={(e) => updateRouteField("fallback_provider_id", e.target.value)}>
@@ -3730,7 +3982,7 @@ function SettingsPage() {
             <input className="field" type="number" value={String(routeForm.min_commercial_score ?? 0)} onChange={(e) => updateRouteField("min_commercial_score", Number(e.target.value))} placeholder="min commercial" />
             <input className="field" type="number" value={String(routeForm.max_risk_score ?? 100)} onChange={(e) => updateRouteField("max_risk_score", Number(e.target.value))} placeholder="max risk" />
             <input className="field" type="number" value={String(routeForm.priority ?? 100)} onChange={(e) => updateRouteField("priority", Number(e.target.value))} placeholder="priority" />
-            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(routeForm.enabled)} onChange={(e) => updateRouteField("enabled", e.target.checked)} />Enabled</label>
+            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(routeForm.enabled)} onChange={(e) => updateRouteField("enabled", e.target.checked)} />启用</label>
           </div>
           <div className="panel mt-3 overflow-x-auto">
             <table className="w-full min-w-[980px] border-collapse text-left text-sm">
@@ -3792,7 +4044,7 @@ function SettingsPage() {
         >
           <div className="panel grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-5">
             <select className="field" value={String(versionForm.prompt_template_id ?? "")} onChange={(e) => updateVersionField("prompt_template_id", e.target.value)}>
-              <option value="">Prompt Template</option>
+              <option value="">Prompt 模板</option>
               {(promptTemplates.data ?? []).map((template) => <option key={String(template.id)} value={String(template.id)}>{String(template.name)}</option>)}
             </select>
             <input className="field" value={String(versionForm.version ?? "v1")} onChange={(e) => updateVersionField("version", e.target.value)} placeholder="version" />
@@ -3800,7 +4052,7 @@ function SettingsPage() {
             <input className="field" value={String(versionForm.strategy ?? "")} onChange={(e) => updateVersionField("strategy", e.target.value)} placeholder="strategy" />
             <input className="field" value={String(versionForm.tone ?? "")} onChange={(e) => updateVersionField("tone", e.target.value)} placeholder="tone" />
             <textarea className="field min-h-28 md:col-span-2 xl:col-span-5" value={String(versionForm.content ?? "")} onChange={(e) => updateVersionField("content", e.target.value)} placeholder="prompt content" />
-            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(versionForm.is_default)} onChange={(e) => updateVersionField("is_default", e.target.checked)} />Default</label>
+            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(versionForm.is_default)} onChange={(e) => updateVersionField("is_default", e.target.checked)} />默认</label>
           </div>
           <div className="panel mt-3 overflow-x-auto">
             <table className="w-full min-w-[920px] border-collapse text-left text-sm">
@@ -3924,13 +4176,13 @@ function ExecutionPage() {
             <Play className="h-5 w-5 text-gray-600" />
           </div>
           <div>
-            <h2 className="font-bold">Execution Runtime Status</h2>
+            <h2 className="font-bold">Execution Runtime 状态</h2>
             <p className="mt-1 text-sm text-gray-500">Sprint 02 建立独立 Execution Runtime、Queue、Worker 和状态流。本 Sprint 不打开浏览器、不执行 Playwright/TGE 动作。</p>
           </div>
         </div>
         {feedback && <p className="text-sm text-teal">{feedback}</p>}
         <div className="panel flex flex-wrap items-center gap-3 p-4">
-          <button className="button" onClick={() => void runtimeAction("claim-next")}><Bot className="h-4 w-4" />Claim Next</button>
+          <button className="button" onClick={() => void runtimeAction("claim-next")}><Bot className="h-4 w-4" />领取下一个</button>
           <span className="text-sm text-gray-500">Local Worker heartbeat: {String((workers.data ?? [])[0]?.last_heartbeat ?? "—")}</span>
         </div>
         <div className="grid gap-3 md:grid-cols-5">
@@ -3971,19 +4223,19 @@ function ExecutionPage() {
                       <td className="px-4 py-3 text-xs text-gray-500">{task.created_at ? new Date(String(task.created_at)).toLocaleString() : "—"}</td>
                       <td className="max-w-xs px-4 py-3 text-xs text-red-600">{String(task.error_message ?? "—")}</td>
                       <td className="px-4 py-3"><div className="flex flex-wrap gap-2">
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "run-runtime")}>Run</button>
-                        <button className="button-secondary" onClick={() => void runtimeAction("retry", task.id)}>Retry</button>
-                        <button className="button-secondary" onClick={() => void runtimeAction("cancel", task.id)}>Cancel</button>
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "resume")}>Resume</button>
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "precheck")}>Precheck</button>
-                        <button className="button" onClick={() => void executionAction(task.id, "prepare-reply")}>Prepare Reply</button>
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-submitted")}>Mark Submitted</button>
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "retry-fill")}>Retry Fill</button>
-                        <button className="button" onClick={() => void executionAction(task.id, "run-open-page")}>Run OPEN_PAGE</button>
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "attach")}>Attach</button>
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "close-tab")}>Close Tab</button>
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-success")}>Success</button>
-                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-failed")}>Failed</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "run-runtime")}>运行</button>
+                        <button className="button-secondary" onClick={() => void runtimeAction("retry", task.id)}>重试</button>
+                        <button className="button-secondary" onClick={() => void runtimeAction("cancel", task.id)}>取消</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "resume")}>继续</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "precheck")}>预检查</button>
+                        <button className="button" onClick={() => void executionAction(task.id, "prepare-reply")}>准备回复</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-submitted")}>标记已提交</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "retry-fill")}>重试填入</button>
+                        <button className="button" onClick={() => void executionAction(task.id, "run-open-page")}>运行 OPEN_PAGE</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "attach")}>连接</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "close-tab")}>关闭 Tab</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-success")}>成功</button>
+                        <button className="button-secondary" onClick={() => void executionAction(task.id, "mark-failed")}>失败</button>
                       </div></td>
                     </tr>
                   ))}</tbody>
@@ -4116,12 +4368,12 @@ function SubmissionPage() {
                     <td className="max-w-xs px-4 py-3 text-xs text-gray-500">{task.retryable ? `可重试 · ${String(task.retry_count ?? 0)}` : String(task.retry_blocked_reason ?? "不可重试")}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "submit")}>Policy Check</button>
-                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "run-auto")}>Run AUTO_ASSISTED Now</button>
-                        <button className="button" onClick={() => void submissionAction(task.id, "confirm")}>Confirm Submitted</button>
-                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "mark-failed")}>Mark Failed</button>
-                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "retry")} disabled={!task.retryable}>Retry</button>
-                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "cancel")}>Cancel</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "submit")}>策略检查</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "run-auto")}>立即运行 AUTO_ASSISTED</button>
+                        <button className="button" onClick={() => void submissionAction(task.id, "confirm")}>确认已提交</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "mark-failed")}>标记失败</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "retry")} disabled={!task.retryable}>重试</button>
+                        <button className="button-secondary" onClick={() => void submissionAction(task.id, "cancel")}>取消</button>
                       </div>
                     </td>
                   </tr>
@@ -4279,13 +4531,13 @@ function EngagementPage() {
             </select>
             <input className="field" type="number" value={String(strategyForm.browse_count_min)} onChange={(e) => updateStrategy("browse_count_min", Number(e.target.value))} />
             <input className="field" type="number" value={String(strategyForm.like_count_min)} onChange={(e) => updateStrategy("like_count_min", Number(e.target.value))} />
-            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(strategyForm.before_reply_enabled)} onChange={(e) => updateStrategy("before_reply_enabled", e.target.checked)} />Reply Warm-up</label>
+            <label className="flex items-center gap-2 rounded border border-line px-3 text-sm"><input type="checkbox" checked={Boolean(strategyForm.before_reply_enabled)} onChange={(e) => updateStrategy("before_reply_enabled", e.target.checked)} />回复前预热</label>
           </div>
         </Section>
         <Section title="Create Engagement Task" action={<button className="button" onClick={createTask}><CalendarClock className="h-4 w-4" />加入 Scheduler</button>}>
           <div className="panel grid gap-3 p-4 md:grid-cols-3 xl:grid-cols-7">
             <select className="field" value={String(taskForm.strategy_id)} onChange={(e) => updateTask("strategy_id", e.target.value)}>
-              <option value="">Custom</option>
+              <option value="">自定义</option>
               {(strategies.data ?? []).map((strategy) => <option key={String(strategy.id)} value={String(strategy.id)}>{String(strategy.name)}</option>)}
             </select>
             <select className="field" value={String(taskForm.account_id)} onChange={(e) => updateTask("account_id", e.target.value)}>
@@ -4319,9 +4571,9 @@ function EngagementPage() {
                   <td className="px-4 py-3">{String(task.visit_profile_done_count ?? 0)} / {String(task.visit_profile_target_count ?? 0)}</td>
                   <td className="px-4 py-3">{String(task.source_type)} · {String(task.source_value ?? "")}</td>
                   <td className="px-4 py-3"><div className="flex flex-wrap gap-2">
-                    <button className="button-secondary" onClick={() => void taskAction(task.id, "run-mock")}>Run Mock</button>
-                    <button className="button-secondary" onClick={() => void taskAction(task.id, "retry")}>Retry</button>
-                    <button className="button-secondary" onClick={() => void taskAction(task.id, "cancel")}>Cancel</button>
+                    <button className="button-secondary" onClick={() => void taskAction(task.id, "run-mock")}>运行 Mock</button>
+                    <button className="button-secondary" onClick={() => void taskAction(task.id, "retry")}>重试</button>
+                    <button className="button-secondary" onClick={() => void taskAction(task.id, "cancel")}>取消</button>
                   </div></td>
                 </tr>
               ))}</tbody>
@@ -4442,9 +4694,9 @@ function PlatformCenterPage() {
 
           <Section title="Capability Check">
             <div className="panel space-y-3 p-4">
-              <label className="block text-xs font-semibold uppercase text-gray-500">Platform</label>
+              <label className="block text-xs font-semibold uppercase text-gray-500">平台</label>
               <input className="input" value={platform} onChange={(event) => setPlatform(event.target.value)} />
-              <label className="block text-xs font-semibold uppercase text-gray-500">Action Type</label>
+              <label className="block text-xs font-semibold uppercase text-gray-500">动作类型</label>
               <input className="input" value={actionType} onChange={(event) => setActionType(event.target.value)} />
               <button className="button" onClick={runCapabilityCheck} disabled={checking}>
                 <ShieldCheck className="h-4 w-4" />
@@ -4584,15 +4836,15 @@ function WorkerCenterPage() {
           <StateView loading={gpu.loading} error={gpu.error} reload={gpu.reload}>
             <div className="grid gap-3 md:grid-cols-4">
               <div className="panel p-4">
-                <p className="text-xs font-semibold uppercase text-gray-500">Worker Status</p>
+                <p className="text-xs font-semibold uppercase text-gray-500">Worker 状态</p>
                 <p className="mt-3 text-2xl font-bold">{String(primaryGpuWorker.status ?? "offline")}</p>
               </div>
               <div className="panel p-4">
-                <p className="text-xs font-semibold uppercase text-gray-500">Last Heartbeat</p>
+                <p className="text-xs font-semibold uppercase text-gray-500">最近心跳</p>
                 <p className="mt-3 text-sm font-semibold">{String(primaryGpuWorker.last_heartbeat_at ?? "none")}</p>
               </div>
               <div className="panel p-4">
-                <p className="text-xs font-semibold uppercase text-gray-500">Model</p>
+                <p className="text-xs font-semibold uppercase text-gray-500">模型</p>
                 <p className="mt-3 text-sm font-semibold">{String(primaryGpuWorker.model_name ?? gpuConfig.default_model ?? "unset")}</p>
               </div>
               <div className="panel p-4">
@@ -4604,11 +4856,11 @@ function WorkerCenterPage() {
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
               <div className="panel space-y-3 p-4">
                 <div>
-                  <label className="text-xs font-semibold uppercase text-gray-500">Model</label>
+                  <label className="text-xs font-semibold uppercase text-gray-500">模型</label>
                   <input className="input mt-1" value={gpuModel} onChange={(event) => setGpuModel(event.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase text-gray-500">System Prompt</label>
+                  <label className="text-xs font-semibold uppercase text-gray-500">系统 Prompt</label>
                   <textarea
                     className="input mt-1 min-h-20"
                     value={gpuSystemPrompt}
@@ -4994,7 +5246,7 @@ function AppLayout() {
         <div className="absolute bottom-0 inset-x-0 border-t border-line p-4">
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            Human-in-the-loop mode
+            人工确认模式
           </div>
         </div>
       </aside>
@@ -5025,7 +5277,7 @@ function AppLayout() {
               </button>
               <button className="button">
                 <Zap className="h-4 w-4" />
-                Quick Action
+                快捷操作
               </button>
             </div>
           </div>
